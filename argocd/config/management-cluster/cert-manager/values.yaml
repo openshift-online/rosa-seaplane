@@ -6,6 +6,52 @@ cert-manager:
     servicemonitor:
       enabled: true
 
+  # registry.redhat.io requires the cluster pull secret (see templates/pull-secret.yaml).
+  global:
+    imagePullSecrets:
+      - name: pull-secret
+
+  # Red Hat ships controller, webhook, and cainjector in one image (no ENTRYPOINT).
+  # Pin the 1.19 stream to stay aligned with chart v1.19.2. Digest overrides tag.
+  # Catalog: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9:v1.19.6-1
+  image:
+    repository: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9
+    tag: v1.19.6-1
+    digest: sha256:3afda61dcc3c22373e234bccd55ac2d09dd7db86e0c90b761ed967969b47541e
+  command:
+    - /app/cmd/controller/controller
+
+  webhook:
+    image:
+      repository: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9
+      tag: v1.19.6-1
+      digest: sha256:3afda61dcc3c22373e234bccd55ac2d09dd7db86e0c90b761ed967969b47541e
+    command:
+      - /app/cmd/webhook/webhook
+
+  cainjector:
+    image:
+      repository: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9
+      tag: v1.19.6-1
+      digest: sha256:3afda61dcc3c22373e234bccd55ac2d09dd7db86e0c90b761ed967969b47541e
+    command:
+      - /app/cmd/cainjector/cainjector
+
+  acmesolver:
+    image:
+      repository: registry.redhat.io/cert-manager/jetstack-cert-manager-acmesolver-rhel9
+      tag: v1.19.6-1
+      digest: sha256:309dcc51ac5c0c8651f5a14d389b16d9ea217c33fe2b15cb5bf7966f2928ff53
+
+  # The RH operand image does not ship startupapicheck. ArgoCD already waits on
+  # webhook health, so skip the Helm post-install Job.
+  startupapicheck:
+    enabled: false
+    image:
+      repository: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9
+      tag: v1.19.6-1
+      digest: sha256:3afda61dcc3c22373e234bccd55ac2d09dd7db86e0c90b761ed967969b47541e
+
   # --- DNS01 solver tuning for Route 53 rate limits ---
   # Route 53 has a hard 5 req/s per-account limit shared across cert-manager,
   # external-dns, and terraform. The Route 53 provider's Present() phase calls
