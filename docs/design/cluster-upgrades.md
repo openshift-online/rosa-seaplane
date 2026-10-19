@@ -1,9 +1,60 @@
 # ROSA V2 Cluster Upgrades
 
+**Last Updated Date**: 2026-10-19
+
+## Summary
+
+ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "Default Z," computed from Cincinnati Z-release risk and a day-offset for progressive delivery, with CI coverage sourced from the live fleet's actual active z-release spread rather than per-cluster CVO risk evaluation or live Cincinnati graph-edge checks.
+
+## Context
+
+- **Problem Statement:** The fleet needs an automatic, low-touch way to keep a large, regionally-distributed set of clusters on safe, continuously-updated OCP Z/Y releases, catch bad releases quickly, and give SRE controlled escape hatches, without centralized coordination across regions or per-cluster CVO-reported risk evaluation.
+- **Constraints:** Each region's Channel and Upgrade controllers operate independently (Regional Independence); the platform does not evaluate CVO-reported per-cluster risk; rollout must be progressive and staggered, not instantaneous; SRE overrides must go through ZOA Trusted Actions, not direct cluster access; EOL migration must reuse the same machinery as ordinary upgrades rather than a separate path.
+- **Assumptions:** OCP's own nightly/candidate/stable release pipeline is a trustworthy signal that a Z-release has been vetted; Cincinnati's native platform-specific risk support (Q1 2027) will eventually replace today's interim mechanisms; the Postgres-backed Channel CRD model (Block 1) is available to build on.
+
+## Alternatives Considered
+
+1. **Use CVO for per-cluster edge checking:** evaluate each cluster's own CVO-reported risks and graph edges before every upgrade decision. Rejected per the rationale in [CVO risk evaluation design notes](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0).
+2. **Let customers select which Z to run:** expose Z-level choice directly to customers, not just channel/Y-level choice. Rejected because it fragments the fleet's active-version spread too much for CI to cover: Testing Requirements' live-fleet-sourced coverage model depends on the active spread staying narrow enough to fully test.
+3. **Let customers opt into early Z-upgrades:** give customers a lever to adopt a new Z ahead of their channel's normal day-offset. Rejected as unnecessary: the design already keeps the whole fleet upgraded to Default Z almost continuously, so there's no meaningful "early" case left to expose.
+
+## Design Rationale
+
+- **Justification:** Deriving CI coverage from the live fleet (rather than live Cincinnati graph-edge checks or per-cluster CVO risk evaluation) means every version a customer could actually be on has already been proven to cross into the next target before that target is ever reached, with no runtime dependency on an external graph API.
+- **Evidence:** Querying Cincinnati's real graph data (see Y+1 Upgrade) showed that cross-minor edges commonly land on a specific jump-off release that doesn't track a channel's configured Z-offset, which would make a literal edge-check brittle; the live-fleet-sourced model avoids that dependency entirely.
+- **Comparison:** CVO-based per-cluster edge checking (alternative 1) would require the per-cluster risk evaluation this design explicitly avoids, for the reasons in the linked design notes. Customer-selectable Z (alternative 2) and early-upgrade opt-in (alternative 3) would both work against the fleet-wide CI coverage model this design depends on, for no corresponding benefit once the whole fleet is kept close to Default Z continuously.
+
+## Consequences
+
+### Positive
+
+- No per-cluster CVO risk evaluation is needed; safety comes from CI coverage sourced from the live fleet instead.
+- The fleet stays close to Default Z almost continuously, so there's little practical "drift" for the design to account for.
+- SRE retains fine-grained override (pin, rollback, channel override, fleet-wide exclusion) entirely through ZOA Trusted Actions, with no direct cluster access.
+- EOL migration reuses the same channel-targeting machinery as ordinary upgrades (see Block 6), including the EUS multi-minor hop (see Block 2, User-driven Y-upgrade), rather than a separate forced-upgrade path.
+
+### Negative
+
+- The SLO exclusion latch's sensitivity decays over a version's lifetime as successful upgrades accumulate (see Risks); no mitigation yet.
+- Pinning a cluster is not free: every distinct pinned version is a standing entry in the CI test matrix for as long as the pin exists (see Block 2, Per-cluster pin).
+- Cincinnati's native platform-specific risk support isn't live yet (targeted Q1 2027), so the SLO exclusion latch is carrying interim weight that Cincinnati is expected to eventually take over.
+
+## Cross-Cutting Concerns
+
+### Reliability:
+
+- **Observability:** see Monitoring & Observability Requirements and Block 4 for the full metrics set.
+- **Resiliency:** see the SLO exclusion latch (Block 3) and the Risks table for known gaps.
+
+### Security:
+
+- All SRE overrides (pin, rollback, channel override, fleet-wide exclusion) go through ZOA Trusted Actions; rollback specifically requires a separate, higher-approval ZOA TA (see SRE Controls).
+
 ## Resources
 
 - [OCP Upgrade Graph](https://access.redhat.com/labs/ocpupgradegraph/update_path)
 - [OCP Release Status](https://amd64.ocp.releases.ci.openshift.org/)
+- [CVO risk evaluation design notes](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0)
 
 ## Terminology
 
