@@ -20,7 +20,6 @@ The goal is to stay close to current rather than waiting for long bake times, be
 The platform does **not** perform per-cluster CVO risk evaluation for Z-stream upgrades. CVO-reported cluster-specific risks are not factored into the automatic upgrade decision. Instead, the platform:
 
 - Relies on CI testing to catch issues before rollout.
-- Uses platform-specific risks in the graph (fleet-wide blocks).
 - Provides exclusions and pinned versions as an escape hatch for known exceptions.
 - Will rely on the Cincinnati graph for platform-specific risk information (attached to z-releases).
 
@@ -79,9 +78,9 @@ Clusters may differ from x.y.default-z if:
 
 The customer changes the channel (e.g., stable-4.21 → stable-4.22). The platform does not check Cincinnati edges for this: CI coverage is sourced from the live fleet (see Testing Requirements), so every z-release actually running in production has already been tested crossing into the target channel's Default Z before any customer requests the change. The platform rejects the change only if:
 
-- the target Z carries a release risk the platform has not accepted;
-- admin acknowledgments have not been provided (policy gate, not risk evaluation);
-- the change would create an N-3 control-plane skew.
+- admin acknowledgments have not been provided (policy gate, not risk evaluation)
+- the change would create an N-3 control-plane skew
+- the default z on the new Y has a defined platform-specific risk
 
 Y+1 upgrades are validated via CI testing, not per-cluster CVO evaluation, and not via a live graph-edge check. Nightly and candidate testing continuously pull the fleet's actual active z-release spread for Y (across every region, including pinned and excluded clusters) and test upgrading each of those versions to both Y's Default Z and Y+1's Default Z. By the time a Z is promoted into a stable/fast/eus channel, every currently-active Y-side version has already been proven to cross into it, so a customer-requested Y+1 change never needs a runtime coverage check, only the risk/ack/skew gates above.
 
@@ -97,14 +96,12 @@ The platform does not perform per-cluster CVO risk evaluation for Y+1 upgrades. 
 SRE can perform the following controls:
 
 <!-- prettier-ignore -->
-| Control | Scope | Mechanism |
-| --- | --- | --- |
-| Z-release Exclusion intervals\* <br/>(e.g. `[4.22.14, 4.22.18)`) | Fleet wide | Cincinnati Graph Data |
-| Z-release Exclusion intervals | Regional | GitOps |
-| Z-release Exclusion intervals | Cluster specific | ZOA TA |
-| Override the channel (forces a Y-stream change) | Cluster specific | ZOA TA |
-| Pin to a specific Z at or above the cluster's current version <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA |
-| Pin to a specific Z below the cluster's current version (rollback) <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA, separate from the one above and requiring additional approval |
+| Control | Scope | Mechanism | Use Case |
+| --- | --- | --- | --- |
+| Z-release Exclusion intervals\* <br/>(e.g. `[4.22.14, 4.22.18)`) | Fleet wide | Cincinnati Graph Data | A release fails CI, or progressive upgrades start failing |
+| Override the channel (forces a Y-stream change) | Cluster specific | ZOA TA | Forced upgrade (e.g. EOL) |
+| Pin to a specific Z at or above the cluster's current version <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA | The cluster must stay at a particular z-release for special reasons or due to its special configuration |
+| Pin to a specific Z below the cluster's current version (rollback) <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA, separate from the one above and requiring additional approval | SRE determines the cluster's version must be rolled back |
 
 \* Note that exclusion intervals apply to all channels: a blocked z-release is unavailable for installation and as an upgrade target across every channel.
 
@@ -123,7 +120,7 @@ Platform must maintain automated test coverage for:
 
 ### CI Testing configurations
 
-1. **Nightly testing (\~24h feedback):** Platform runs automated tests against OCP nightly builds. Breakage triggers immediate revert request to OCP (must be within 24h; OCP will revert without argument if caught early).
+1. **Nightly testing (\~24h feedback):** Platform runs automated tests against **accepted** OCP nightly builds. Breakage triggers immediate revert request to OCP (must be within 24h; OCP will revert without argument if caught early).
    1. ROSA V2 e2e tests
    2. Upgrade tests: every z-release currently active in the fleet (across all regions, including pinned/excluded clusters) to the nightly build.
 2. **Candidate testing:** Pre-release versions vetted before entering fast/stable channels.
@@ -134,8 +131,6 @@ Platform must maintain automated test coverage for:
 TODO: why do we need to test on a candidate if it has been tested on nightly?
 
 CI testing will not run on fast, stable or eus channels, as the release will have been vetted through nightly and candidate testing by that point. However, the platform will monitor the installs and upgrades on new releases, and in the case of failures or regressions, it will trigger alerts that will result in adding exclusion intervals for the affected z-releases.
-
-All ROSA V2 pre-merge CI runs on candidate.
 
 ### Upgrade tests:
 
@@ -156,9 +151,15 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 ## Monitoring & Observability Requirements
 
 - **Fleet Z-stream distribution:** Track percentage of fleet on default-z, lag distribution by version, reasons for lag (pinned, upgrade in progress, stuck, soak-stuck).
-- **Stranded cluster detection:** Alert on clusters with Z \> default-z (waiting for newer default-z to be released) or Z \< default-z for longer than maximum expected rollout duration.
 - **Upgrade success metrics:** Track upgrade success rate, time-to-rollout, SLO breach correlation with upgrades.
 - **Pinned/excluded z-releases:** Expose which specific z-releases are currently pinned or excluded fleet-wide, labeled by version (not just a count). CI consumes this feed directly to decide what it does and doesn't need to keep testing for a given version. The platform doesn't need its own lever or policy for "stop testing a stale pin"; that decision lives entirely on the CI side, informed by this metric.
+
+## Risks
+
+| Risk | Description | Mitigation |
+| --- | --- | --- |
+| Risk is declared and the z-default goes back one release (fallback z). | The fleet will now upgrade to the fallback z, which has not been the testing target since the release of the latest z. This is a narrow risk, because CI has previously tested the fallback z. | Test against latest z **and** the fallback z. Alternatively, all upgrades are stopped, tests are launched against previous-z and after success upgrades are resumed. NOTE: we will not opt to do this initially. |
+| Upgrade status conditions grow unbounded | For every upgrade, each cluster gains two .status.conditions with no cleanup | Implement a cleanup mechanism to remove or archive old conditions, or limit the number of retained conditions per cluster. |
 
 ## Implementation plan
 
@@ -166,7 +167,7 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 
 Channel CRs are Postgres-backed custom resources (not Kubernetes-native), stored under `channels`. A channel is named for its OCP minor and group, e.g. `stable-4.20`. Channel CRs are per-region: each region's Channel controller owns its own copy of a given channel, so the same channel name can resolve to a different `.status.default` in different regions once the day-offset is applied (see Block 3).
 
-- `.spec.gates[]`: the feature gates that unlock the channel for customer selection. Empty or unset means the channel is available to all customers.
+- `.spec.feature_gates[]`: the feature gates that unlock the channel for customer selection. Empty or unset means the channel is available to all customers.
 - `.status.default`: the Default Z (version and release image) the channel currently installs and upgrades to, e.g. `4.20.13`; the Channel controller resolves the image from Cincinnati and sets it.
 - `.status.risks.excluded[]`: Z-versions excluded by the Channel controller's SLO latch; Default Z computation skips them. Once set, they can only be removed via ZOA TAs.
 
@@ -198,14 +199,14 @@ Reconcile loop (every ~10 min):
 
 Per-cluster lifecycle (the slot is held against the recorded target release from target until full soak, even if `.status.default` advances to a newer Z while the upgrade is in flight: a cluster always finishes the upgrade it was targeted for before it can be retargeted):
 
-- Target: set the `TargetedForUpgrade` condition (release and timestamp), set `.spec.release.image` from the cluster's target. `seaplane_cluster_upgrade_targeted{channel,version}` is emitted from the presence of this condition and is never removed.
+- Target: set the `TargetedForUpgrade` condition (release and timestamp), set `.spec.release.image` from the cluster's target. `seaplane_channel_upgrades_started{channel,version}` is emitted from the presence of this condition and is never removed.
 - `UpgradeSuccessful` status condition: the cluster reports healthy on the new version.
 - `UpgradeSuccessfulSoak` status condition: the cluster has stayed healthy for `minReadyDuration` (clock starts at `UpgradeSuccessful`). At this point the cluster is fully upgraded and frees its slot.
 
 `stuck` and `soak_stuck` are not independent state the controller sets and must remember to unset. Each reconcile, the controller already knows (from the `TargetedForUpgrade`/`UpgradeSuccessful` timestamps) whether a cluster has blown through its timeout, so it recomputes the comparison and emits or withholds the metric fresh every loop. The metric's appearance fires the alert immediately (the timeout is already applied in the controller's comparison, so no `for:` duration is needed in the alerting rule); once the cluster succeeds or soaks, the controller simply stops emitting it next loop and the alert resolves:
 
-- `seaplane_cluster_upgrade_stuck{channel,version,uuid}`: emitted while a cluster is targeted at a release and has not reported `UpgradeSuccessful` for it within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn once it succeeds. Pages SRE.
-- `seaplane_cluster_upgrade_soak_stuck{channel,version,uuid}`: emitted while a cluster has reported `UpgradeSuccessful` for a release but lost health again before reaching `minReadyDuration` since that timestamp, without yet reaching `UpgradeSuccessfulSoak`; withdrawn once it soaks. Pages SRE.
+- `seaplane_channel_upgrades_stuck{channel,version,uuid}`: emitted while a cluster is targeted at a release and has not reported `UpgradeSuccessful` for it within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn once it succeeds. Pages SRE.
+- `seaplane_channel_upgrades_soak_stuck{channel,version,uuid}`: emitted while a cluster has reported `UpgradeSuccessful` for a release but lost health again before reaching `minReadyDuration` since that timestamp, without yet reaching `UpgradeSuccessfulSoak`; withdrawn once it soaks. Pages SRE.
 
 Metric cardinality: `targeted` is labeled `{channel,version}` only, because every cluster is targeted and per-cluster series would be too many. `stuck` and `soak_stuck` carry `uuid` because we expect few and need to name the offending clusters.
 
@@ -277,7 +278,7 @@ Scope: own the Channel CRs and compute each channel's `.status.default`.
 Channel discovery:
 
 - GitOps provides a list of rulesets that define what channels are supported (plain names or regexes), matched against channel names in the OCP Upgrade Graph (Cincinnati). Allow-list only those channels.
-- For each supported channel, create and maintain a Channel CR, assigning `.spec.gates[]` by the GitOps rules.
+- For each supported channel, create and maintain a Channel CR, assigning `.spec.feature_gates[]` by the GitOps rules.
 
 Default Z computation:
 
@@ -288,7 +289,7 @@ Default Z computation:
 
 SLO exclusion latch:
 
-- Watch `seaplane_cluster_upgrade_targeted`, `seaplane_cluster_upgrade_stuck`, and `seaplane_cluster_upgrade_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), append that version to `.status.risks.excluded[]` and regress `.status.default` to the previous non-excluded Z. There is no minimum-sample floor for now: a single early failure can trip the threshold and block the channel (a floor is a future refinement).
+- Watch `seaplane_channel_upgrades_started`, `seaplane_channel_upgrades_stuck`, and `seaplane_channel_upgrades_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), append that version to `.status.risks.excluded[]` and regress `.status.default` to the previous non-excluded Z. There is no minimum-sample floor for now: a single early failure can trip the threshold and block the channel (a floor is a future refinement).
 - `seaplane_channel_excluded_version{channel,version,source}`: one series per currently-excluded version, with `source` set to `slo_latch`, `cincinnati`, or `gitops`. Fire an alert while a `slo_latch` series has no matching `cincinnati` or `gitops` series for the same version. SRE resolves it one of two ways, both of which clear the alert:
   - the Z is genuinely bad: formalize the exclusion in Cincinnati (future state) or GitOps (stopgap);
   - it was a false positive (for example one unhealthy MC): fix the underlying cause so the gauges fall, then remove the exclusion with a ZOA TA.
@@ -318,9 +319,9 @@ Future state: Cincinnati exclusions only; the GitOps exclusion path is a stopgap
 | Metric | Requirement | Exposed by | Calculation |
 | --- | --- | --- | --- |
 | Telemeter `cluster_version` | Fleet Z-release distribution | CVO, via HyperShift's control-plane ServiceMonitor | CVO-reported actual/desired/updating/completed version per cluster |
-| `seaplane_cluster_upgrade_targeted{channel,version}` | Upgrade success metrics | Upgrade controller (Block 2) | Presence of the `TargetedForUpgrade` condition; set once, never withdrawn |
-| `seaplane_cluster_upgrade_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while targeted at a release and `UpgradeSuccessful` hasn't landed within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn on success |
-| `seaplane_cluster_upgrade_soak_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while `UpgradeSuccessful` has landed but health is lost again before `minReadyDuration` since that timestamp, with `UpgradeSuccessfulSoak` not yet reached; withdrawn on soak |
+| `seaplane_channel_upgrades_started{channel,version}` | Upgrade success metrics | Upgrade controller (Block 2) | Presence of the `TargetedForUpgrade` condition; set once, never withdrawn |
+| `seaplane_channel_upgrades_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while targeted at a release and `UpgradeSuccessful` hasn't landed within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn on success |
+| `seaplane_channel_upgrades_soak_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while `UpgradeSuccessful` has landed but health is lost again before `minReadyDuration` since that timestamp, with `UpgradeSuccessfulSoak` not yet reached; withdrawn on soak |
 | `seaplane_cluster_version{channel,version}` | Fleet Z-release distribution, Stranded cluster detection | Upgrade controller (Block 2) | Count of clusters per channel and version, recomputed each reconcile; the regional-native equivalent of Telemeter's `cluster_version` |
 | `seaplane_cluster_pinned{version}` | Pinned/excluded z-releases | Upgrade controller (Block 2) | One series per distinct version currently named by a `pin-version` or `exclude-intervals` label anywhere in the fleet |
 | `seaplane_channel_excluded_version{channel,version,source}` | SLO exclusion latch alerting | Channel controller (Block 3) | One series per currently-excluded version, `source` set to `slo_latch`, `cincinnati`, or `gitops`; alerts when a `slo_latch` series has no matching `cincinnati` or `gitops` series |
