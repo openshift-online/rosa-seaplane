@@ -67,7 +67,6 @@ Clusters may differ from x.y.default-z if:
 
 - **Upgrade in progress:** Progressive rollout is mid-flight.
 - **Pinned version**: SRE has pinned a cluster or group to a specific Z (via ZOA TA). This can put a cluster ahead of x.y.default-z as well as behind it.
-- **Excluded versions:** SRE has excluded a cluster or group from a specific Z range (via ZOA TA) due to known incompatibility. The exclusion can be an open-ended cap (e.g., "hold at 4.22.14, no max"). The preference is not to use Excluded versions as the main mechanism, but use Cincinnati graph data instead to block at the global level.
 
 ### Monitoring & Rollback
 
@@ -80,9 +79,9 @@ The customer changes the channel (e.g., stable-4.21 → stable-4.22). The platfo
 
 - admin acknowledgments have not been provided (policy gate, not risk evaluation)
 - the change would create an N-3 control-plane skew
-- the default z on the new Y has a defined platform-specific risk
+- the Default Z on the new Y has a defined platform-specific risk
 
-Y+1 upgrades are validated via CI testing, not per-cluster CVO evaluation, and not via a live graph-edge check. Nightly and candidate testing continuously pull the fleet's actual active z-release spread for Y (across every region, including pinned and excluded clusters) and test upgrading each of those versions to both Y's Default Z and Y+1's Default Z. By the time a Z is promoted into a stable/fast/eus channel, every currently-active Y-side version has already been proven to cross into it, so a customer-requested Y+1 change never needs a runtime coverage check, only the risk/ack/skew gates above.
+Y+1 upgrades are validated via CI testing, not per-cluster CVO evaluation, and not via a live graph-edge check. Nightly and candidate testing continuously pull the fleet's actual active z-release spread for Y (across every region, including pinned clusters) and test upgrading each of those versions to both Y's Default Z and Y+1's Default Z. By the time a Z is promoted into a stable/fast/eus channel, every currently-active Y-side version has already been proven to cross into it, so a customer-requested Y+1 change never needs a runtime coverage check, only the risk/ack/skew gates above.
 
 The platform does not perform per-cluster CVO risk evaluation for Y+1 upgrades. Safety comes from:
 
@@ -114,19 +113,19 @@ Testing is the primary validation mechanism for both Z-stream and Y-stream upgra
 Platform must maintain automated test coverage for:
 
 - **Installation:** Every supported z-release for all supported channels.
-- **Z-stream upgrade:** every z-release currently active in the fleet, across all regions (including pinned and excluded clusters), upgraded to its minor's Default Z (validates the "any Z to any Z" assumption using live fleet state, not a fixed version matrix).
-- **Y-stream upgrade:** every z-release currently active in the fleet for minor Y, across all regions (including pinned and excluded clusters), upgraded to Y+1's Default Z. Sourcing this from live production, rather than a static graph walk, is what lets a Y+1 channel change skip any runtime edge check (see Y+1 Upgrade): coverage already exists for every version a customer could actually be on. Every distinct version an SRE pins or excludes a cluster to is still live in production, so it adds a standing entry to this matrix for as long as the pin or exclusion exists (see Per-cluster pin/exclude in Block 2). Pinning is not free from a CI-cost perspective.
+- **Z-stream upgrade:** every z-release currently active in the fleet, across all regions (including pinned clusters), upgraded to its minor's Default Z (validates the "any Z to any Z" assumption using live fleet state, not a fixed version matrix).
+- **Y-stream upgrade:** every z-release currently active in the fleet for minor Y, across all regions (including pinned clusters), upgraded to Y+1's Default Z. Sourcing this from live production, rather than a static graph walk, is what lets a Y+1 channel change skip any runtime edge check (see Y+1 Upgrade): coverage already exists for every version a customer could actually be on. Every distinct version an SRE pins a cluster to is still live in production, so it adds a standing entry to this matrix for as long as the pin exists (see Per-cluster pin in Block 2). Pinning is not free from a CI-cost perspective.
 - **Feature validation:** Core platform features (ingress, node creation, KMS, HSM, storage, etc.).
 
 ### CI Testing configurations
 
 1. **Nightly testing (\~24h feedback):** Platform runs automated tests against **accepted** OCP nightly builds. Breakage triggers immediate revert request to OCP (must be within 24h; OCP will revert without argument if caught early).
    1. ROSA V2 e2e tests
-   2. Upgrade tests: every z-release currently active in the fleet (across all regions, including pinned/excluded clusters) to the nightly build.
+   2. Upgrade tests: every z-release currently active in the fleet (across all regions, including pinned clusters) to the nightly build.
 2. **Candidate testing:** Pre-release versions vetted before entering fast/stable channels.
    1. ROSA V2 e2e tests
-   2. Upgrade tests: every z-release currently active in the fleet for the same minor (across all regions, including pinned/excluded clusters) to the candidate release.
-   3. Y+1 upgrade tests: every z-release currently active in the fleet for the prior minor Y (across all regions, including pinned/excluded clusters) to the candidate release, when the candidate is a Y+1 target. This is what proves Y+1 coverage before the release is ever promoted, so no cluster is ever asked to cross an untested edge.
+   2. Upgrade tests: every z-release currently active in the fleet for the same minor (across all regions, including pinned clusters) to the candidate release.
+   3. Y+1 upgrade tests: every z-release currently active in the fleet for the prior minor Y (across all regions, including pinned clusters) to the candidate release, when the candidate is a Y+1 target. This is what proves Y+1 coverage before the release is ever promoted, so no cluster is ever asked to cross an untested edge.
 
 TODO: why do we need to test on a candidate if it has been tested on nightly?
 
@@ -152,10 +151,11 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 
 - **Fleet Z-stream distribution:** Track percentage of fleet on default-z, lag distribution by version, reasons for lag (pinned, upgrade in progress, stuck, soak-stuck).
 - **Upgrade success metrics:** Track upgrade success rate, time-to-rollout, SLO breach correlation with upgrades.
-- **Pinned/excluded z-releases:** Expose which specific z-releases are currently pinned or excluded fleet-wide, labeled by version (not just a count). CI consumes this feed directly to decide what it does and doesn't need to keep testing for a given version. The platform doesn't need its own lever or policy for "stop testing a stale pin"; that decision lives entirely on the CI side, informed by this metric.
+- **Pinned z-releases:** Expose which specific z-releases are currently pinned fleet-wide, labeled by version (not just a count). CI consumes this feed directly to decide what it does and doesn't need to keep testing for a given version. The platform doesn't need its own lever or policy for "stop testing a stale pin"; that decision lives entirely on the CI side, informed by this metric.
 
 ## Risks
 
+<!-- prettier-ignore -->
 | Risk | Description | Mitigation |
 | --- | --- | --- |
 | Risk is declared and the z-default goes back one release (fallback z). | The fleet will now upgrade to the fallback z, which has not been the testing target since the release of the latest z. This is a narrow risk, because CI has previously tested the fallback z. | Test against latest z **and** the fallback z. Alternatively, all upgrades are stopped, tests are launched against previous-z and after success upgrades are resumed. NOTE: we will not opt to do this initially. |
@@ -185,7 +185,7 @@ Install: at install time the platform resolves the channel's `.status.default` a
 - Feature gate marker for a `spec.release.image` override: an unvalidated pass-through to OCP, gated to entitled non-prod users, never reachable by external customers.
 - Feature gate to access `private` channels (enforced by the validation above).
 - Feature gate for the ability to disable upgrades: if set, the upgrade controller does not upgrade the cluster.
-- Feature gate to set `pin-version` at cluster creation, so a cluster can install directly at a chosen Z instead of the channel's Default Z (see Per-cluster pin/exclude in Block 2).
+- Feature gate to set `pin-version` at cluster creation, so a cluster can install directly at a chosen Z instead of the channel's Default Z (see Per-cluster pin in Block 2).
 
 ### Block 2 - Upgrade controller
 
@@ -193,7 +193,7 @@ Scope: drive every cluster to its channel's `.status.default` (automatic Z-upgra
 
 Reconcile loop (every ~10 min):
 
-- A cluster's target is its `pin-version` label when present (see Per-cluster pin/exclude), otherwise `.status.default` capped by any `exclude-intervals` label. Pin is the only path allowed to move a cluster backward; targeting via `.status.default` is never a downgrade.
+- A cluster's target is its `pin-version` label when present (see Per-cluster pin), otherwise `.status.default`. Pin is the only path allowed to move a cluster backward; targeting via `.status.default` is never a downgrade.
 - A cluster is eligible for a new target when it is not currently in-flight and its version differs from this target. An in-flight cluster is skipped here even if its target has since changed: it is never retargeted mid-upgrade, only re-evaluated for a new target once its current one finishes (see Per-cluster lifecycle).
 - Staggering: `MAX_CONCURRENT_UPGRADES` caps in-flight upgrades, pin-driven or automatic alike. A cluster counts as in-flight from the moment its `TargetedForUpgrade` condition is set until its `UpgradeSuccessfulSoak` condition matches that same recorded release, so the count survives controller restarts. Pick up a new cluster only while in-flight is under the cap. When more clusters are eligible than free slots, pick up the ones furthest behind their target first, so a cluster that's fallen several Z's behind doesn't keep losing slot contention to ones that just became eligible.
 
@@ -210,7 +210,7 @@ Per-cluster lifecycle (the slot is held against the recorded target release from
 
 Metric cardinality: `targeted` is labeled `{channel,version}` only, because every cluster is targeted and per-cluster series would be too many. `stuck` and `soak_stuck` carry `uuid` because we expect few and need to name the offending clusters.
 
-`stuck` and `soak_stuck` only cover a cluster that's already been targeted and is failing to land, not a cluster sitting untargeted (ahead of `.status.default` after an SLO-latch regression or a deliberate pin, or behind it because `MAX_CONCURRENT_UPGRADES` hasn't picked it up yet). `seaplane_cluster_version{channel,version}` counts clusters per channel and version, recomputed each reconcile: this is the region's own equivalent of Telemeter's `cluster_version`, giving Fleet Z-release distribution a regional-native source that doesn't depend on an external pipeline. Stranded cluster detection is a query over it: any non-default version whose count stays non-zero past the expected rollout window, ahead or behind.
+`stuck` and `soak_stuck` only cover a cluster that's already been targeted and is failing to land, not a cluster sitting untargeted (ahead of `.status.default` after an SLO-latch regression or a deliberate pin, or behind it because `MAX_CONCURRENT_UPGRADES` hasn't picked it up yet). `seaplane_cluster_version{channel,version}` counts clusters per channel and version, recomputed each reconcile: this is the region's own equivalent of Telemeter's `cluster_version`, giving Fleet Z-release distribution a regional-native source that doesn't depend on an external pipeline. `seaplane_channel_default_version{channel,version}` marks which version is currently `.status.default` for that channel, so the two can be joined to see the fleet's distribution against the target. Stranded clusters (ahead or behind Default Z for longer than the expected rollout window) are visible in that distribution, but there's no dedicated alert for it: once a cluster is accounted for by `stuck`/`soak_stuck` or the SLO latch, there's nothing further for SRE to act on.
 
 ```mermaid
 stateDiagram-v2
@@ -227,20 +227,19 @@ stateDiagram-v2
 Remediation (no automatic rollback):
 
 - Stuck and soak-stuck clusters hold their slots and roll forward: SRE fixes them in place until they soak, or they skip the bad Z once the Channel controller promotes the next Z into `.status.default` (the excluded Z is no longer a target, and the next loop retargets them).
-- HyperShift supports rollback, but the controller never downgrades automatically. An SRE performs a rollback by pinning the cluster to an older `<z>` (see Per-cluster pin/exclude), through the dedicated rollback ZOA TA.
+- HyperShift supports rollback, but the controller never downgrades automatically. An SRE performs a rollback by pinning the cluster to an older `<z>` (see Per-cluster pin), through the dedicated rollback ZOA TA.
 
-Per-cluster pin/exclude: SRE pins or excludes a cluster via a label on the Cluster, set through a ZOA TA:
+Per-cluster pin: SRE pins a cluster via a label on the Cluster, set through a ZOA TA:
 
 - `seaplane.io/pin-version: <z>`: replaces `.status.default` as the cluster's target, regardless of what `.status.default` is. The reconcile loop drives the cluster to `<z>` through the normal Target → UpgradeSuccessful → UpgradeSuccessfulSoak lifecycle, the same conditions and metrics as any other upgrade. Two separate ZOA TAs set this label, not one: pinning to `<z>` at or above the cluster's current version is the ordinary action; pinning to a `<z>` below it is a rollback and goes through a separate ZOA TA requiring additional SRE approval (see SRE Controls).
-- `seaplane.io/exclude-intervals: <z1,z2)[,<z3,z4)...]`: caps what `.status.default` can target, same interval semantics as the fleet-wide exclusion intervals (see SRE Controls); a range can be open-ended (e.g. `[4.22.14,)`) to cap the cluster with no upper bound. The reconcile loop skips any target that falls in an excluded interval.
 - SRE removes the label to resume automatic upgrades. A label (rather than a spec field) keeps this a simple, selector-friendly mechanism: SRE tooling and the "clusters pinned z releases" metric can both list affected clusters with a label selector instead of scanning cluster status.
-- Cost: pinning is not free. A pinned or capped cluster is still live in production, so its version is part of the active z-release spread that Testing Requirements sources CI coverage from: every distinct `<z>` a cluster is pinned or capped at becomes a standing entry in the nightly/candidate test matrix for as long as the label exists. Pinning several clusters at different versions multiplies that matrix; SRE should keep pins rare, temporary, and consolidated (prefer capping multiple clusters at the same `<z>` over scattering them across different ones).
-- `seaplane_cluster_pinned{version}`: emitted per distinct version currently named by a `pin-version` or `exclude-intervals` label somewhere in the fleet. Labeled by version, not cluster, since the point is to tell external CI what versions are still pinned in production, not to enumerate clusters; CI decides for itself whether and how long to keep testing a given version.
-- `seaplane_cluster_pin_active{uuid,channel}`: emitted per pinned or excluded cluster, by uuid. Always firing while the label is present, routed silently (visible, no page) by default; promoted to paging once the cluster's channel has an EOL date scheduled (see Block 6), since a pinned cluster can't climb to a dying minor's Default Z or follow the forced flip on its own.
+- Cost: pinning is not free. A pinned cluster is still live in production, so its version is part of the active z-release spread that Testing Requirements sources CI coverage from: every distinct `<z>` a cluster is pinned at becomes a standing entry in the nightly/candidate test matrix for as long as the label exists. Pinning several clusters at different versions multiplies that matrix; SRE should keep pins rare, temporary, and consolidated (prefer pinning multiple clusters at the same `<z>` over scattering them across different ones).
+- `seaplane_cluster_pinned{version}`: emitted per distinct version currently named by a `pin-version` label somewhere in the fleet. Labeled by version, not cluster, since the point is to tell external CI what versions are still pinned in production, not to enumerate clusters; CI decides for itself whether and how long to keep testing a given version.
+- `seaplane_cluster_pin_active{uuid,channel}`: emitted per pinned cluster, by uuid. Always firing while the label is present, routed silently (visible, no page) by default; promoted to paging once the cluster's channel has an EOL date scheduled (see Block 6), since a pinned cluster can't climb to a dying minor's Default Z or follow the forced flip on its own.
 
 User-driven Y-upgrade (channel change). The same-minor hop is always allowed. A minor change `x.y.z -> x.y+1.z'` is not graph-checked: Testing Requirements already guarantees every currently-active Y-side z-release has CI-proven coverage crossing into Y+1's `.status.default` before that `.status.default` is ever set, so there is nothing left to validate against Cincinnati at request time. Reject the change if:
 
-- the target Z carries a release risk the platform has not accepted;
+- the Default Z on the target channel has a defined platform-specific risk;
 - required admin acknowledgments have not been provided;
 - the change would create an N-3 control-plane skew.
 
@@ -284,14 +283,15 @@ Default Z computation:
 
 - Query Cincinnati (and sippy for nightlies) for new-Z discovery and Z release risks (future state); set `.status.default` to the Default Z (version and image) in the channel. No edge data is needed here or anywhere in Block 2: Y+1 crossings are validated by CI coverage sourced from the live fleet, not by querying Cincinnati's graph (see Y+1 Upgrade).
 - The same-minor decision is deliberately simple: take the latest Z in the channel, back off by the channel's Z-offset (a stability-tier setting, e.g. stable/eus = 1, fast = 0), then walk further back past any Z that fails either filter:
-  - skip any Z in the effective exclusion set (the union of Cincinnati Z release risks, GitOps exclusions, and the channel's own `.status.risks.excluded[]`);
+  - skip any Z in the effective exclusion set (the union of Cincinnati Z release risks and the channel's own `.status.risks.excluded[]`);
   - skip any Z that has not yet been out for the region's day-offset (a per-region delay delivered by GitOps, measured from the Z's release date). Staggering this offset across regions produces cross-region progressive rollout: a Z becomes the default in leading regions first and in trailing regions only once it has aged enough.
+- `seaplane_channel_default_version{channel,version}`: set to 1 for the version currently in `.status.default`, updated whenever it changes. Exists purely so `seaplane_cluster_version` (Block 2) can be joined against it, without having to query the Channel CR directly.
 
 SLO exclusion latch:
 
 - Watch `seaplane_channel_upgrades_started`, `seaplane_channel_upgrades_stuck`, and `seaplane_channel_upgrades_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), append that version to `.status.risks.excluded[]` and regress `.status.default` to the previous non-excluded Z. There is no minimum-sample floor for now: a single early failure can trip the threshold and block the channel (a floor is a future refinement).
-- `seaplane_channel_excluded_version{channel,version,source}`: one series per currently-excluded version, with `source` set to `slo_latch`, `cincinnati`, or `gitops`. Fire an alert while a `slo_latch` series has no matching `cincinnati` or `gitops` series for the same version. SRE resolves it one of two ways, both of which clear the alert:
-  - the Z is genuinely bad: formalize the exclusion in Cincinnati (future state) or GitOps (stopgap);
+- `seaplane_channel_excluded_version{channel,version,source}`: one series per currently-excluded version, with `source` set to `slo_latch` or `cincinnati`. Fire an alert while a `slo_latch` series has no matching `cincinnati` series for the same version. SRE resolves it one of two ways, both of which clear the alert:
+  - the Z is genuinely bad: formalize the exclusion in Cincinnati (future state);
   - it was a false positive (for example one unhealthy MC): fix the underlying cause so the gauges fall, then remove the exclusion with a ZOA TA.
 - The exclusion is latched. The controller never removes it automatically, even after the ratio falls back under threshold. Removal is always an explicit ZOA TA, and it must follow the fix (otherwise the next loop re-adds the exclusion). Once excluded, a Z is never reconsidered for upgrades until the exclusion is removed.
 
@@ -305,13 +305,11 @@ stateDiagram-v2
     note right of Excluded
         append to .status.risks.excluded[]
         regress .status.default to prev non-excluded Z
-        alert while excluded minus cincinnati minus gitops is not empty
+        alert while excluded minus cincinnati is not empty
     end note
 ```
 
 Configuration: `threshold` (the SLO ratio that trips the latch), the per-channel Z-offset (stability tier), and the per-region day-offset (progressive delivery), all GitOps-delivered.
-
-Future state: Cincinnati exclusions only; the GitOps exclusion path is a stopgap until Cincinnati risk submission exists and should be removed then.
 
 ### Block 4 - Metrics
 
@@ -320,19 +318,20 @@ Future state: Cincinnati exclusions only; the GitOps exclusion path is a stopgap
 | --- | --- | --- | --- |
 | Telemeter `cluster_version` | Fleet Z-release distribution | CVO, via HyperShift's control-plane ServiceMonitor | CVO-reported actual/desired/updating/completed version per cluster |
 | `seaplane_channel_upgrades_started{channel,version}` | Upgrade success metrics | Upgrade controller (Block 2) | Presence of the `TargetedForUpgrade` condition; set once, never withdrawn |
-| `seaplane_channel_upgrades_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while targeted at a release and `UpgradeSuccessful` hasn't landed within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn on success |
-| `seaplane_channel_upgrades_soak_stuck{channel,version,uuid}` | Upgrade success metrics, Stranded cluster detection | Upgrade controller (Block 2) | Recomputed each reconcile: true while `UpgradeSuccessful` has landed but health is lost again before `minReadyDuration` since that timestamp, with `UpgradeSuccessfulSoak` not yet reached; withdrawn on soak |
-| `seaplane_cluster_version{channel,version}` | Fleet Z-release distribution, Stranded cluster detection | Upgrade controller (Block 2) | Count of clusters per channel and version, recomputed each reconcile; the regional-native equivalent of Telemeter's `cluster_version` |
-| `seaplane_cluster_pinned{version}` | Pinned/excluded z-releases | Upgrade controller (Block 2) | One series per distinct version currently named by a `pin-version` or `exclude-intervals` label anywhere in the fleet |
-| `seaplane_channel_excluded_version{channel,version,source}` | SLO exclusion latch alerting | Channel controller (Block 3) | One series per currently-excluded version, `source` set to `slo_latch`, `cincinnati`, or `gitops`; alerts when a `slo_latch` series has no matching `cincinnati` or `gitops` series |
-| `seaplane_cluster_pin_active{uuid,channel}` | EOL pin escalation | Upgrade controller (Block 2) | One series per pinned or excluded cluster; always firing, routed silently by default |
+| `seaplane_channel_upgrades_stuck{channel,version,uuid}` | Upgrade success metrics | Upgrade controller (Block 2) | Recomputed each reconcile: true while targeted at a release and `UpgradeSuccessful` hasn't landed within `upgradeSuccessfulTimeout` of the `TargetedForUpgrade` timestamp; withdrawn on success |
+| `seaplane_channel_upgrades_soak_stuck{channel,version,uuid}` | Upgrade success metrics | Upgrade controller (Block 2) | Recomputed each reconcile: true while `UpgradeSuccessful` has landed but health is lost again before `minReadyDuration` since that timestamp, with `UpgradeSuccessfulSoak` not yet reached; withdrawn on soak |
+| `seaplane_cluster_version{channel,version}` | Fleet Z-release distribution | Upgrade controller (Block 2) | Count of clusters per channel and version, recomputed each reconcile; the regional-native equivalent of Telemeter's `cluster_version` |
+| `seaplane_channel_default_version{channel,version}` | Fleet Z-release distribution | Channel controller (Block 3) | Set to 1 for the channel's current Default Z, updated whenever `.status.default` changes; joins against `seaplane_cluster_version` to show the fleet's distribution against the target |
+| `seaplane_cluster_pinned{version}` | Pinned z-releases | Upgrade controller (Block 2) | One series per distinct version currently named by a `pin-version` label anywhere in the fleet |
+| `seaplane_channel_excluded_version{channel,version,source}` | SLO exclusion latch alerting | Channel controller (Block 3) | One series per currently-excluded version, `source` set to `slo_latch` or `cincinnati`; alerts when a `slo_latch` series has no matching `cincinnati` series |
+| `seaplane_cluster_pin_active{uuid,channel}` | EOL pin escalation | Upgrade controller (Block 2) | One series per pinned cluster; always firing, routed silently by default |
 | `seaplane_channel_eol_scheduled{channel}` | EOL pin escalation | EOL controller (Block 6) | Set to 1 once `installsClosedDate` or `eolDate` is set on the channel; joined against `seaplane_cluster_pin_active` to promote that alert to paging |
 
 ### Block 5 - CI
 
 Scope: implement the Testing Requirements coverage (install, Z-stream upgrade, Y-stream upgrade sourced from the live fleet) as an extension of the `rosa-hyperfleet-ephemeral-e2e` workflow (openshift/release), reusing `rosa-hyperfleet-resolve-ocp-image` for nightly/candidate payload resolution.
 
-- Fleet discovery: a step, sibling to `resolve-ocp-image`, queries the Platform API for every z-release currently active for a given minor, across all regions, including pinned/excluded clusters.
+- Fleet discovery: a step, sibling to `resolve-ocp-image`, queries the Platform API for every z-release currently active for a given minor, across all regions, including pinned clusters.
 - Controls: `pin-version`, settable at creation (Block 1) and updatable afterward (Block 2), drives every version transition in these tests. It installs the cluster directly at the chosen Z, and changing it later triggers an upgrade through the same Target → UpgradeSuccessful → UpgradeSuccessfulSoak lifecycle and metrics production uses.
 - Upgrade step: after install, change `pin-version` to the second target release, wait for `UpgradeSuccessfulSoak`, then re-run the e2e suite against the upgraded cluster.
 - One periodic per cadence (nightly, candidate), looping over the discovered active-Z list and reusing the provision/teardown steps per version; each version reports its own pass/fail so one bad pairing doesn't mask the rest.
@@ -362,4 +361,4 @@ New EOL controller, per cluster on an EOL-approaching channel:
 
 Latch collision: if the SLO latch excludes every remaining Z in the dying minor's channel, `.status.default` has no eligible target left and the cluster can no longer climb forward, stalling the migration before it ever reaches a flip-ready Z. This is correct safety (never force a cluster onto a known-bad Z, even under deadline pressure), but as `eolDate` nears the EOL controller must escalate to SRE with the conflict spelled out: fix the Z, clear the exclusion, or accept the risk via ZOA TA.
 
-Pinned collision: a pinned or excluded cluster (see Per-cluster pin/exclude in Block 2) has the same effect as a latch collision: it can't climb to the dying minor's Default Z or follow the forced flip on its own, and nothing drives it off the minor before `eolDate`. `seaplane_channel_eol_scheduled{channel}`, emitted by the EOL controller once `installsClosedDate` or `eolDate` is set on a channel, is what turns `seaplane_cluster_pin_active{uuid,channel}` (Block 2) from a silent, always-on signal into a paging one: the pin itself isn't urgent on an ordinary channel, but the moment its channel is EOL-scheduled, SRE needs to walk that cluster forward manually well before the deadline, not discover it at `eolDate`.
+Pinned collision: a pinned cluster (see Per-cluster pin in Block 2) has the same effect as a latch collision: it can't climb to the dying minor's Default Z or follow the forced flip on its own, and nothing drives it off the minor before `eolDate`. `seaplane_channel_eol_scheduled{channel}`, emitted by the EOL controller once `installsClosedDate` or `eolDate` is set on a channel, is what turns `seaplane_cluster_pin_active{uuid,channel}` (Block 2) from a silent, always-on signal into a paging one: the pin itself isn't urgent on an ordinary channel, but the moment its channel is EOL-scheduled, SRE needs to walk that cluster forward manually well before the deadline, not discover it at `eolDate`.
