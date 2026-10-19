@@ -9,19 +9,19 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 ## Context
 
 - **Problem Statement:** The fleet needs an automatic, low-touch way to keep a large, regionally-distributed set of clusters on safe, continuously-updated OCP Z/Y releases, catch bad releases quickly, and give SRE controlled escape hatches, without centralized coordination across regions or per-cluster CVO-reported risk evaluation.
-- **Constraints:** Each region's Channel and Upgrade controllers operate independently (Regional Independence); the platform does not evaluate CVO-reported per-cluster risk; rollout must be progressive and staggered, not instantaneous; SRE overrides must go through ZOA Trusted Actions, not direct cluster access; EOL migration must reuse the same machinery as ordinary upgrades rather than a separate path.
-- **Assumptions:** OCP's own nightly/candidate/stable release pipeline is a trustworthy signal that a Z-release has been vetted; Cincinnati's native platform-specific risk support (Q1 2027) will eventually replace today's interim mechanisms; the Postgres-backed Channel CRD model (Block 1) is available to build on.
+- **Constraints:** Each region's Channel and Upgrade controllers (introduced in this document) operate independently (Regional Independence); the platform does not evaluate CVO-reported per-cluster risk; rollout must be progressive and staggered, not instantaneous; SRE overrides must go through ZOA TAs (Zero-operator-access Trusted Actions), not direct cluster access; EOL migration must reuse the same machinery as ordinary upgrades rather than a separate path.
+- **Assumptions:** OCP's own nightly/candidate/stable release pipeline is a trustworthy signal that a Z-release has been vetted; Cincinnati's native platform-specific risk support (Q1 2027) will be leveraged to create platform-specific risks.
 
 ## Alternatives Considered
 
-1. **Use CVO for per-cluster edge checking:** evaluate each cluster's own CVO-reported risks and graph edges before every upgrade decision. Rejected per the rationale in [CVO risk evaluation design notes](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0).
+1. **Use CVO for per-cluster edge checking:** evaluate each cluster's own CVO-reported risks and graph edges before every upgrade decision. Rejected per the rationale in the [Alternative Spec for Managed Fleet z-stream selection](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0) document.
 2. **Let customers select which Z to run:** expose Z-level choice directly to customers, not just channel/Y-level choice. Rejected because it fragments the fleet's active-version spread too much for CI to cover: Testing Requirements' live-fleet-sourced coverage model depends on the active spread staying narrow enough to fully test.
 3. **Let customers opt into early Z-upgrades:** give customers a lever to adopt a new Z ahead of their channel's normal day-offset. Rejected as unnecessary: the design already keeps the whole fleet upgraded to Default Z almost continuously, so there's no meaningful "early" case left to expose.
 
 ## Design Rationale
 
 - **Justification:** Deriving CI coverage from the live fleet (rather than live Cincinnati graph-edge checks or per-cluster CVO risk evaluation) means every version a customer could actually be on has already been proven to cross into the next target before that target is ever reached, with no runtime dependency on an external graph API.
-- **Evidence:** Querying Cincinnati's real graph data (see Y+1 Upgrade) showed that cross-minor edges commonly land on a specific jump-off release that doesn't track a channel's configured Z-offset, which would make a literal edge-check brittle; the live-fleet-sourced model avoids that dependency entirely.
+- **Evidence:** Querying Cincinnati's real graph data (see Y+1 Upgrade) showed that cross-minor edges are anchored to whatever X.Y+1.Z was latest at the time X.Y.Z was promoted — matching OCP's own process of testing upgradability "from X.Y.Z to the latest X.Y+1.Z" at promotion time; not to whatever our channel's Z-offset and day-offset currently resolve as Default Z. A literal edge-check against Default Z would therefore be brittle; the live-fleet-sourced model avoids that dependency entirely.
 - **Comparison:** CVO-based per-cluster edge checking (alternative 1) would require the per-cluster risk evaluation this design explicitly avoids, for the reasons in the linked design notes. Customer-selectable Z (alternative 2) and early-upgrade opt-in (alternative 3) would both work against the fleet-wide CI coverage model this design depends on, for no corresponding benefit once the whole fleet is kept close to Default Z continuously.
 
 ## Consequences
@@ -35,7 +35,7 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 ### Negative
 
-- The SLO exclusion latch's sensitivity decays over a version's lifetime as successful upgrades accumulate (see Risks); no mitigation yet.
+- The SLO exclusion latch's sensitivity decays over a version's lifetime as successful upgrades accumulate (see Risks); mitigated by bounding the ratio to a trailing window instead of each version's lifetime, not yet implemented.
 - Pinning a cluster is not free: every distinct pinned version is a standing entry in the CI test matrix for as long as the pin exists (see Block 2, Per-cluster pin).
 - Cincinnati's native platform-specific risk support isn't live yet (targeted Q1 2027), so the SLO exclusion latch is carrying interim weight that Cincinnati is expected to eventually take over.
 
@@ -54,13 +54,13 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 - [OCP Upgrade Graph](https://access.redhat.com/labs/ocpupgradegraph/update_path)
 - [OCP Release Status](https://amd64.ocp.releases.ci.openshift.org/)
-- [CVO risk evaluation design notes](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0)
+- [Alternative Spec for Managed Fleet z-stream selection](https://docs.google.com/document/d/1wYr-MW_r0i_tftD9rNM0HIfuU_BcbqUghdZno6F5yYM/edit?tab=t.0)
 
 ## Terminology
 
 - **Channel:** The rollout stream that declares the minor version and stability tier (e.g., stable-4.22, fast-4.23).
 - **Default Z (x.y.default-z):** The target z-stream for a given channel, i.e. the Channel CR's `.status.default`.
-- **Platform-specific risk exclusions:** Excluding versions marked with platform-specific risks in the Cincinnati graph (e.g., "don't upgrade ROSA V2 to 4.22.17"). Platform-specific risk support to be delivered by OCP Q1 2027; until then, the Channel controller's SLO exclusion latch (see Automatic Z-upgrades) is the automatic interim mechanism, backed by pinned versions as a manual SRE escape hatch.
+- **Platform-specific risk exclusions:** Excluding versions marked with platform-specific (`hcpPlatform`) risks in the Cincinnati graph (e.g., "don't upgrade ROSA V2 to 4.22.17"). Platform-specific risk support to be delivered by OCP Q1 2027; until then, the Channel controller's SLO exclusion latch (see Automatic Z-upgrades) is the automatic interim mechanism, backed by pinned versions as a manual SRE escape hatch.
 
 ## Design Principles
 
@@ -214,6 +214,8 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 | Upgrade status conditions grow unbounded | For every upgrade, each cluster gains two .status.conditions with no cleanup | Implement a cleanup mechanism to remove or archive old conditions, or limit the number of retained conditions per cluster. |
 
 ## Implementation plan
+
+This section contains the implementation details for this feature. It is not necessary to read this to understand the high-level design or the risks and requirements outlined above.
 
 ### Block 1 - API and Channel CRD
 
