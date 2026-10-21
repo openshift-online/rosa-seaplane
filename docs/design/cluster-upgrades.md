@@ -35,16 +35,16 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 ### Negative
 
-- The SLO exclusion latch's sensitivity decays over a version's lifetime as successful upgrades accumulate (see Risks); mitigated by bounding the ratio to a trailing window instead of each version's lifetime, not yet implemented.
+- The SLO breach alert's sensitivity decays over a version's lifetime as successful upgrades accumulate (see Risks); mitigated by bounding the ratio to a trailing window instead of each version's lifetime, not yet implemented.
 - Pinning a cluster is not free: every distinct pinned version is a standing entry in the CI test matrix for as long as the pin exists (see Block 2, Per-cluster pin).
-- Cincinnati's native platform-specific risk support isn't live yet (targeted Q1 2027), so the SLO exclusion latch is carrying interim weight that Cincinnati is expected to eventually take over.
+- Cincinnati's native platform-specific risk support isn't live yet (targeted Q1 2027), so in the interim exclusions are recorded as ordinary SRE-written Cincinnati exclusion intervals, prompted by the SLO breach alert. Automating that write to remove the manual SRE step is a separate seaplane-side target end state, independent of the Q1 2027 platform-specific risk timeline.
 
 ## Cross-Cutting Concerns
 
 ### Reliability:
 
 - **Observability:** see Monitoring & Observability Requirements and Block 4 for the full metrics set.
-- **Resiliency:** see the SLO exclusion latch (Block 3) and the Risks table for known gaps.
+- **Resiliency:** see the SLO breach alert (Block 3) and the Risks table for known gaps.
 
 ### Security:
 
@@ -60,7 +60,7 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 - **Channel:** The rollout stream that declares the minor version and stability tier (e.g., stable-4.22, fast-4.23).
 - **Default Z (x.y.default-z):** The target z-stream for a given channel, i.e. the Channel CR's `.status.default`.
-- **Platform-specific risk exclusions:** Excluding versions marked with platform-specific (`hcpPlatform`) risks in the Cincinnati graph (e.g., "don't upgrade ROSA V2 to 4.22.17"). Platform-specific risk support to be delivered by OCP Q1 2027; until then, the Channel controller's SLO exclusion latch (see Automatic Z-upgrades) is the automatic interim mechanism, backed by pinned versions as a manual SRE escape hatch.
+- **Platform-specific risk exclusions:** Excluding versions marked with platform-specific (`hcpPlatform`) risks in the Cincinnati graph (e.g., "don't upgrade ROSA V2 to 4.22.17"). Platform-specific risk support to be delivered by OCP Q1 2027; until then, exclusions are recorded as ordinary Cincinnati exclusion intervals written by SRE, prompted by the Channel controller's SLO breach alert (see Automatic Z-upgrades), with pinned versions as a manual SRE escape hatch.
 
 ## Design Principles
 
@@ -103,10 +103,7 @@ Progressive rollout is per-region: each region drives its own clusters to the De
 
 A cluster must stay healthy for `minReadyDuration` after it first reports healthy on the new version before the upgrade counts as fully soaked and frees its slot.
 
-The controller collects upgrade outcomes and uses them as its own feedback signal when the upgrade SLO is breached in a region:
-
-- **Regional:** the response is automatic and local. The Channel controller excludes the broken Z (appends it to the channel's excluded set, latched until an SRE clears it), so the region's Default Z regresses to the previous Z and no further clusters move to the broken one. An alert is raised for SRE, who can then trigger an all-regions block manually via a ZOA TA (Trusted Action) (see Platform-Owned Risks).
-- **Fleet-wide:** the same SLO breach in a single region raises an alert that writes platform risk into the Cincinnati graph data, which blocks that Z across all regions at once. Automating this alert to graph-data fan-out is the target end state.
+The controller collects upgrade outcomes and uses them as its own feedback signal: when `(stuck + soak_stuck) / targeted` crosses the SLO threshold for a Z in a region, the Channel controller raises an alert that pages SRE (see SLO breach alert in Block 3). Detection is regional, but there is no automatic local block. For a Z that leaves clusters stuck, the rollout self-wedges — stuck clusters hold their slots (see Progressive Rollout), capping concurrent exposure at `MAX_CONCURRENT_UPGRADES` while SRE investigates; for a Z that fails only partially or after soak, successful clusters free their slots and more are targeted, so exposure is bounded only by SRE response time (see Risks). SRE formalizes a genuinely bad Z as a Cincinnati exclusion interval (see Platform-Owned Risks) — the only exclusion path — which blocks that Z across all regions at once. Automating the breach alert to a Cincinnati graph-data write is the target end state.
 
 ### Cross-Region Promotion
 
@@ -194,7 +191,7 @@ CI testing will not run on fast, stable or eus channels, as the release will hav
 Requirement: As a platform provider, we must be able to add platform-owned risk rules for z-releases to the Cincinnati graph.
 
 - **Scope:** Platform-wide (not per-cluster). Example: "Don't install or upgrade ROSA V2 clusters to 4.22.17 on AWS due to issue X."
-- **Fallback:** Until platform-specific graph support is available, the SLO exclusion latch handles automatic detection and blocking; process-driven risk reporting plus pinned versions remain a manual SRE escape hatch.
+- **Fallback:** Until platform-specific graph support is available, the SLO breach alert handles automatic detection and SRE records the block as a Cincinnati exclusion interval; process-driven risk reporting plus pinned versions remain a manual SRE escape hatch.
 
 **Note:** this changes the usual edge-exclusion semantics: instead of blocking individual upgrade edges, the exclusion blocks the z-release as a whole (all edges to it, plus new installs on it), for the given platform.
 
@@ -210,7 +207,8 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 | Risk | Description | Mitigation |
 | --- | --- | --- |
 | Risk is declared and the z-default goes back one release (fallback z). | The fleet will now upgrade to the fallback z, which has not been the testing target since the release of the latest z. This is a narrow risk, because CI has previously tested the fallback z. | Test against latest z **and** the fallback z. Alternatively, all upgrades are stopped, tests are launched against previous-z and after success upgrades are resumed. NOTE: we will not opt to do this initially. |
-| The SLO latch ratio's denominator decays in sensitivity over a version's lifetime. | `targeted` is never withdrawn (lifetime count for the version), while `stuck`/`soak_stuck` are withdrawn once a cluster recovers. As a version accumulates successful upgrades over time, the same absolute number of new failures represents a shrinking percentage, so the latch becomes progressively less likely to trip on a later bad rollout of the same version. | Bound the ratio to a trailing window instead of each version's lifetime: count distinct clusters that were stuck or soak-stuck at any point in the window (not just right now, so one that already recovered within the window still counts), divided by how many clusters were newly targeted in that same window. `targeted` is already a monotonic count, so the windowed denominator falls out of it directly; no new metric is needed. Not implemented initially, same as the missing minimum-sample floor (see SLO exclusion latch in Block 3). |
+| The SLO breach alert ratio's denominator decays in sensitivity over a version's lifetime. | `targeted` is never withdrawn (lifetime count for the version), while `stuck`/`soak_stuck` are withdrawn once a cluster recovers. As a version accumulates successful upgrades over time, the same absolute number of new failures represents a shrinking percentage, so the alert becomes progressively less likely to fire on a later bad rollout of the same version. | Bound the ratio to a trailing window instead of each version's lifetime: count distinct clusters that were stuck or soak-stuck at any point in the window (not just right now, so one that already recovered within the window still counts), divided by how many clusters were newly targeted in that same window. `targeted` is already a monotonic count, so the windowed denominator falls out of it directly; no new metric is needed. Not implemented initially, same as the missing minimum-sample floor (see SLO breach alert in Block 3). |
+| The interim exposure window between detecting a bad Z (SLO breach alert, or post-promotion monitoring) and SRE recording a Cincinnati exclusion is no longer closed automatically. | With no local exclusion latch, nothing pulls `.status.default` off a bad Z until SRE writes the Cincinnati exclusion. Self-wedging bounds exposure only for the stuck/soak-stuck failure modes the SLO ratio detects; a Z that fails partially or only after soak frees slots as clusters succeed, so the eligible fleet can keep cycling onto it during the SRE response window. | Accepted trade-off of making Cincinnati the single exclusion store. Bounded in practice by SRE paging response, and for post-soak regressions by post-promotion monitoring (see Testing Requirements). Automating the breach-to-Cincinnati write (target end state) closes the window without reintroducing a second exclusion store. |
 | Upgrade status conditions grow unbounded | For every upgrade, each cluster gains two .status.conditions with no cleanup | Implement a cleanup mechanism to remove or archive old conditions, or limit the number of retained conditions per cluster. |
 
 ## Implementation plan
@@ -223,7 +221,6 @@ Channel CRs are Postgres-backed custom resources (not Kubernetes-native), stored
 
 - `.spec.feature_gates[]`: the feature gates that unlock the channel for customer selection. Empty or unset means the channel is available to all customers.
 - `.status.default`: the Default Z (version and release image) the channel currently installs and upgrades to, e.g. `4.20.13`; the Channel controller resolves the image from Cincinnati and sets it.
-- `.status.risks.excluded[]`: Z-versions excluded by the Channel controller's SLO latch; Default Z computation skips them. Once set, they can only be removed via ZOA TAs.
 
 Cluster creation API and validation:
 
@@ -264,7 +261,7 @@ Per-cluster lifecycle (the slot is held against the recorded target release from
 
 Metric cardinality: `targeted` is labeled `{channel,version}` only, because every cluster is targeted and per-cluster series would be too many. `stuck` and `soak_stuck` carry `uuid` because we expect few and need to name the offending clusters.
 
-`stuck` and `soak_stuck` only cover a cluster that's already been targeted and is failing to land, not a cluster sitting untargeted (ahead of `.status.default` after an SLO-latch regression or a deliberate pin, or behind it because `MAX_CONCURRENT_UPGRADES` hasn't picked it up yet). `seaplane_cluster_version{channel,version}` counts clusters per channel and version, recomputed each reconcile: this is the region's own equivalent of Telemeter's `cluster_version`, giving Fleet Z-release distribution a regional-native source that doesn't depend on an external pipeline. `seaplane_channel_default_version{channel,version}` marks which version is currently `.status.default` for that channel, so the two can be joined to see the fleet's distribution against the target. Stranded clusters (ahead or behind Default Z for longer than the expected rollout window) are visible in that distribution, but there's no dedicated alert for it: once a cluster is accounted for by `stuck`/`soak_stuck` or the SLO latch, there's nothing further for SRE to act on.
+`stuck` and `soak_stuck` only cover a cluster that's already been targeted and is failing to land, not a cluster sitting untargeted (ahead of `.status.default` after a Cincinnati exclusion drops the default, or a deliberate pin, or behind it because `MAX_CONCURRENT_UPGRADES` hasn't picked it up yet). `seaplane_cluster_version{channel,version}` counts clusters per channel and version, recomputed each reconcile: this is the region's own equivalent of Telemeter's `cluster_version`, giving Fleet Z-release distribution a regional-native source that doesn't depend on an external pipeline. `seaplane_channel_default_version{channel,version}` marks which version is currently `.status.default` for that channel, so the two can be joined to see the fleet's distribution against the target. Stranded clusters (ahead or behind Default Z for longer than the expected rollout window) are visible in that distribution, but there's no dedicated alert for it: once a cluster is accounted for by `stuck`/`soak_stuck` or the SLO breach alert, there's nothing further for SRE to act on.
 
 ```mermaid
 stateDiagram-v2
@@ -280,7 +277,7 @@ stateDiagram-v2
 
 Remediation (no automatic rollback):
 
-- Stuck and soak-stuck clusters hold their slots and roll forward: SRE fixes them in place until they soak, or they skip the bad Z once the Channel controller promotes the next Z into `.status.default` (the excluded Z is no longer a target, and the next loop retargets them).
+- Stuck and soak-stuck clusters hold their slots and roll forward: SRE fixes them in place until they soak, or they skip the bad Z once it's excluded in Cincinnati and the Channel controller promotes the next Z into `.status.default` (the excluded Z is no longer a target, and the next loop retargets them).
 - HyperShift supports rollback, but the controller never downgrades automatically. An SRE performs a rollback by pinning the cluster to an older `<z>` (see Per-cluster pin), through the dedicated rollback ZOA TA.
 
 Per-cluster pin: SRE pins a cluster via a label on the Cluster, set through a ZOA TA:
@@ -339,33 +336,33 @@ Default Z computation:
 
 - Query Cincinnati (and sippy for nightlies) for new-Z discovery and Z release risks (future state); set `.status.default` to the Default Z (version and image) in the channel. No edge data is needed here or anywhere in Block 2: Y+1 crossings are validated by CI coverage sourced from the live fleet, not by querying Cincinnati's graph (see Y+1 Upgrade).
 - The same-minor decision is deliberately simple: take the latest Z in the channel, back off by the channel's Z-offset (a stability-tier setting, e.g. stable/eus = 1, fast = 0), then walk further back past any Z that fails either filter:
-  - skip any Z in the effective exclusion set (the union of Cincinnati Z release risks and the channel's own `.status.risks.excluded[]`);
+  - skip any Z excluded in Cincinnati (platform-specific Z release risks or SRE-written exclusion intervals);
   - skip any Z that has not yet been out for the region's day-offset (a per-region delay delivered by GitOps, measured from the Z's release date). Staggering this offset across regions produces cross-region progressive rollout: a Z becomes the default in leading regions first and in trailing regions only once it has aged enough.
 - `seaplane_channel_default_version{channel,version}`: set to 1 for the version currently in `.status.default`, updated whenever it changes. Exists purely so `seaplane_cluster_version` (Block 2) can be joined against it, without having to query the Channel CR directly.
 
-SLO exclusion latch:
+SLO breach alert:
 
-- Watch `seaplane_channel_upgrades_started`, `seaplane_channel_upgrades_stuck`, and `seaplane_channel_upgrades_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), append that version to `.status.risks.excluded[]` and regress `.status.default` to the previous non-excluded Z. There is no minimum-sample floor for now: a single early failure can trip the threshold and block the channel (a floor is a future refinement).
-- `seaplane_channel_excluded_version{channel,version,source}`: one series per currently-excluded version, with `source` set to `slo_latch` or `cincinnati`. Fire an alert while a `slo_latch` series has no matching `cincinnati` series for the same version. SRE resolves it one of two ways, both of which clear the alert:
-  - the Z is genuinely bad: formalize the exclusion in Cincinnati (future state);
-  - it was a false positive (for example one unhealthy MC): fix the underlying cause so the gauges fall, then remove the exclusion with a ZOA TA.
-- The exclusion is latched. The controller never removes it automatically, even after the ratio falls back under threshold. Removal is always an explicit ZOA TA, and it must follow the fix (otherwise the next loop re-adds the exclusion). Once excluded, a Z is never reconsidered for upgrades until the exclusion is removed.
+- Watch `seaplane_channel_upgrades_started`, `seaplane_channel_upgrades_stuck`, and `seaplane_channel_upgrades_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), fire an alert that pages SRE. The controller takes no automatic action on `.status.default` and writes no exclusion of its own: Cincinnati is the only exclusion store (see Default Z computation above). Containment in the meantime comes from the rollout self-wedging — stuck clusters hold their slots (see Progressive Rollout), which caps concurrent exposure at `MAX_CONCURRENT_UPGRADES` only for a Z that leaves clusters stuck; a Z that fails partially or only after soak frees slots as clusters succeed, so its exposure is bounded by SRE response time instead (see Risks). There is no minimum-sample floor for now: a single early failure can trip the threshold and page (a floor is a future refinement).
+- SRE resolves the alert one of two ways:
+  - the Z is genuinely bad: record a Cincinnati exclusion interval for it (the only exclusion path). Default Z computation re-runs from scratch every reconcile, so once Cincinnati reports the exclusion `.status.default` regresses to the previous eligible Z;
+  - it was a false positive (for example one unhealthy MC): fix the underlying cause so the gauges fall and the alert clears.
+- The Cincinnati exclusion is latched the same way any graph-data exclusion is: it persists until SRE removes it (after the fix), and while it stands the Z is never reconsidered for upgrades. Automating the breach alert to a Cincinnati graph-data write is the target end state; until then that write is the SRE step above.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Eligible
-    Eligible --> Excluded: (stuck + soak_stuck) / targeted > threshold
-    Excluded --> Excluded: ratio drops (latched, no auto-clear)
-    Excluded --> Eligible: ZOA TA removes exclusion (after fix)
+    [*] --> Healthy
+    Healthy --> Breached: (stuck + soak_stuck) / targeted > threshold (pages SRE)
+    Breached --> Healthy: false positive — SRE fixes cause, gauges fall, alert clears
+    Breached --> Excluded: SRE records a Cincinnati exclusion interval
+    Excluded --> Healthy: SRE removes the Cincinnati exclusion (after fix)
 
     note right of Excluded
-        append to .status.risks.excluded[]
-        regress .status.default to prev non-excluded Z
-        alert while excluded minus cincinnati is not empty
+        exclusion lives only in Cincinnati
+        Default Z computation skips it; .status.default regresses
     end note
 ```
 
-Configuration: `threshold` (the SLO ratio that trips the latch), the per-channel Z-offset (stability tier), and the per-region day-offset (progressive delivery), all GitOps-delivered.
+Configuration: `threshold` (the SLO ratio that fires the breach alert), the per-channel Z-offset (stability tier), and the per-region day-offset (progressive delivery), all GitOps-delivered.
 
 ### Block 4 - Metrics
 
@@ -379,7 +376,7 @@ Configuration: `threshold` (the SLO ratio that trips the latch), the per-channel
 | `seaplane_cluster_version{channel,version}` | Fleet Z-release distribution | Upgrade controller (Block 2) | Count of clusters per channel and version, recomputed each reconcile; the regional-native equivalent of Telemeter's `cluster_version` |
 | `seaplane_channel_default_version{channel,version}` | Fleet Z-release distribution | Channel controller (Block 3) | Set to 1 for the channel's current Default Z, updated whenever `.status.default` changes; joins against `seaplane_cluster_version` to show the fleet's distribution against the target |
 | `seaplane_cluster_pinned{version}` | Pinned z-releases | Upgrade controller (Block 2) | One series per distinct version currently named by a `pin-version` label anywhere in the fleet |
-| `seaplane_channel_excluded_version{channel,version,source}` | SLO exclusion latch alerting | Channel controller (Block 3) | One series per currently-excluded version, `source` set to `slo_latch` or `cincinnati`; alerts when a `slo_latch` series has no matching `cincinnati` series |
+| `seaplane_channel_excluded_version{channel,version}` | Excluded-version visibility | Channel controller (Block 3) | One series per version currently excluded in Cincinnati for the channel (Z release risks or exclusion intervals), as applied by Default Z computation |
 | `seaplane_cluster_pin_active{uuid,channel}` | EOL pin escalation | Upgrade controller (Block 2) | One series per pinned cluster; always firing, routed silently by default |
 | `seaplane_channel_eol_scheduled{channel}` | EOL pin escalation | EOL controller (Block 6) | Set to 1 once `installsClosedDate` or `eolDate` is set on the channel; joined against `seaplane_cluster_pin_active` to promote that alert to paging |
 
@@ -415,6 +412,6 @@ New EOL controller, per cluster on an EOL-approaching channel:
 - Flip: once on the dying minor's Default Z, write `.spec.channel` server-side to the real final target (`X.Y+1-<channelgroup>`, or `X.Y+2-eus` for EUS). The flip bypasses the Block 2 admin-acknowledgment gate (this is a forced move, not customer-initiated) but still respects the N-3 skew guard, checked for every leg the move requires.
 - Hand back to Block 2: the same gap-aware targeting rule that handles a customer's EUS channel change (see Block 2, User-driven Y-upgrade) takes over from here, no EOL-specific handling needed. For a non-EUS flip this is a single ordinary hop. For EUS, `.spec.channel` already names `X.Y+2-eus` directly; the control plane still can't skip `X.Y+1` (EUS only lets worker nodes skip that reboot), so Block 2 targets the intermediate minor's Default Z first and the final channel's once the gap closes to one.
 
-Latch collision: if the SLO latch excludes every remaining Z in the dying minor's channel, `.status.default` has no eligible target left and the cluster can no longer climb forward, stalling the migration before it ever reaches a flip-ready Z. This is correct safety (never force a cluster onto a known-bad Z, even under deadline pressure), but as `eolDate` nears the EOL controller must escalate to SRE with the conflict spelled out: fix the Z, clear the exclusion, or accept the risk via ZOA TA.
+Exclusion collision: if Cincinnati excludes every remaining Z in the dying minor's channel, `.status.default` has no eligible target left and the cluster can no longer climb forward, stalling the migration before it ever reaches a flip-ready Z. This is correct safety (never force a cluster onto a known-bad Z, even under deadline pressure), but as `eolDate` nears the EOL controller must escalate to SRE with the conflict spelled out: fix the Z, clear the Cincinnati exclusion, or accept the risk via ZOA TA.
 
-Pinned collision: a pinned cluster (see Per-cluster pin in Block 2) has the same effect as a latch collision: it can't climb to the dying minor's Default Z or follow the forced flip on its own, and nothing drives it off the minor before `eolDate`. `seaplane_channel_eol_scheduled{channel}`, emitted by the EOL controller once `installsClosedDate` or `eolDate` is set on a channel, is what turns `seaplane_cluster_pin_active{uuid,channel}` (Block 2) from a silent, always-on signal into a paging one: the pin itself isn't urgent on an ordinary channel, but the moment its channel is EOL-scheduled, SRE needs to walk that cluster forward manually well before the deadline, not discover it at `eolDate`.
+Pinned collision: a pinned cluster (see Per-cluster pin in Block 2) has the same effect as an exclusion collision: it can't climb to the dying minor's Default Z or follow the forced flip on its own, and nothing drives it off the minor before `eolDate`. `seaplane_channel_eol_scheduled{channel}`, emitted by the EOL controller once `installsClosedDate` or `eolDate` is set on a channel, is what turns `seaplane_cluster_pin_active{uuid,channel}` (Block 2) from a silent, always-on signal into a paging one: the pin itself isn't urgent on an ordinary channel, but the moment its channel is EOL-scheduled, SRE needs to walk that cluster forward manually well before the deadline, not discover it at `eolDate`.
