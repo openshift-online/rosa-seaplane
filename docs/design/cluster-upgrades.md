@@ -9,7 +9,7 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 ## Context
 
 - **Problem Statement:** The fleet needs an automatic, low-touch way to keep a large, regionally-distributed set of clusters on safe, continuously-updated OCP Z/Y releases, catch bad releases quickly, and give SRE controlled escape hatches, without centralized coordination across regions or per-cluster CVO-reported risk evaluation.
-- **Constraints:** Each region's Channel and Upgrade controllers (introduced in this document) operate independently (Regional Independence); the platform does not evaluate CVO-reported per-cluster risk; rollout must be progressive and staggered, not instantaneous; SRE overrides must go through ZOA TAs (Zero-operator-access Trusted Actions), not direct cluster access; EOL migration must reuse the same machinery as ordinary upgrades rather than a separate path.
+- **Constraints:** This design is bounded by OCP's current delivery model — OCP ships as a single monolithic release payload, so the platform cannot patch individual components; every fix (CVE, bug, or platform issue) arrives only as a whole Z-release and only after OCP's full release cycle completes. The machinery here is therefore built around whole-payload Z/Y transitions, not component-level patching. Beyond that: each region's Channel and Upgrade controllers (introduced in this document) operate independently (Regional Independence); the platform does not evaluate CVO-reported per-cluster risk; rollout must be progressive and staggered, not instantaneous; SRE overrides must go through ZOA TAs (Zero-operator-access Trusted Actions), not direct cluster access; EOL migration must reuse the same machinery as ordinary upgrades rather than a separate path.
 - **Assumptions:** OCP's own nightly/candidate/stable release pipeline is a trustworthy signal that a Z-release has been vetted; Cincinnati's native platform-specific risk support (Q1 2027) will be leveraged to create platform-specific risks.
 
 ## Alternatives Considered
@@ -48,7 +48,8 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 ### Security:
 
-- All SRE overrides (pin, rollback, channel override, fleet-wide exclusion) go through ZOA Trusted Actions; rollback specifically requires a separate, higher-approval ZOA TA (see SRE Controls).
+- All per-cluster and Cincinnati-graph SRE overrides (pin, rollback, channel override, fleet-wide exclusion) go through ZOA Trusted Actions; rollback specifically requires a separate, higher-approval ZOA TA (see SRE Controls).
+- The one exception is the fleet-wide `minVersion` hotfix floor (see Hotfixes), delivered through reviewed GitOps rather than a self-service ZOA TA: a fleet-wide floor is a deliberate, auditable change that warrants PR review.
 
 ## Resources
 
@@ -60,6 +61,7 @@ ROSA V2 keeps every cluster in a region continuously upgraded to a per-channel "
 
 - **Channel:** The rollout stream that declares the minor version and stability tier (e.g., stable-4.22, fast-4.23).
 - **Default Z (x.y.default-z):** The target z-stream for a given channel, i.e. the Channel CR's `.status.default`.
+- **Limited Support (LS):** A support state a cluster can enter (for example when it needs customer action or runs in a configuration with reduced support guarantees). LS clusters are not exempt from automatic upgrades (see Automatic Z-upgrades).
 - **Platform-specific risk exclusions:** Excluding versions marked with platform-specific (`hcpPlatform`) risks in the Cincinnati graph (e.g., "don't upgrade ROSA V2 to 4.22.17"). Platform-specific risk support to be delivered by OCP Q1 2027; until then, exclusions are recorded as ordinary Cincinnati exclusion intervals written by SRE, prompted by the Channel controller's SLO breach alert (see Automatic Z-upgrades), with pinned versions as a manual SRE escape hatch.
 
 ## Design Principles
@@ -78,7 +80,7 @@ The platform does **not** perform per-cluster CVO risk evaluation for Z-stream u
 
 The Default Z for a channel is governed by two independent offsets:
 
-- **Z-offset (stability tier):** how many Z's back from the latest available Z the channel's Default Z sits, for bake-time/stability reasons. Stable and eus channels use a Z-offset of 1 (latest minus one); other channels like fast use a Z-offset of 0 (the latest available Z). This is a per-channel setting, unrelated to region.
+- **Z-offset (stability tier):** how many Z's back from the latest available Z the channel's Default Z sits, for bake-time/stability reasons. The offset is a control the platform owns and tunes per channel: a larger offset buys more soak time at the cost of carrying known CVEs and bug fixes longer, a smaller one trades soak time for fresher fixes, and we set each channel's value wherever that trade-off balances best, revising it as real-world data warrants. The values used in this document — stable/eus at 1 (latest minus one) and fast at 0 (the latest available Z), are starting points.
 - **Day-offset (progressive delivery):** how many days a region waits after a Z's release date before adopting it as Default Z, so a new Z doesn't land on every region at once (see Cross-Region Promotion). This is a per-region setting, unrelated to channel stability tier.
 
 In all cases, the chosen Z must have passed ROSA V2 CI and have no platform-specific risks declared against it in Cincinnati.
@@ -96,6 +98,8 @@ The customer selects the channel (e.g., stable-4.21). The platform resolves the 
 ## Automatic Z-upgrades
 
 The platform will keep the fleet continuously upgraded to the Default Z for their respective channels, ensuring that clusters are always running a version that has passed CI and has no known platform-specific risks.
+
+Limited Support clusters are not exempt from this. Keeping them on the Default Z like every other cluster is what keeps them inside the active-version spread CI covers (see Testing Requirements); holding one back on an old Z would both widen the CI matrix and leave it unpatched. If a specific Limited Support cluster genuinely must hold a version, that is handled through the ordinary per-cluster pin (see Per-cluster pin in Block 2), not a blanket Limited Support exemption.
 
 ### Progressive Rollout
 
@@ -146,11 +150,21 @@ SRE can perform the following controls:
 | Control | Scope | Mechanism | Use Case |
 | --- | --- | --- | --- |
 | Z-release Exclusion intervals\* <br/>(e.g. `[4.22.14, 4.22.18)`) | Fleet wide | Cincinnati Graph Data | A release fails CI, or progressive upgrades start failing |
+| Channel `minVersion` floor (fleet-wide hotfix) | Fleet wide | GitOps (Channel CR) | A critical fix (e.g. CVE) must reach the whole fleet faster than the normal cadence (see Hotfixes) |
 | Override the channel (forces a Y-stream change) | Cluster specific | ZOA TA | Forced upgrade (e.g. EOL) |
 | Pin to a specific Z at or above the cluster's current version <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA | The cluster must stay at a particular z-release for special reasons or due to its special configuration |
 | Pin to a specific Z below the cluster's current version (rollback) <br/> (SRE must remove the pin for future upgrades.) | Cluster specific | ZOA TA, separate from the one above and requiring additional approval | SRE determines the cluster's version must be rolled back |
 
 \* Note that exclusion intervals apply to all channels: a blocked z-release is unavailable for installation and as an upgrade target across every channel.
+
+## Hotfixes
+
+A hotfix is the case where a fix, typically a critical CVE or a critical bug, must reach clusters faster than the normal Default-Z cadence would deliver it. Because OCP ships as a whole release payload (see Context, Constraints), a hotfix is always a jump to a newer Z that carries the fix, never a component-level patch. There are two hotfix paths, differing only in blast radius:
+
+- **Fleet-wide hotfix (`minVersion`):** a per region GitOps-delivered floor on a channel's Default Z (see Block 3). When set, Default Z computation raises `.status.default` to the lowest eligible Z at or above `minVersion` (and leaves it unchanged if the normal Default Z is already higher), overriding the Z-offset and the day-offset's automatic aging. Because `minVersion` is itself delivered per region via GitOps, SRE still controls the cross-region rollout and can stagger it like any other release. The usual safety filters still apply above the floor: `minVersion` must resolve to a CI-passed, non-excluded Z, and the actual rollout is still paced by `MAX_CONCURRENT_UPGRADES`. Once the fleet has climbed to the new floor, normal progression resumes from there.
+- **Cluster-specific hotfix (pin):** the per-cluster pin already described (see Per-cluster pin in Block 2 and SRE Controls). SRE pins a single cluster forward to the fixed z-release through a ZOA TA, without moving the rest of the fleet.
+
+`minVersion` is reserved for genuinely urgent fixes, not routine floor-raising. Clusters held below `minVersion` by a pin are the exception the floor does not reach: `minVersion` governs Default-Z-driven clusters, so SRE must reconcile any pinned cluster that also needs the fix through the cluster-specific path above.
 
 ## Testing Requirements
 
@@ -200,6 +214,7 @@ Requirement: As a platform provider, we must be able to add platform-owned risk 
 - **Fleet Z-stream distribution:** Track percentage of fleet on default-z, lag distribution by version, reasons for lag (pinned, upgrade in progress, stuck, soak-stuck).
 - **Upgrade success metrics:** Track upgrade success rate, time-to-rollout, SLO breach correlation with upgrades.
 - **Pinned z-releases:** Expose which specific z-releases are currently pinned fleet-wide, labeled by version (not just a count). CI consumes this feed directly to decide what it does and doesn't need to keep testing for a given version. The platform doesn't need its own lever or policy for "stop testing a stale pin"; that decision lives entirely on the CI side, informed by this metric.
+- **Hotfix floor compliance:** During a fleet-wide hotfix, track how much of the fleet is at or above the channel's `minVersion`, and time-to-full-compliance, so a CVE remediation can be reported against an SLA. This joins `seaplane_cluster_version` against `seaplane_channel_min_version`, the same way the Default Z distribution does.
 
 ## Risks
 
@@ -220,6 +235,7 @@ This section contains the implementation details for this feature. It is not nec
 Channel CRs are Postgres-backed custom resources (not Kubernetes-native), stored under `channels`. A channel is named for its OCP minor and group, e.g. `stable-4.20`. Channel CRs are per-region: each region's Channel controller owns its own copy of a given channel, so the same channel name can resolve to a different `.status.default` in different regions once the day-offset is applied (see Block 3).
 
 - `.spec.feature_gates[]`: the feature gates that unlock the channel for customer selection. Empty or unset means the channel is available to all customers.
+- `.spec.minVersion`: (optional) GitOps-delivered floor on the channel's Default Z, used for fleet-wide hotfixes (see Hotfixes). Empty or unset means no floor.
 - `.status.default`: the Default Z (version and release image) the channel currently installs and upgrades to, e.g. `4.20.13`; the Channel controller resolves the image from Cincinnati and sets it.
 
 Cluster creation API and validation:
@@ -335,16 +351,17 @@ Channel discovery:
 Default Z computation:
 
 - Query Cincinnati (and sippy for nightlies) for new-Z discovery and Z release risks (future state); set `.status.default` to the Default Z (version and image) in the channel. No edge data is needed here or anywhere in Block 2: Y+1 crossings are validated by CI coverage sourced from the live fleet, not by querying Cincinnati's graph (see Y+1 Upgrade).
-- The same-minor decision is deliberately simple: take the latest Z in the channel, back off by the channel's Z-offset (a stability-tier setting, e.g. stable/eus = 1, fast = 0), then walk further back past any Z that fails either filter:
+- The same-minor decision is deliberately simple: take the latest Z in the channel, back off by the channel's Z-offset (a stability-tier setting the platform tunes per channel; e.g. stable/eus = 1, fast = 0, illustrative), then walk further back past any Z that fails either filter:
   - skip any Z excluded in Cincinnati (platform-specific Z release risks or SRE-written exclusion intervals);
   - skip any Z that has not yet been out for the region's day-offset (a per-region delay delivered by GitOps, measured from the Z's release date). Staggering this offset across regions produces cross-region progressive rollout: a Z becomes the default in leading regions first and in trailing regions only once it has aged enough.
+- Apply the `minVersion` floor (fleet-wide hotfix, see Hotfixes): if `.spec.minVersion` is set and the Z selected above is below it, raise the target to the lowest eligible (CI-passed, non-excluded) Z at or above `minVersion`, ignoring the Z-offset and day-offset for the purpose of meeting the floor. If no eligible Z at or above the floor exists, the channel has no valid Default Z and the controller alerts SRE (the same conflict shape as the EOL exclusion collision in Block 6).
 - `seaplane_channel_default_version{channel,version}`: set to 1 for the version currently in `.status.default`, updated whenever it changes. Exists purely so `seaplane_cluster_version` (Block 2) can be joined against it, without having to query the Channel CR directly.
 
 SLO breach alert:
 
 - Watch `seaplane_channel_upgrades_started`, `seaplane_channel_upgrades_stuck`, and `seaplane_channel_upgrades_soak_stuck`. When `(stuck + soak_stuck) / targeted > threshold` for a (channel, version), fire an alert that pages SRE. The controller takes no automatic action on `.status.default` and writes no exclusion of its own: Cincinnati is the only exclusion store (see Default Z computation above). Containment in the meantime comes from the rollout self-wedging — stuck clusters hold their slots (see Progressive Rollout), which caps concurrent exposure at `MAX_CONCURRENT_UPGRADES` only for a Z that leaves clusters stuck; a Z that fails partially or only after soak frees slots as clusters succeed, so its exposure is bounded by SRE response time instead (see Risks). There is no minimum-sample floor for now: a single early failure can trip the threshold and page (a floor is a future refinement).
 - SRE resolves the alert one of two ways:
-  - the Z is genuinely bad: record a Cincinnati exclusion interval for it (the only exclusion path). Default Z computation re-runs from scratch every reconcile, so once Cincinnati reports the exclusion `.status.default` regresses to the previous eligible Z;
+  - the Z is genuinely bad: record a Cincinnati exclusion interval for it (the only exclusion path). Default Z computation re-runs from scratch every reconcile, so once Cincinnati reports the exclusion `.status.default` regresses to the previous eligible Z and the `minVersion` floor is re-applied on top. If the excluded version was itself the hotfix floor and no eligible Z at or above `minVersion` remains, computation has no valid target and raises the "no eligible Z above floor" alert rather than silently dropping below the floor;
   - it was a false positive (for example one unhealthy MC): fix the underlying cause so the gauges fall and the alert clears.
 - The Cincinnati exclusion is latched the same way any graph-data exclusion is: it persists until SRE removes it (after the fix), and while it stands the Z is never reconsidered for upgrades. Automating the breach alert to a Cincinnati graph-data write is the target end state; until then that write is the SRE step above.
 
@@ -362,7 +379,7 @@ stateDiagram-v2
     end note
 ```
 
-Configuration: `threshold` (the SLO ratio that fires the breach alert), the per-channel Z-offset (stability tier), and the per-region day-offset (progressive delivery), all GitOps-delivered.
+Configuration: `threshold` (the SLO ratio that fires the breach alert), the per-channel Z-offset (stability tier), the per-region day-offset (progressive delivery), and the optional per-channel `minVersion` floor (fleet-wide hotfix, see Hotfixes), all GitOps-delivered.
 
 ### Block 4 - Metrics
 
@@ -375,6 +392,7 @@ Configuration: `threshold` (the SLO ratio that fires the breach alert), the per-
 | `seaplane_channel_upgrades_soak_stuck{channel,version,uuid}` | Upgrade success metrics | Upgrade controller (Block 2) | Recomputed each reconcile: true while `UpgradeSuccessful` has landed but health is lost again before `minReadyDuration` since that timestamp, with `UpgradeSuccessfulSoak` not yet reached; withdrawn on soak |
 | `seaplane_cluster_version{channel,version}` | Fleet Z-release distribution | Upgrade controller (Block 2) | Count of clusters per channel and version, recomputed each reconcile; the regional-native equivalent of Telemeter's `cluster_version` |
 | `seaplane_channel_default_version{channel,version}` | Fleet Z-release distribution | Channel controller (Block 3) | Set to 1 for the channel's current Default Z, updated whenever `.status.default` changes; joins against `seaplane_cluster_version` to show the fleet's distribution against the target |
+| `seaplane_channel_min_version{channel,version}` | Hotfix floor compliance | Channel controller (Block 3) | Set to 1 for the channel's current `minVersion` floor when one is set; joins against `seaplane_cluster_version` to show how much of the fleet has reached the hotfix floor |
 | `seaplane_cluster_pinned{version}` | Pinned z-releases | Upgrade controller (Block 2) | One series per distinct version currently named by a `pin-version` label anywhere in the fleet |
 | `seaplane_channel_excluded_version{channel,version}` | Excluded-version visibility | Channel controller (Block 3) | One series per version currently excluded in Cincinnati for the channel (Z release risks or exclusion intervals), as applied by Default Z computation |
 | `seaplane_cluster_pin_active{uuid,channel}` | EOL pin escalation | Upgrade controller (Block 2) | One series per pinned cluster; always firing, routed silently by default |
