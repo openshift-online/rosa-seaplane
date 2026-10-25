@@ -2,8 +2,8 @@
 # Register or deregister this MC as a ZOA boundary target in RC SSM
 # (/zoa/targets/<deployment>/<cluster>).
 #
-# RC-account Terraform only (use_rc_account + CHILD_ADMIN_ROLE), same lifecycle
-# model as provision-kube-applier-dynamodb.sh — not nested in provision-infra-mc.
+# RC-account Terraform only (use_rc_account + CHILD_ADMIN_ROLE), called by
+# provision-cluster.sh after MC infrastructure, like kube-applier DynamoDB.
 # Does not use zoa-data-access; MC Lambdas use that role for DynamoDB/S3 only.
 set -euo pipefail
 
@@ -15,15 +15,14 @@ config_load management
 _resolve_rc_account
 RESOLVED_REGIONAL_ACCOUNT_ID="${_RESOLVED_RC_ACCOUNT_ID}"
 
-DELETE_FLAG=$(jq -r '.delete // false' "$DEPLOY_CONFIG_FILE")
-[ "${IS_DESTROY:-false}" == "true" ] && DELETE_FLAG="true"
+DELETE_FLAG="${IS_DESTROY:-false}"
 
 TERRAFORM_ACTION="apply"
 [ "${DELETE_FLAG}" == "true" ] && TERRAFORM_ACTION="destroy"
 
 _zoa_deployment_name=$(jq -r '.zoa_deployment_name // empty' "$DEPLOY_CONFIG_FILE")
 if [ -z "${_zoa_deployment_name}" ]; then
-    _zoa_deployment_name=$(jq -r '.deployment_name // empty' "deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-regional-cluster-inputs/terraform.json" 2>/dev/null || echo "")
+    _zoa_deployment_name=$(jq -r '.deployment_name // empty' "$(config_path_for_mode regional)" 2>/dev/null || echo "")
 fi
 if [ -z "${_zoa_deployment_name}" ]; then
     echo "ERROR: zoa_deployment_name not set in MC deploy config or RC deployment_name" >&2

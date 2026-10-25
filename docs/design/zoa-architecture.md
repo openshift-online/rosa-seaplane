@@ -288,7 +288,7 @@ The Access Lambda execution role (`aws_iam_role.access_lambda`) is **created** i
 - **Cross-account data plane**: MC `*-zoa-lambda` roles assume RC **`zoa-data-access`** for DynamoDB and S3. Trust requires principals in the configured **MC OU** and an IAM role name suffix **`zoa-lambda`** (wildcard ARN condition), so only per-VPC ZOA Lambda roles qualify — not arbitrary principals in the OU.
 - **SSM discovery (two namespaces)**:
   - **Central account** (providers `aws.central_deployments` + replica): `/zoa/deployments/<deployment_name>` — Access Function URL + invoker ARN (`module.zoa-access`).
-  - **RC account**: `/zoa/targets/<deployment_name>/<cluster_id>` — boundary target JSON (API URL, ECS ARNs, subnets) for `zoa session start`. RC row: `module.zoa-lambda` on regional cluster. MC rows: pipeline stage `buildspec-provision-mc-zoa-target-ssm.yml` → `provision-mc-zoa-target-ssm.sh` → `terraform/config/mc-zoa-target-ssm-provisioning/` (Terraform in **RC account** via child admin role — same idea as kube-applier DynamoDB provisioning, **not** via `zoa-data-access`).
+  - **RC account**: `/zoa/targets/<deployment_name>/<cluster_id>` — boundary target JSON (API URL, ECS ARNs, subnets) for `zoa session start`. RC row: `module.zoa-lambda` on regional cluster. MC rows: combined `scripts/buildspec/provision-cluster.sh` → `scripts/buildspec/provision-mc-zoa-target-ssm.sh` → `terraform/config/mc-zoa-target-ssm-provisioning/` (separate `mc-zoa-target-ssm/<cluster_id>.tfstate` in the **RC account** via child admin role — same idea as kube-applier DynamoDB provisioning, **not** via `zoa-data-access`).
 
 ### AWS cost allocation tags (ZOA)
 

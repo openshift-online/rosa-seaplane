@@ -2,6 +2,8 @@
 
 **Last Updated Date**: 2026-09-23
 
+> Superseded proposal. The current implementation retains per-cluster CodePipeline orchestration with combined CodeBuild workers. See [CodePipeline Cluster Lifecycle](codepipeline-cluster-lifecycle.md); the standalone-webhook workflows below are historical design context.
+
 ## Summary
 
 This ADR replaces AWS CodePipeline with standalone AWS CodeBuild for Regional Cluster (RC) and Management Cluster (MC) provisioning. Bootstrap still creates shared central resources (CodeStar, IAM, ECR) plus a thin **cluster-build provisioner** CodeBuild. That provisioner uses the **AWS SDK** (not Terraform state) to create, update, and delete **one CodeBuild project per cluster**. Git webhooks start those projects at the commit SHA.

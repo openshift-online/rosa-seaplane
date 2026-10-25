@@ -33,6 +33,7 @@ from render import (
     scan_annotations,
     scan_template_variables,
     update_docs,
+    validate_cluster_topology,
     write_output,
 )
 
@@ -803,6 +804,24 @@ class TestBuildMcList:
         mc_list = build_mc_list(ctx, merged, "xg4y")
         assert mc_list[0]["management_id"] == "xg4y-mc01"
 
+    def test_shared_ids_do_not_duplicate_suffixes(self):
+        merged = {
+            "provision_mcs": {"mc01": {"account_id": "111"}},
+        }
+        ctx = build_context(merged, "staging", "us-east-1", "")
+        mc_list = build_mc_list(ctx, merged, "")
+
+        assert ctx["regional_id"] == "regional"
+        assert mc_list[0]["management_id"] == "mc01"
+
+    def test_ephemeral_ids_keep_prefix(self):
+        merged = {"provision_mcs": {"mc01": {"account_id": "111"}}}
+        ctx = build_context(merged, "ephemeral", "us-east-1", "beb87f69")
+        mc_list = build_mc_list(ctx, merged, "beb87f69")
+
+        assert ctx["regional_id"] == "beb87f69-regional"
+        assert mc_list[0]["management_id"] == "beb87f69-mc01"
+
     def test_default_account_id(self):
         merged = {
             "aws": {"management_cluster_account_id": "default-account"},
@@ -831,12 +850,54 @@ class TestBuildMcList:
         assert mc_list[0]["account_id"] == "mc-mc01-us-east-1"
 
 
+class TestClusterTopologyValidation:
+    def test_rejects_duplicate_rc_and_mc_ids(self):
+        merged = {
+            "provision_mcs": {"mc01": {"account_id": "111"}},
+            "aws": {"management_cluster_account_id": "222"},
+            "cluster_naming": {
+                "rc_pattern": "{prefix}-cluster",
+                "mc_pattern": "{prefix}-cluster",
+            },
+        }
+        ctx = build_context(merged, "integration", "us-east-1", "")
+        mc_list = build_mc_list(ctx, merged, "")
+
+        with pytest.raises(ValueError, match="used by both"):
+            validate_cluster_topology(merged, ctx, mc_list, "integration", "us-east-1")
+
+    def test_rejects_missing_mc_account(self):
+        merged = {"provision_mcs": {"mc01": {}}}
+        ctx = build_context(merged, "integration", "us-east-1", "")
+        mc_list = build_mc_list(ctx, merged, "")
+        mc_list[0].pop("account_id", None)
+
+        with pytest.raises(ValueError, match="no account_id"):
+            validate_cluster_topology(merged, ctx, mc_list, "integration", "us-east-1")
+
+
 # =============================================================================
 # cleanup_stale_files
 # =============================================================================
 
 
 class TestCleanupStaleFiles:
+    def test_removes_orphaned_input_directories_after_template_rename(self, tmp_path):
+        region_dir = tmp_path / "staging" / "us-east-1"
+        for name in ("obsolete-cluster-inputs", "pipeline-regional-cluster-inputs", "argocd-bootstrap-regional-cluster"):
+            (region_dir / name).mkdir(parents=True)
+
+        cleanup_stale_files(
+            valid_envs={"staging"},
+            env_regions={"staging": {"us-east-1"}},
+            env_region_mcs={"staging": {"us-east-1": set()}},
+            deploy_dir=tmp_path,
+        )
+
+        assert not (region_dir / "obsolete-cluster-inputs").exists()
+        assert (region_dir / "pipeline-regional-cluster-inputs").is_dir()
+        assert (region_dir / "argocd-bootstrap-regional-cluster").is_dir()
+
     def test_removes_stale_environment(self, tmp_path):
         deploy_dir = tmp_path / "deploy"
         stale_dir = deploy_dir / "old-env" / "us-east-1"

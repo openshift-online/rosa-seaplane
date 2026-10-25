@@ -2,7 +2,7 @@
 
 aws:
   # Account IDs are resolved from SSM parameters in the CONTROL account (where
-  # the pipeline-provisioner runs). The RC account ID lives under the /rc/
+  # shared provisioning resources live). The RC account ID lives under the /rc/
   # segment and each MC under /<cluster_prefix>/ (published by the internal
   # account-config module). management_cluster_account_id falls back to the
   # base default (ssm:///infra/<env>/<region>/<cluster_prefix>/account_id).

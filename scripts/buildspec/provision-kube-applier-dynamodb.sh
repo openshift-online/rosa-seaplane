@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Provision kube-applier DynamoDB tables and seaplane-operator IAM policy
 # in the RC account for this Management Cluster.
-# Called from: terraform/config/pipeline-management-cluster/buildspec-provision-kube-applier-dynamodb.yml
+# Called from: scripts/buildspec/provision-cluster.sh
 set -euo pipefail
 
 source scripts/pipeline-common/lib.sh
@@ -12,8 +12,7 @@ config_load management
 RESOLVED_REGIONAL_ACCOUNT_ID="${REGIONAL_AWS_ACCOUNT_ID}"
 
 # Determine terraform action
-DELETE_FLAG=$(jq -r '.delete // false' "$DEPLOY_CONFIG_FILE")
-[ "${IS_DESTROY:-false}" == "true" ] && DELETE_FLAG="true"
+DELETE_FLAG="${IS_DESTROY:-false}"
 
 TERRAFORM_ACTION="apply"
 [ "${DELETE_FLAG}" == "true" ] && TERRAFORM_ACTION="destroy"
@@ -21,7 +20,7 @@ TERRAFORM_ACTION="apply"
 echo "MC ${MANAGEMENT_ID}: kube-applier-dynamodb terraform ${TERRAFORM_ACTION} in RC account ${RESOLVED_REGIONAL_ACCOUNT_ID}/${TARGET_REGION}"
 
 # Read RC regional_id from RC deploy config
-_RC_CONFIG_FILE="deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-regional-cluster-inputs/terraform.json"
+_RC_CONFIG_FILE=$(config_path_for_mode regional)
 if [ ! -f "$_RC_CONFIG_FILE" ]; then
     echo "ERROR: RC config not found: $_RC_CONFIG_FILE" >&2
     exit 1

@@ -26,7 +26,7 @@
   "sre_prometheus_oidc_client_id": {{ regional_cluster.sre_prometheus_oidc_client_id | default("") | tojson }},
   "sre_thanos_oidc_client_id": {{ regional_cluster.sre_thanos_oidc_client_id | default("") | tojson }},
   "environment_domain": {{ dns.domain | default(None) | tojson }},
-  "regional_id": "{% if eph_prefix %}{{ eph_prefix }}-regional{% else %}regional{% endif %}",
+  "regional_id": "{{ regional_id }}",
   "eph_prefix": "{{ eph_prefix | default('') }}",
   "seaplane_db_instance_class": {{ regional_cluster.seaplane_db_instance_class | default('db.r6g.large') | tojson }},
   "seaplane_db_deletion_protection": {{ regional_cluster.seaplane_db_deletion_protection | default(true) | tojson }},
@@ -54,6 +54,5 @@
 {%- set _ = _mc_info.append({"id": mc.management_id, "account_id": mc.account_id}) %}
 {%- endfor %}
 {%- if _mc_info %},
-  "management_clusters_info": {{ _mc_info | tojson }}{% endif %}{% if delete %},
-  "delete": true{% endif %}
+  "management_clusters_info": {{ _mc_info | tojson }}{% endif %}
 }

@@ -1,19 +1,9 @@
 # =============================================================================
-# Pipeline Provisioner Outputs
+# GitHub Connection
 # =============================================================================
 
-output "provisioner_pipeline_name" {
-  description = "Name of the Pipeline Provisioner CodePipeline"
-  value       = module.pipeline_provisioner.provisioner_pipeline_name
-}
-
-output "provisioner_pipeline_arn" {
-  description = "ARN of the Pipeline Provisioner CodePipeline"
-  value       = module.pipeline_provisioner.provisioner_pipeline_arn
-}
-
 output "github_connection_arn" {
-  description = "ARN of the shared GitHub connection (used by all pipelines)"
+  description = "ARN of the shared GitHub connection (used by all CodeBuild projects)"
   value       = aws_codestarconnections_connection.github.arn
 }
 
@@ -27,22 +17,17 @@ output "github_connection_status" {
   value       = aws_codestarconnections_connection.github.connection_status
 }
 
-output "provisioner_role_arn" {
-  description = "ARN of the IAM role used by the provisioner CodeBuild project"
-  value       = module.pipeline_provisioner.provisioner_role_arn
-}
-
 # =============================================================================
 # General Information
 # =============================================================================
 
 output "central_account_id" {
-  description = "AWS Account ID where pipelines are deployed"
+  description = "AWS Account ID where CodeBuild projects are deployed"
   value       = data.aws_caller_identity.current.account_id
 }
 
 output "deployment_region" {
-  description = "AWS Region where pipelines are deployed"
+  description = "AWS Region where CodeBuild projects are deployed"
   value       = var.region
 }
 
@@ -60,11 +45,31 @@ output "platform_image_tag" {
   value       = module.platform_image.image_tag
 }
 
+output "platform_container_image" {
+  description = "Full container image URI (repository:tag) for use by provision-cluster-resources.sh"
+  value       = module.platform_image.container_image
+}
+
 # =============================================================================
-# MC Shared Role
+# Cluster CodeBuild Roles
 # =============================================================================
 
+output "rc_codebuild_role_arn" {
+  description = "ARN of the centrally-managed IAM role used by RC CodeBuild projects"
+  value       = aws_iam_role.rc_codebuild_role.arn
+}
+
 output "mc_codebuild_role_arn" {
-  description = "ARN of the shared IAM role used by all MC pipeline CodeBuild projects (empty when enable_shared_mc_role=false)"
-  value       = var.enable_shared_mc_role ? aws_iam_role.mc_codebuild_role[0].arn : ""
+  description = "ARN of the shared IAM role used by all MC CodeBuild projects"
+  value       = aws_iam_role.mc_codebuild_role.arn
+}
+
+output "codepipeline_artifact_bucket_name" {
+  description = "S3 bucket used by the dynamically managed RC/MC CodePipelines"
+  value       = module.codepipeline_shared.artifact_bucket_name
+}
+
+output "codepipeline_role_arn" {
+  description = "IAM role used by the dynamically managed RC/MC CodePipelines"
+  value       = module.codepipeline_shared.pipeline_role_arn
 }

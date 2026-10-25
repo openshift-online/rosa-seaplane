@@ -6,8 +6,7 @@
 #
 # Public ECR repositories must be managed from us-east-1.
 #
-# Usage:
-#   ./scripts/build-platform-image.sh
+# Usage: PLATFORM_ECR_REPO must be set by the CodeBuild project.
 #
 # Set CONTAINER_RUNTIME=docker or CONTAINER_RUNTIME=podman to override auto-detection.
 
@@ -55,41 +54,14 @@ else
   exit 1
 fi
 
-# Find the platform public ECR repository in the current account
-echo "Looking up platform public ECR repository..."
-
-if [ -n "${PLATFORM_ECR_REPO:-}" ]; then
-  # Explicit override via environment variable
-  ECR_URL="${PLATFORM_ECR_REPO}"
-  echo "Using PLATFORM_ECR_REPO from environment: $ECR_URL"
-else
-  # Query for repositories ending with '/platform' and validate uniqueness
-  ECR_MATCHES=$(aws ecr-public describe-repositories \
-    --region us-east-1 \
-    --query "repositories[?ends_with(repositoryName, '/platform')].[repositoryUri, repositoryName]" \
-    --output json 2>/dev/null || echo "[]")
-
-  MATCH_COUNT=$(echo "$ECR_MATCHES" | jq 'length')
-
-  if [ "$MATCH_COUNT" -eq 0 ]; then
-    echo "Error: No platform public ECR repository found in this account."
-    echo "Make sure 'terraform apply' has been run first."
-    exit 1
-  elif [ "$MATCH_COUNT" -gt 1 ]; then
-    echo "Error: Multiple repositories matching '/platform' found:"
-    echo "$ECR_MATCHES" | jq -r '.[] | "  - \(.[1]): \(.[0])"'
-    echo ""
-    echo "Set PLATFORM_ECR_REPO to the desired repository URI to disambiguate."
-    exit 1
-  fi
-
-  ECR_URL=$(echo "$ECR_MATCHES" | jq -r '.[0][0]')
-
-  if [ -z "$ECR_URL" ] || [ "$ECR_URL" = "null" ]; then
-    echo "Error: Failed to determine ECR repository URI."
-    exit 1
-  fi
+# The project always receives its exact repository URI from Terraform. Requiring
+# it avoids account-wide repository discovery and keeps IAM scoped to one repo.
+if [ -z "${PLATFORM_ECR_REPO:-}" ]; then
+  echo "Error: PLATFORM_ECR_REPO must be set by the CodeBuild project."
+  exit 1
 fi
+ECR_URL="${PLATFORM_ECR_REPO}"
+echo "Using PLATFORM_ECR_REPO from environment: $ECR_URL"
 
 echo "ECR Repository: $ECR_URL"
 echo "Image tag:      $IMAGE_TAG"

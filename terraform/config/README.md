@@ -2,23 +2,19 @@
 
 ## CI/CD Pipelines
 
-For the full pipeline architecture, event triggers, and lifecycle diagrams, see [Pipeline-Based Lifecycle](../../docs/design/pipeline-based-lifecycle.md).
+For the current per-cluster pipeline architecture and lifecycle, see [CodePipeline Cluster Lifecycle](../../docs/design/codepipeline-cluster-lifecycle.md).
 
 ### `central-account-bootstrap/`
 
-Seeds the initial CodePipeline that watches the `deploy/` directory in the repository. After deploying, the GitHub CodeStar connection must be authorized manually in the AWS Console.
+Creates the shared CodeStar connection, artifact bucket, CodePipeline role, CodeBuild roles, platform-image project, and platform-image ECR repository. The connection must be authorized manually in the AWS Console.
 
-### `pipeline-provisioner/`
+### `../modules/platform-image-builder/`
 
-Meta-pipeline that dynamically creates per-cluster CodePipelines when regional or management cluster JSON files are committed to `deploy/`.
+Defines the retained platform-image CodeBuild project. `scripts/provision-cluster-resources.sh` dynamically creates one CodePipeline and one CodeBuild project per RC or MC.
 
-### `pipeline-regional-cluster/`
+### `codebuild-regional-cluster/` and `codebuild-management-cluster/`
 
-Three-stage CodePipeline (validate → deploy → bootstrap) for provisioning a regional cluster. Created dynamically by the pipeline provisioner.
-
-### `pipeline-management-cluster/`
-
-Three-stage CodePipeline (validate → deploy → bootstrap) for provisioning a management cluster. Created dynamically by the pipeline provisioner.
+Contain the combined per-cluster buildspecs. Cluster pipeline and CodeBuild definitions are reconciled through AWS APIs; cluster infrastructure remains Terraform-managed.
 
 ## Cluster Infrastructure
 

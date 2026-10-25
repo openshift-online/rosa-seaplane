@@ -31,6 +31,10 @@ _CENTRAL_AWS_SECRET_ACCESS_KEY=""
 _CENTRAL_AWS_SESSION_TOKEN=""
 _RESOLVED_RC_ACCOUNT_ID=""
 
+# Shared API live endpoint. Override through the build environment when the
+# route changes; both RC and MC readiness checks use this value.
+export PLATFORM_API_LIVE_PATH="${PLATFORM_API_LIVE_PATH:-/api/v0/live}"
+
 # ── Validation ───────────────────────────────────────────────────────────────
 
 # Validate required pipeline env vars, derive CLUSTER_ID, and init credentials.
@@ -47,6 +51,69 @@ preflight_check() {
     fi
 
     init_account_helpers
+}
+
+# Require non-empty runtime variables before Terraform is invoked. Terraform
+# defaults are useful for optional settings, but must not hide missing pipeline
+# identity, repository, or image inputs.
+require_nonempty_vars() {
+    local context="$1"
+    shift
+    local missing=()
+    local name
+
+    for name in "$@"; do
+        if [[ -z "${!name:-}" ]]; then
+            missing+=("$name")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "ERROR: Missing required ${context} variables: ${missing[*]}" >&2
+        return 1
+    fi
+}
+
+validate_aws_account_id() {
+    local label="$1"
+    local account_id="$2"
+
+    if [[ ! "$account_id" =~ ^[0-9]{12}$ ]]; then
+        echo "ERROR: ${label} must be a 12-digit AWS account ID, got '${account_id}'" >&2
+        return 1
+    fi
+}
+
+validate_arn_account() {
+    local label="$1"
+    local arn="$2"
+    local account_id="$3"
+
+    if [[ ! "$arn" =~ ^arn:[^:]*:[^:]*:[^:]*:${account_id}: ]]; then
+        echo "ERROR: ${label} is not an ARN in AWS account ${account_id}: '${arn}'" >&2
+        return 1
+    fi
+}
+
+# Print a safe, source-labelled summary of the values that control a
+# provisioning step. Callers pass triples: name, source, value.
+print_provision_param_summary() {
+    local context="$1"
+    shift
+
+    echo "${context} parameter summary:"
+    while [[ $# -gt 0 ]]; do
+        local name="$1"
+        local source="$2"
+        local value="$3"
+        shift 3
+
+        case "$name" in
+            *SECRET*|*TOKEN*|*PASSWORD*|*KEY*) value="<redacted>" ;;
+        esac
+        [[ -n "$value" ]] || value="<empty>"
+        printf '  %-36s %-12s %s\n' "$name" "$source" "$value"
+    done
 }
 
 # ── AWS Credentials ──────────────────────────────────────────────────────────
@@ -170,12 +237,14 @@ build_management_clusters_tf_var() {
     local parts=()
     local entry id acct resolved
     for entry in $(echo "$mc_info" | jq -r '.[] | @base64'); do
-        id=$(echo "$entry" | base64 -d | jq -r '.id')
-        acct=$(echo "$entry" | base64 -d | jq -r '.account_id')
-        resolved=$(resolve_management_cluster_account_id "$acct")
-        if [[ -n "$resolved" && -n "$id" ]]; then
-            parts+=("${id}:${resolved}")
+        id=$(echo "$entry" | base64 -d | jq -r '.id // empty')
+        acct=$(echo "$entry" | base64 -d | jq -r '.account_id // empty')
+        resolved=$(resolve_management_cluster_account_id "$acct") || return 1
+        if [[ -z "$id" || ! "$resolved" =~ ^[0-9]{12}$ ]]; then
+            echo "ERROR: Invalid management cluster id/account: '${id}:${resolved}'" >&2
+            return 1
         fi
+        parts+=("${id}:${resolved}")
     done
 
     local mc_info_len
@@ -250,6 +319,24 @@ parseBool() {
     esac
 }
 
+# Resolve a rendered cluster config path (render.py writes codebuild-* dirs).
+config_path_for_mode() {
+    local mode="$1"
+
+    if [[ "$mode" == "regional" ]]; then
+        echo "deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-regional-cluster-inputs/terraform.json"
+    elif [[ "$mode" == "management" ]]; then
+        echo "deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-management-cluster-${MANAGEMENT_ID}-inputs/terraform.json"
+    else
+        echo "ERROR: config_path_for_mode: unknown mode '$mode'" >&2
+        return 1
+    fi
+}
+
+provisioner_config_path() {
+    echo "deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-provisioner-inputs/terraform.json"
+}
+
 # Load terraform variables from deploy/ JSON config files.
 # Usage: config_load regional   OR   config_load management
 # Exports: DEPLOY_CONFIG_FILE, APP_CODE, SERVICE_PHASE, COST_CENTER,
@@ -260,14 +347,7 @@ config_load() {
 
     ENVIRONMENT="${ENVIRONMENT:-staging}"
 
-    if [[ "$mode" == "regional" ]]; then
-        DEPLOY_CONFIG_FILE="deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-regional-cluster-inputs/terraform.json"
-    elif [[ "$mode" == "management" ]]; then
-        DEPLOY_CONFIG_FILE="deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-management-cluster-${MANAGEMENT_ID}-inputs/terraform.json"
-    else
-        echo "ERROR: config_load: unknown mode '$mode' (expected 'regional' or 'management')" >&2
-        exit 1
-    fi
+    DEPLOY_CONFIG_FILE=$(config_path_for_mode "$mode")
 
     if [ ! -f "$DEPLOY_CONFIG_FILE" ]; then
         echo "ERROR: Deploy config not found: $DEPLOY_CONFIG_FILE" >&2
@@ -279,7 +359,8 @@ config_load() {
     COST_CENTER=$(jq -r '.cost_center // "000"' "$DEPLOY_CONFIG_FILE")
     ENABLE_BASTION=$(parseBool '.enable_bastion' false "$DEPLOY_CONFIG_FILE")
 
-    local env_json="deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-provisioner-inputs/terraform.json"
+    local env_json
+    env_json=$(provisioner_config_path)
     if [ -f "$env_json" ]; then
         ENVIRONMENT_DOMAIN=$(jq -r '.domain // empty' "$env_json")
     else
