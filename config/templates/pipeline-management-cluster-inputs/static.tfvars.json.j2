@@ -1,0 +1,21 @@
+{
+  "app_code": "{{ terraform_tags.app_code }}",
+  "service_phase": "{{ terraform_tags.service_phase }}",
+  "cost_center": "{{ terraform_tags.cost_center }}",
+  "management_id": "{{ mc.management_id }}",
+  "zoa_lambda_image_tag": {{ regional_cluster.zoa_lambda_image_tag | default('') | tojson }},
+  "zoa_runner_image_tag": {{ regional_cluster.zoa_runner_image_tag | default('') | tojson }},
+  "zoa_runner_source_image": {{ regional_cluster.zoa_runner_source_image | default('') | tojson }},
+  "zoa_boundary_image": {{ ((regional_cluster.zoa_boundary_source_image ~ ':' ~ regional_cluster.zoa_boundary_image_tag) if regional_cluster.zoa_boundary_source_image and regional_cluster.zoa_boundary_image_tag else '') | tojson }},
+  "zoa_boundary_session_idle_timeout_seconds": {{ regional_cluster.zoa_boundary_session_idle_timeout_seconds | default(3600) | tojson }},
+  "zoa_lambda_api_concurrency": {{ regional_cluster.zoa_lambda_api_concurrency | tojson }},
+  "zoa_lambda_worker_concurrency": {{ regional_cluster.zoa_lambda_worker_concurrency | tojson }},
+  "zoa_deployment_name": {{ deployment_name | tojson }},
+  "worker_node_ami_id": {% if worker_node_ami %}{{ worker_node_ami.id | tojson }}{% else %}""{% endif %},
+  "worker_node_root_volume_size": {{ worker_node_root_volume_size | default(50) | tojson }}
+{%- if mc.enable_bastion is defined %},
+  "enable_bastion": {{ mc.enable_bastion | tojson }}
+{%- elif management_cluster_defaults.enable_bastion %},
+  "enable_bastion": {{ management_cluster_defaults.enable_bastion | tojson }}
+{%- endif %}
+}

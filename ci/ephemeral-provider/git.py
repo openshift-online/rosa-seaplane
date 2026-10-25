@@ -38,10 +38,15 @@ class GitManager:
         self.fork_repo = None
         self._auth_header = None
         self._eph_branch_override = eph_branch_name
+        self._pre_push_base_sha: str | None = None
+        self.pushed_file_paths: list[str] = []
 
     def _github_token(self) -> str:
         """Read the git token from credentials directory or environment."""
-        env_token = os.environ.get("GITHUB_TOKEN")
+        env_token = (
+            os.environ.get("SEAPLANE_CI_GITHUB_TOKEN")
+            or os.environ.get("GITHUB_TOKEN")
+        )
         if env_token:
             return env_token
         return (self.creds_dir / "github_token").read_text().strip()
@@ -80,6 +85,10 @@ class GitManager:
                 f"stdout: {stdout}\nstderr: {stderr}"
             )
         return result
+
+    def current_sha(self) -> str:
+        """Return the checked-out commit SHA."""
+        return self._run_git("rev-parse", "HEAD").stdout.strip()
 
     def _resolve_fork_owner(self, token: str) -> str:
         """Get the GitHub username associated with the git token."""
@@ -216,6 +225,7 @@ class GitManager:
         self._run_git("fetch", "upstream", self.source_branch, auth=True)
 
         head_before = self._run_git("rev-parse", "HEAD").stdout.strip()
+        self._pre_push_base_sha = head_before
         log.info("Resetting %s to upstream/%s", self.eph_branch, self.source_branch)
         self._run_git("reset", "--hard", f"upstream/{self.source_branch}")
         head_after = self._run_git("rev-parse", "HEAD").stdout.strip()
@@ -235,21 +245,48 @@ class GitManager:
         branch_url = f"https://github.com/{self.fork_repo}/commits/{self.eph_branch}/"
         log.info("Resync complete: %s", branch_url)
 
-    def push(self, message: str, force: bool = False):
-        """Stage all changes, commit, and push to the ephemeral branch."""
+    def push(
+        self,
+        message: str,
+        force: bool = False,
+        force_push_if_clean: bool = False,
+    ) -> str | None:
+        """Stage all changes, commit, and push to the ephemeral branch.
+
+        Returns:
+            Full git SHA of the pushed commit, or None if nothing to commit.
+        """
+        base_sha = self._pre_push_base_sha or self.current_sha()
+        self.pushed_file_paths = []
         self._run_git("add", "-A")
 
         result = self._run_git("diff", "--cached", "--quiet", check=False)
         if result.returncode == 0:
-            log.info("No changes to commit, skipping push")
-            return
+            if not force_push_if_clean:
+                log.info("No changes to commit, skipping push")
+                return None
+
+            log.info("No changes to commit; force-updating the ephemeral branch")
+            pushed_sha = self.current_sha()
+            self.pushed_file_paths = self._changed_paths(base_sha, pushed_sha)
+            push_cmd = ["push", "ci", self.eph_branch]
+            if force:
+                push_cmd.insert(1, "--force")
+            self._run_git(*push_cmd, auth=True)
+            self._pre_push_base_sha = None
+            return pushed_sha
 
         self._run_git("commit", "-m", message)
         push_cmd = ["push", "ci", self.eph_branch]
         if force:
             push_cmd.insert(1, "--force")
         self._run_git(*push_cmd, auth=True)
-        log.info("Pushed: %s", message)
+        sha_result = self._run_git("rev-parse", "HEAD")
+        pushed_sha = sha_result.stdout.strip()
+        self.pushed_file_paths = self._changed_paths(base_sha, pushed_sha)
+        log.info("Pushed: %s (SHA: %s)", message, pushed_sha[:7])
+        self._pre_push_base_sha = None
+        return pushed_sha
 
     def delete_eph_branch(self):
         """Delete the ephemeral branch from the fork (best-effort).
@@ -279,8 +316,37 @@ class GitManager:
             return
         log.info("Deleted ephemeral branch: %s", self.eph_branch)
 
-    def render_and_push(self, message: str, force: bool = False):
-        """Run render.py in the work directory, then commit and push."""
+    def _changed_paths(self, base_sha: str, target_sha: str) -> list[str]:
+        if base_sha == target_sha:
+            return []
+        tree_diff = self._run_git(
+            "diff", "--no-renames", "--name-only", f"{base_sha}..{target_sha}"
+        )
+        pushed_commits = self._run_git(
+            "log",
+            "--format=",
+            "--name-only",
+            "--no-renames",
+            f"{base_sha}..{target_sha}",
+        )
+        return sorted(
+            path
+            for path in set(tree_diff.stdout.splitlines())
+            | set(pushed_commits.stdout.splitlines())
+            if path
+        )
+
+    def render_and_push(
+        self,
+        message: str,
+        force: bool = False,
+        force_push_if_clean: bool = False,
+    ) -> str | None:
+        """Run render.py in the work directory, then commit and push.
+
+        Returns:
+            Full git SHA of the pushed commit, or None if nothing to commit.
+        """
         render_script = self.work_dir / "scripts" / "render.py"
         log.info("Running render.py (eph_prefix=%s)", self.eph_prefix)
         env = os.environ.copy()
@@ -301,15 +367,22 @@ class GitManager:
                 f"render.py failed (exit {result.returncode})\n"
                 f"stdout: {result.stdout}\nstderr: {result.stderr}"
             )
-        self.push(message, force=force)
+        return self.push(
+            message,
+            force=force,
+            force_push_if_clean=force_push_if_clean,
+        )
 
-    def modify_config(self, environment: str, region: str, callback, force: bool = False):
+    def modify_config(self, environment: str, region: str, callback, force: bool = False) -> str | None:
         """Load a region config file, apply callback modifications, render, and push.
 
         Args:
             environment: Environment name (e.g. "ci").
             region: AWS region (e.g. "us-east-1"), maps to config/<env>/<region>.yaml.
             callback: A function that receives and modifies the region config dict.
+
+        Returns:
+            Full git SHA of the pushed commit, or None if nothing to commit.
         """
         region_file = self.work_dir / "config" / environment / f"{region}.yaml"
         if not region_file.exists():
@@ -325,4 +398,4 @@ class GitManager:
         with open(region_file, "w") as f:
             yaml.dump(region_config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
-        self.render_and_push(f"ci: update {environment}/{region} config", force=force)
+        return self.render_and_push(f"ci: update {environment}/{region} config", force=force)

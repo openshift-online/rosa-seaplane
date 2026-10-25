@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-post-account-shell ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags pre-push render
+.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-post-account-shell ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags pre-push render
 
 # =============================================================================
 # Local tool management
@@ -175,13 +175,11 @@ check-docs: ## Check documentation formatting
 	@npx --no-install prettier --check '**/*.md'
 	@echo "✅ Documentation formatting check complete"
 
-# Pipeline config roots and modules are excluded from tag enforcement (pipelines are being removed).
+# central-account-bootstrap (shared connection/state/ECR) and the platform-image
+# source module are excluded from tag enforcement; the CodePipeline modules are
+# tagged and linted normally.
 TFLINT_EXCLUDE_DIRS := \
-	./terraform/config/pipeline-management-cluster \
-	./terraform/config/pipeline-regional-cluster \
 	./terraform/config/central-account-bootstrap \
-	./terraform/modules/pipeline-notifications \
-	./terraform/modules/pipeline-provisioner \
 	./terraform/modules/platform-image
 
 TFLINT_DIRS := $(filter-out $(TFLINT_EXCLUDE_DIRS),$(TERRAFORM_DIRS))
@@ -217,6 +215,10 @@ BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
 ephemeral-provision: ## Provision an ephemeral environment
 	@ID="$(ID)" REPO="$(REPO)" BRANCH="$(if $(filter command line,$(origin BRANCH)),$(BRANCH),)" \
 		./scripts/dev/ephemeral-env.sh provision
+
+ephemeral-provision-resume: ## Resync and resume a failed ephemeral provisioning run (RESYNC=false to skip resync)
+	@ID="$(ID)" RESYNC="$(if $(RESYNC),$(RESYNC),true)" \
+		./scripts/dev/ephemeral-env.sh provision-resume
 
 ephemeral-teardown: ## Tear down (RESYNC=1: update CI branch from your feature branch, then destroy — use after a failed teardown)
 	@ID="$(ID)" RESYNC="$(RESYNC)" ./scripts/dev/ephemeral-env.sh teardown

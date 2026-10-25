@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap ArgoCD on a Regional Cluster.
-# Called from: terraform/config/pipeline-regional-cluster/buildspec-bootstrap-argocd.yml
+# Called from: scripts/buildspec/provision-cluster.sh
 set -euo pipefail
 
 source scripts/pipeline-common/lib.sh
@@ -8,14 +8,13 @@ source scripts/pipeline-common/lib.sh
 preflight_check
 
 ENVIRONMENT="${ENVIRONMENT:-staging}"
-RC_CONFIG_FILE="deploy/${ENVIRONMENT}/${TARGET_REGION}/pipeline-regional-cluster-inputs/terraform.json"
+RC_CONFIG_FILE=$(config_path_for_mode regional)
 if [ ! -f "$RC_CONFIG_FILE" ]; then
     echo "ERROR: Config file not found: $RC_CONFIG_FILE" >&2
     exit 1
 fi
 
-DELETE_FLAG=$(jq -r '.delete // false' "$RC_CONFIG_FILE")
-[ "${IS_DESTROY:-false}" == "true" ] && DELETE_FLAG="true"
+DELETE_FLAG="${IS_DESTROY:-false}"
 
 if [ "${DELETE_FLAG}" == "true" ]; then
     echo "delete=true — skipping ArgoCD bootstrap"

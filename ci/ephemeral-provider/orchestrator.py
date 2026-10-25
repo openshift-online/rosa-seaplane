@@ -8,6 +8,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -16,9 +17,10 @@ import yaml
 
 from __init__ import TARGET_ENVIRONMENT
 from aws import AWSCredentials
+from codebuild import BuildMonitor, BuildResult
 from codebuild_logs import download_codebuild_logs
+from codepipeline import PipelineMonitor
 from git import GitManager
-from pipeline import PipelineMonitor
 from yaml_utils import deep_merge, load_and_merge
 
 PROVISION_TIMEOUT = 3600  # seconds (1 hour); total time for provisioning
@@ -76,48 +78,255 @@ class EphemeralEnvOrchestrator:
         self.override_dir = Path(override_dir) if override_dir else None
         self.provision_overrides = provision_overrides or []
         self.eph_branch_name = eph_branch_name
-        self.provisioner_name = f"{eph_prefix}-pipeline-provisioner"
-        # TODO: compute deterministic RC/MC pipeline names from rendered config
-        # instead of using prefix-based discovery (e.g. {eph_prefix}-regional-pipe, {eph_prefix}-mc01-pipe)
-        self.pipeline_prefix = f"{eph_prefix}-"
         self.aws: AWSCredentials | None = None
-        self.central_monitor: PipelineMonitor | None = None
+        self.central_monitor: BuildMonitor | None = None
         self.target_monitor: PipelineMonitor | None = None
         self.git: GitManager | None = None
+        # CodeBuild project names (read from rendered config after bootstrap)
+        self.rc_project: str | None = None
+        self.mc_projects: list[str] = []
+        self._codebuild_logs_collected = False
+        self._operation_started_at: float | None = None
+        self._operation_failed = False
+        self._timing_steps: list[dict[str, object]] = []
+        self._provision_builds: list[tuple[str, str]] = []
+        self._provision_results: dict[str, BuildResult] = {}
+        self._provision_artifact_path: Path | None = None
+
+    def _reset_provision_report(self) -> None:
+        self._operation_started_at = time.monotonic()
+        self._operation_failed = False
+        self._timing_steps = []
+        self._provision_builds = []
+        self._provision_results = {}
+        self._provision_artifact_path = None
+        self._codebuild_logs_collected = False
+
+    def _record_timing(self, label: str, duration: float, status: str) -> None:
+        self._timing_steps.append(
+            {
+                "scope": "ORCHESTRATOR",
+                "step": label,
+                "status": status,
+                "duration": duration,
+            }
+        )
+
+    @contextmanager
+    def _timed_step(self, label: str):
+        start = time.monotonic()
+        status = "SUCCEEDED"
+        try:
+            yield
+        except Exception:
+            status = "FAILED"
+            raise
+        finally:
+            self._record_timing(label, time.monotonic() - start, status)
 
     def provision(self, save_rc_state: str | None = None, save_mc_state: str | None = None):
+        self._reset_provision_report()
+        try:
+            self._provision_impl(save_rc_state, save_mc_state)
+        except Exception:
+            self._operation_failed = True
+            raise
+        finally:
+            self._log_provision_timing_summary()
+
+    def _provision_impl(
+        self, save_rc_state: str | None = None, save_mc_state: str | None = None
+    ):
         """Provision the ephemeral environment (setup + bootstrap + wait for pipelines).
 
         Args:
             save_rc_state: If set, save RC terraform outputs JSON to this path after provisioning.
             save_mc_state: If set, save MC terraform outputs JSON to this path after provisioning.
         """
-        self._setup_aws()
+        with self._timed_step("AWS credential setup"):
+            self._setup_aws()
 
-        git = GitManager(self.creds_dir, self.repo, self.branch)
-        self.git = git
-        git.create_eph_branch(self.eph_prefix)
+        with self._timed_step("Ephemeral branch and config setup"):
+            git = GitManager(self.creds_dir, self.repo, self.branch)
+            self.git = git
+            git.create_eph_branch(self.eph_prefix)
 
-        # Inject ephemeral environment into config.yaml (not checked into the repo)
-        self._inject_ephemeral_config(git)
+            # Inject ephemeral environment into config.yaml (not checked into the repo)
+            self._inject_ephemeral_config(git)
 
-        # Apply provision override files (deep-merge YAML fragments into repo files)
-        self._apply_provision_overrides(git)
+            # Apply provision override files (deep-merge YAML fragments into repo files)
+            self._apply_provision_overrides(git)
 
-        git.render_and_push("ci: add ephemeral environment and render deploy files")
+        with self._timed_step("Render and push deployment config"):
+            desired_sha = git.render_and_push("ci: add ephemeral environment and render deploy files")
+            if not desired_sha:
+                raise RuntimeError("render_and_push returned no SHA — no changes committed")
 
-        # Bootstrap pipeline provisioner
-        self.central_monitor = PipelineMonitor(self.aws.session)
+        self.central_monitor = BuildMonitor(self.aws.session)
         self.target_monitor = PipelineMonitor(self.aws.target_session)
-        self._bootstrap_pipeline_provisioner(git)
+        self._read_project_names(git)
+        pipeline_names = [
+            self.target_monitor.pipeline_name(name)
+            for name in [self.rc_project, *self.mc_projects]
+            if name
+        ]
+        push_trigger_configs = self.target_monitor.push_trigger_configs(pipeline_names)
+        created_pipeline_names = set(self.target_monitor.missing_pipelines(pipeline_names))
 
-        # Wait for provisioning pipelines
-        self._wait_for_provision()
+        # Bootstrap provisioner (terraform + provision-cluster-resources.sh creates RC/MC resources)
+        with self._timed_step("Provisioner bootstrap"):
+            self._bootstrap_provisioner(git)
+
+        # Read RC/MC project names from rendered config
+        with self._timed_step("Discover RC/MC CodeBuild projects"):
+            self._read_project_names(git)
+
+        desired_push_trigger_configs = (
+            self.target_monitor.push_trigger_configs(pipeline_names)
+            if push_trigger_configs is not None
+            else None
+        )
+        # Wait for provisioning builds
+        self._wait_for_provision(
+            desired_sha,
+            created_pipeline_names,
+            push_trigger_configs=push_trigger_configs,
+            branch=git.eph_branch,
+            changed_paths=git.pushed_file_paths,
+            desired_push_trigger_configs=desired_push_trigger_configs,
+        )
 
         if save_rc_state:
-            self._save_terraform_outputs(git, save_rc_state)
+            with self._timed_step("Save and validate RC outputs"):
+                self._save_terraform_outputs(git, save_rc_state)
+                self._validate_saved_outputs(save_rc_state, "RC")
         if save_mc_state:
-            self._save_mc_terraform_outputs(git, save_mc_state)
+            with self._timed_step("Save and validate MC outputs"):
+                self._save_mc_terraform_outputs(git, save_mc_state)
+                if self.mc_projects:
+                    self._validate_saved_outputs(save_mc_state, "MC")
+
+    def resume(
+        self,
+        save_rc_state: str | None = None,
+        save_mc_state: str | None = None,
+        resync_before_resume: bool = False,
+    ):
+        self._reset_provision_report()
+        try:
+            self._resume_impl(save_rc_state, save_mc_state, resync_before_resume)
+        except Exception:
+            self._operation_failed = True
+            raise
+        finally:
+            self._log_provision_timing_summary()
+
+    def _resume_impl(
+        self,
+        save_rc_state: str | None = None,
+        save_mc_state: str | None = None,
+        resync_before_resume: bool = False,
+    ):
+        """Resume provisioning from an existing ephemeral branch.
+
+        This retries the bootstrap and CodeBuild stages without creating a new
+        branch or appending another environment record. When requested, the
+        existing branch is first reset to the latest source branch, ephemeral
+        configuration is re-injected, and the rendered result is force-pushed.
+        Existing Terraform state and CodeBuild projects are reused.
+        """
+        with self._timed_step("Checkout ephemeral branch and discover region"):
+            git = GitManager(
+                self.creds_dir,
+                self.repo,
+                self.branch,
+                eph_branch_name=self.eph_branch_name,
+            )
+            self.git = git
+            git.checkout_eph_branch(self.eph_prefix)
+
+            env_config_dir = git.work_dir / "config" / TARGET_ENVIRONMENT
+            self.region = discover_region(env_config_dir)
+            log.info("Region (from ephemeral branch): %s", self.region)
+
+        with self._timed_step("AWS credential setup"):
+            self._setup_aws()
+        self.central_monitor = BuildMonitor(self.aws.session)
+        self.target_monitor = PipelineMonitor(self.aws.target_session)
+
+        if resync_before_resume:
+            with self._timed_step("Resync and render deployment config"):
+                self._read_project_names(git)
+                pipeline_names = [
+                    self.target_monitor.pipeline_name(name)
+                    for name in [self.rc_project, *self.mc_projects]
+                    if name
+                ]
+                active_builds = self.target_monitor.active_pipelines(pipeline_names)
+                active_builds.extend(
+                    self.central_monitor.active_builds(
+                        [f"{git.eph_prefix}-build-platform-image"]
+                    )
+                )
+                if active_builds:
+                    raise RuntimeError(
+                        "Cannot automatically resync while CodeBuild builds are active: "
+                        f"{', '.join(active_builds)}. Wait for them to finish, or rerun "
+                        "with RESYNC=false to resume without force-pushing the branch."
+                    )
+
+                log.info("Resyncing ephemeral branch before resuming provisioning")
+                git.resync_eph_branch(self.eph_prefix)
+                self._inject_ephemeral_config(git)
+                desired_sha = git.render_and_push(
+                    "ci: resync ephemeral environment config",
+                    force=True,
+                    force_push_if_clean=True,
+                )
+                push_trigger_configs = self.target_monitor.push_trigger_configs(pipeline_names)
+        else:
+            push_trigger_configs = None
+            with self._timed_step("Resolve resume commit"):
+                desired_sha = git.current_sha()
+
+        log.info("Resuming provisioning at commit: %s", desired_sha)
+
+        self._read_project_names(git)
+        pipeline_names = [
+            self.target_monitor.pipeline_name(name)
+            for name in [self.rc_project, *self.mc_projects]
+            if name
+        ]
+        created_pipeline_names = set(self.target_monitor.missing_pipelines(pipeline_names))
+
+        with self._timed_step("Provisioner bootstrap"):
+            self._bootstrap_provisioner(git)
+        with self._timed_step("Discover RC/MC CodeBuild projects"):
+            self._read_project_names(git)
+        desired_push_trigger_configs = (
+            self.target_monitor.push_trigger_configs(pipeline_names)
+            if push_trigger_configs is not None
+            else None
+        )
+        self._wait_for_provision(
+            desired_sha,
+            created_pipeline_names,
+            push_trigger_configs=push_trigger_configs,
+            branch=git.eph_branch if push_trigger_configs is not None else None,
+            changed_paths=git.pushed_file_paths if push_trigger_configs is not None else None,
+            skip_untriggered_pushes=push_trigger_configs is not None,
+            desired_push_trigger_configs=desired_push_trigger_configs,
+        )
+
+        if save_rc_state:
+            with self._timed_step("Save and validate RC outputs"):
+                self._save_terraform_outputs(git, save_rc_state)
+                self._validate_saved_outputs(save_rc_state, "RC")
+        if save_mc_state:
+            with self._timed_step("Save and validate MC outputs"):
+                self._save_mc_terraform_outputs(git, save_mc_state)
+                if self.mc_projects:
+                    self._validate_saved_outputs(save_mc_state, "MC")
 
     def teardown(self, fire_and_forget: bool = False, with_resync: bool = False):
         """Tear down a previously provisioned ephemeral environment.
@@ -128,16 +337,13 @@ class EphemeralEnvOrchestrator:
         so teardown always matches the provisioned environment.
 
         Args:
-            fire_and_forget: If True, only pushes the initial infrastructure
-                delete flags (Phase 1) and exits immediately without waiting
-                for pipelines to complete. Phase 2 (delete_pipeline flags) and
-                Phase 3 (pipeline-provisioner destruction) are intentionally
-                skipped — teardown is expected to be driven to completion by
-                the in-account aws-nuke-cf janitor.
-            with_resync: If True, reset the ephemeral CI branch to the latest
-                source branch (same as resync) and re-inject config before
-                setting delete flags — destroy runs with fresh code without a
-                separate resync (which would trigger apply and clear delete).
+            fire_and_forget: If True, starts MC and RC destruction together,
+                then exits without waiting for either to finish. Phase 2
+                (delete pipelines/projects) and Phase 3 (provisioner destruction)
+                are intentionally skipped — teardown is expected to be driven to
+                completion by the in-account aws-nuke-cf janitor.
+            with_resync: Refresh the ephemeral branch from the source branch before
+                destruction, with push triggers disabled to prevent an apply.
         """
         # Check out the ephemeral branch first to discover region from its config
         git = GitManager(self.creds_dir, self.repo, self.branch,
@@ -152,16 +358,32 @@ class EphemeralEnvOrchestrator:
 
         self._setup_aws()
 
+        self.central_monitor = BuildMonitor(self.aws.session)
+        self.target_monitor = PipelineMonitor(self.aws.target_session)
+
+        # Read RC/MC project names from rendered config before any teardown side effects.
+        self._read_project_names(git)
+
         if with_resync:
-            log.info("")
-            log.info("==========================================")
+            pipeline_names = [
+                self.target_monitor.pipeline_name(project)
+                for project in [self.rc_project, *self.mc_projects]
+                if project
+            ]
+            for pipeline_name in pipeline_names:
+                self.target_monitor.disable_push_triggers(pipeline_name)
+            self.target_monitor.stop_active_executions(pipeline_names)
             log.info("Teardown: refresh CI branch from %s@%s", self.repo, self.branch)
-            log.info("==========================================")
             git.resync_eph_branch(self.eph_prefix)
             self._inject_ephemeral_config(git)
-            env_config_dir = git.work_dir / "config" / TARGET_ENVIRONMENT
-            self.region = discover_region(env_config_dir)
-            log.info("Region (after resync): %s", self.region)
+            refreshed_region = discover_region(env_config_dir)
+            if refreshed_region != self.region:
+                raise RuntimeError("Teardown resync cannot change the provisioned region")
+            git.render_and_push(
+                "ci: refresh ephemeral environment for teardown",
+                force=True,
+                force_push_if_clean=True,
+            )
 
         # Purge clusters and resource bundles before infrastructure teardown.
         # Deleting bundles triggers ManifestWork removal on the MC, which is
@@ -169,13 +391,7 @@ class EphemeralEnvOrchestrator:
         # destroy on the MC can be blocked by active HCPs.
         self._purge_clusters(git)
 
-        self.central_monitor = PipelineMonitor(self.aws.session)
-        self.target_monitor = PipelineMonitor(self.aws.target_session)
-        self._run_teardown(
-            git,
-            fire_and_forget=fire_and_forget,
-            force_first_push=with_resync,
-        )
+        self._run_teardown(git, fire_and_forget=fire_and_forget)
 
     def resync(self):
         """Resync the ephemeral branch: rebase onto latest source, re-inject config, re-render.
@@ -183,15 +399,51 @@ class EphemeralEnvOrchestrator:
         Re-reads the environment config (including .ephemeral-env/ overrides if
         mounted) so that config changes are picked up alongside code changes.
         """
-        self._setup_aws()
-
         git = GitManager(self.creds_dir, self.repo, self.branch,
                          eph_branch_name=self.eph_branch_name)
         self.git = git
+        git.checkout_eph_branch(self.eph_prefix)
+        env_config_dir = git.work_dir / "config" / TARGET_ENVIRONMENT
+        self.region = discover_region(env_config_dir)
+        self._setup_aws()
+        self.target_monitor = PipelineMonitor(self.aws.target_session)
+        self._read_project_names(git)
+        pipeline_names = [
+            self.target_monitor.pipeline_name(name)
+            for name in [self.rc_project, *self.mc_projects]
+            if name
+        ]
+        active_pipelines = self.target_monitor.active_pipelines(pipeline_names)
+        if active_pipelines:
+            raise RuntimeError(
+                "Cannot resync while CodePipeline executions are active: "
+                f"{', '.join(active_pipelines)}. Wait for them to finish and retry."
+            )
         git.resync_eph_branch(self.eph_prefix)
 
         self._inject_ephemeral_config(git)
-        git.render_and_push("ci: resync ephemeral environment config", force=True)
+        desired_sha = git.render_and_push(
+            "ci: resync ephemeral environment config",
+            force=True,
+            force_push_if_clean=True,
+        )
+        if not desired_sha:
+            raise RuntimeError("render_and_push returned no SHA during ephemeral resync")
+
+        push_trigger_configs = self.target_monitor.push_trigger_configs(pipeline_names)
+        self._read_project_names(git)
+        started = self._start_provision_pipelines(
+            desired_sha,
+            push_trigger_configs=push_trigger_configs,
+            branch=git.eph_branch,
+            changed_paths=git.pushed_file_paths,
+            skip_untriggered_pushes=True,
+        )
+        log.info(
+            "Adopted or started %d ephemeral pipeline execution(s) for resynced commit %s",
+            len(started),
+            desired_sha[:7],
+        )
 
     def collect_codebuild_logs(self):
         """Download CloudWatch logs for all CodeBuild projects matching our ephemeral prefix.
@@ -205,21 +457,46 @@ class EphemeralEnvOrchestrator:
             log.warning("ARTIFACT_DIR not set — skipping CodeBuild log collection")
             return
 
+        if self._codebuild_logs_collected:
+            artifact_path = Path(artifact_dir) / "codebuild-logs"
+            log.info("CodeBuild logs already collected: %s", artifact_path)
+            return artifact_path
+
         if not self.aws or not self.aws.session:
             log.warning("AWS session not available — skipping log collection")
             return
 
         artifact_path = Path(artifact_dir) / "codebuild-logs"
-        # Central region logs (pipeline-provisioner CodeBuild)
-        files = download_codebuild_logs(self.aws.session, self.eph_prefix, artifact_path)
-        # RC/MC builds live in the target account even when both sessions use the same region.
-        files.extend(download_codebuild_logs(self.aws.target_session, self.eph_prefix, artifact_path))
+        # Both sessions use the central account in the current setup; they only
+        # differ by region. Avoid downloading the same account/region twice when
+        # the target region is also us-east-1.
+        files = []
+        seen_sessions = set()
+        for session in (self.aws.session, self.aws.target_session):
+            if session is None:
+                continue
+            session_key = (self.aws.central_account_id, session.region_name)
+            if session_key in seen_sessions:
+                log.info(
+                    "Skipping duplicate CodeBuild log session: account=%s region=%s",
+                    session_key[0],
+                    session_key[1],
+                )
+                continue
+            seen_sessions.add(session_key)
+            files.extend(download_codebuild_logs(session, self.eph_prefix, artifact_path))
 
         # Redact sensitive values (AWS keys, session tokens) from Prow artifacts
         for f in files:
             content = f.read_text()
             content = _redact_sensitive(content)
             f.write_text(content)
+
+        # Only mark collection complete once downloads and redaction succeed, so
+        # a failure above leaves the flag false and a later call can retry.
+        self._codebuild_logs_collected = True
+        log.info("CodeBuild artifact directory: %s", artifact_path)
+        return artifact_path
 
     def _setup_aws(self):
         """Set up AWS credentials and trust policies."""
@@ -282,21 +559,6 @@ class EphemeralEnvOrchestrator:
                 f"Region config {region_file.name} must define 'provision_mcs'. "
                 "Example:\n  provision_mcs:\n    mc01: {}"
             )
-        mc_count = len(region_config["provision_mcs"])
-        if mc_count > 1:
-            raise ValueError(
-                f"Ephemeral environments support at most 1 management cluster "
-                f"(only 1 MC account available), but {mc_count} were defined in "
-                f"{region_file.name}: {list(region_config['provision_mcs'].keys())}"
-            )
-
-        # Reject lifecycle flags that are managed by the provisioner
-        for forbidden in ("delete", "delete_pipeline"):
-            if forbidden in region_config:
-                raise ValueError(
-                    f"Region config must not set '{forbidden}' — "
-                    "this is managed by the provisioner lifecycle."
-                )
 
         # Inject runtime AWS account IDs
         regional_account_id = self.aws.get_target_account_id("regional")
@@ -348,11 +610,15 @@ class EphemeralEnvOrchestrator:
             log.info("  %s <- %s", target_path, override_file)
             load_and_merge(target, override_file)
 
-    def _bootstrap_pipeline_provisioner(self, git: GitManager):
-        """Bootstrap the pipeline-provisioner pointing at the ephemeral branch."""
+    def _bootstrap_provisioner(self, git: GitManager):
+        """Bootstrap the provisioner (terraform + provision-cluster-resources.sh creates RC/MC resources).
+
+        Push triggers stay enabled. The provider adopts matching push executions
+        and only starts executions for explicit retries or unmatched changes.
+        """
         log.info("")
         log.info("==========================================")
-        log.info("Bootstrapping Pipeline Provisioner")
+        log.info("Bootstrapping Provisioner")
         log.info("==========================================")
 
         bootstrap_script = git.work_dir / "scripts" / "bootstrap-central-account.sh"
@@ -366,6 +632,7 @@ class EphemeralEnvOrchestrator:
         env["GITHUB_BRANCH"] = git.eph_branch
         env["TARGET_ENVIRONMENT"] = TARGET_ENVIRONMENT
         env["NAME_PREFIX"] = git.eph_prefix
+        env["ENABLE_CODEPIPELINE_PUSH_TRIGGERS"] = "true"
 
         log.info("Executing: %s", bootstrap_script)
         log.info("Env: REPO=%s, BRANCH=%s", git.fork_repo, git.eph_branch)
@@ -393,56 +660,413 @@ class EphemeralEnvOrchestrator:
                 f"bootstrap-central-account.sh failed with exit code {e.returncode}. "
                 "Check the logs above for the specific shell error."
             )
-        log.info("Pipeline provisioner bootstrapped with ephemeral branch: %s", git.eph_branch)
+        log.info("Provisioner bootstrapped (RC/MC projects created): %s", git.eph_branch)
 
-    def _wait_for_provision(self):
-        """Wait for provisioning pipelines to complete."""
-        log.info("")
-        log.info("==========================================")
-        log.info("Provision: Waiting for Pipelines")
-        log.info("==========================================")
+    def _read_project_names(self, git: GitManager):
+        """Read RC and MC CodeBuild project names from rendered config.
 
-        # Wait for pipeline-provisioner (in central region, us-east-1)
-        provisioner_exec_id = self.central_monitor.wait_for_any_execution(self.provisioner_name)
-        self.central_monitor.wait_for_completion(self.provisioner_name, provisioner_exec_id)
+        Project names are deterministic (computed by render.py using the configurable
+        naming pattern), stored in the rendered JSON files. We read them here to
+        avoid hardcoding the pattern in Python.
+        """
+        log.info("Reading CodeBuild project names from rendered config...")
+        self.rc_project = None
+        self.mc_projects = []
 
-        # Discover RC/MC pipelines (in target region) by ephemeral prefix, excluding the provisioner
-        all_pipelines = [
-            (name, exec_id)
-            for name, exec_id in self.target_monitor.discover_pipelines(self.pipeline_prefix)
-            if name != self.provisioner_name
-        ]
-        if not all_pipelines:
-            raise RuntimeError("No RC/MC pipelines found after provisioner completed.")
+        deploy_dir = git.work_dir / "deploy" / TARGET_ENVIRONMENT / self.region
 
-        # Monitor all pipelines concurrently to capture failures in real-time
-        failed = []
-        with ThreadPoolExecutor(max_workers=len(all_pipelines)) as executor:
-            # Submit all monitoring tasks
-            future_to_pipeline = {
-                executor.submit(self.target_monitor.wait_for_completion, name, exec_id): name
-                for name, exec_id in all_pipelines
-            }
-
-            # Process results as they complete
-            for future in as_completed(future_to_pipeline):
-                pipeline_name = future_to_pipeline[future]
-                try:
-                    future.result()
-                except (RuntimeError, TimeoutError) as e:
-                    log.error("Pipeline '%s' failed: %s", pipeline_name, e)
-                    failed.append(pipeline_name)
-
-        if failed:
-            try:
-                self.collect_codebuild_logs()
-            except Exception:
-                log.exception("Failed to collect CodeBuild logs")
-            raise RuntimeError(
-                f"{len(failed)} pipeline(s) failed during provisioning: {', '.join(failed)}"
+        # Read RC project name
+        rc_config_path = deploy_dir / "pipeline-regional-cluster-inputs" / "terraform.json"
+        if not rc_config_path.exists():
+            raise FileNotFoundError(
+                f"RC config not found: {rc_config_path}. "
+                "Ensure render.py ran successfully during bootstrap."
             )
 
-        log.info("All pipelines completed successfully.")
+        with open(rc_config_path) as f:
+            rc_config = json.load(f)
+            self.rc_project = rc_config.get("regional_id")
+            if not self.rc_project:
+                raise ValueError(f"regional_id not found in {rc_config_path}")
+
+        log.info("  RC project: %s", self.rc_project)
+
+        # Read MC project names
+        mc_config_dir = deploy_dir / "pipeline-provisioner-inputs"
+        if mc_config_dir.exists():
+            for mc_file in sorted(mc_config_dir.glob("management-cluster-*.json")):
+                with open(mc_file) as f:
+                    mc_config = json.load(f)
+                    mc_id = mc_config.get("management_id")
+                    if mc_id:
+                        self.mc_projects.append(mc_id)
+                        log.info("  MC project: %s", mc_id)
+
+        if not self.mc_projects:
+            log.info("  No MC projects found (RC-only deployment)")
+
+    def _start_provision_pipelines(
+        self,
+        desired_sha: str,
+        created_pipeline_names: set[str] | None = None,
+        push_trigger_configs: dict[str, dict | None] | None = None,
+        branch: str | None = None,
+        changed_paths: list[str] | None = None,
+        skip_untriggered_pushes: bool = False,
+        desired_push_trigger_configs: dict[str, dict | None] | None = None,
+    ) -> list[tuple[str, str]]:
+        """Adopt push/create executions; explicitly start only provider-owned retries."""
+        if not self.rc_project:
+            raise RuntimeError("Cannot start provisioning: RC project name is unavailable")
+
+        created_pipeline_names = created_pipeline_names or set()
+        projects = [self.rc_project, *self.mc_projects]
+        execution_ids = {}
+
+        for project_name in projects:
+            pipeline_name = self.target_monitor.pipeline_name(project_name)
+            if pipeline_name in created_pipeline_names:
+                continue
+
+            push_matched = (
+                push_trigger_configs is not None
+                and self.target_monitor.push_trigger_matches(
+                    push_trigger_configs.get(pipeline_name),
+                    branch or "",
+                    changed_paths or [],
+                )
+            )
+            desired_filter_matches = (
+                push_trigger_configs is not None
+                and self.target_monitor.push_trigger_matches(
+                    (desired_push_trigger_configs or push_trigger_configs).get(pipeline_name),
+                    branch or "",
+                    changed_paths or [],
+                )
+            )
+            if push_matched:
+                execution_ids[project_name] = self.target_monitor.wait_for_revision_execution(
+                    pipeline_name,
+                    desired_sha,
+                )
+            elif desired_filter_matches:
+                log.info(
+                    "Starting %s pipeline %s at SHA %s: its current push filter matches, "
+                    "but the filter was not active when this branch update was pushed",
+                    "RC" if project_name == self.rc_project else "MC",
+                    pipeline_name,
+                    desired_sha[:7],
+                )
+                execution_ids[project_name] = self.target_monitor.start_or_reuse_pipeline(
+                    pipeline_name,
+                    desired_sha,
+                )
+            elif skip_untriggered_pushes:
+                active_execution = self.target_monitor.start_or_reuse_pipeline(
+                    pipeline_name,
+                    desired_sha,
+                    start_if_idle=False,
+                )
+                if active_execution:
+                    execution_ids[project_name] = active_execution
+                    continue
+                previous_success = self.target_monitor.has_successful_execution(pipeline_name)
+                if previous_success:
+                    log.info(
+                        "Skipping %s pipeline %s: changed paths do not match its push filter; "
+                        "retaining successful execution %s at SHA %s",
+                        "RC" if project_name == self.rc_project else "MC",
+                        pipeline_name,
+                        previous_success[0],
+                        previous_success[1][:7],
+                    )
+                    continue
+                execution_ids[project_name] = self.target_monitor.start_or_reuse_pipeline(
+                    pipeline_name,
+                    desired_sha,
+                )
+            else:
+                execution_ids[project_name] = self.target_monitor.start_or_reuse_pipeline(
+                    pipeline_name,
+                    desired_sha,
+                )
+
+        for project_name in projects:
+            pipeline_name = self.target_monitor.pipeline_name(project_name)
+            if pipeline_name in created_pipeline_names:
+                execution_ids[project_name] = self.target_monitor.wait_for_creation_execution(
+                    pipeline_name,
+                    desired_sha,
+                )
+
+        return [
+            (project_name, execution_ids[project_name])
+            for project_name in projects
+            if project_name in execution_ids
+        ]
+
+    def _wait_for_provision(
+        self,
+        desired_sha: str,
+        created_pipeline_names: set[str] | None = None,
+        push_trigger_configs: dict[str, dict | None] | None = None,
+        branch: str | None = None,
+        changed_paths: list[str] | None = None,
+        skip_untriggered_pushes: bool = False,
+        desired_push_trigger_configs: dict[str, dict | None] | None = None,
+    ):
+        """Monitor RC + MC executions in RC-first order."""
+        log.info("")
+        log.info("==========================================")
+        log.info("Provision: Reconciling RC and MC CodePipeline executions for this revision")
+        log.info("==========================================")
+
+        build_window_start = time.monotonic()
+
+        # The MC build scripts discover RC outputs directly; they do not need a
+        # direct CodeBuild build-ID override when invoked by CodePipeline.
+        builds = self._start_provision_pipelines(
+            desired_sha,
+            created_pipeline_names,
+            push_trigger_configs,
+            branch,
+            changed_paths,
+            skip_untriggered_pushes,
+            desired_push_trigger_configs,
+        )
+
+        log.info("Tracking %d pipeline execution(s) at SHA %s", len(builds), desired_sha[:7])
+
+        if not builds:
+            self._record_timing(
+                "RC/MC CodePipeline window (overlap)",
+                time.monotonic() - build_window_start,
+                "SUCCEEDED",
+            )
+            self._provision_builds = []
+            self._provision_results = {}
+            log.info("No RC/MC changes require a pipeline run; retaining prior successful state.")
+            return
+
+        # Poll pipeline status in the same RC-first order used to start them.
+        # The CodeBuild executions themselves are already running concurrently.
+        log.info("")
+        log.info("==========================================")
+        log.info("Provision: Waiting for CodePipelines")
+        log.info("==========================================")
+
+        results = self.target_monitor.wait_for_pipelines(builds, desired_sha)
+        failed = [
+            project_name
+            for project_name, _ in builds
+            if results[project_name].status != "SUCCEEDED" or results[project_name].error
+        ]
+        for project_name, _ in builds:
+            result = results[project_name]
+            if project_name in failed:
+                log.error("Build '%s' failed: %s", project_name, result.error or result.status)
+                continue
+            log.info(
+                "✓ Build completed: %s (status=%s, duration=%s)",
+                project_name,
+                result.status,
+                self.target_monitor._format_duration(result.total_duration),
+            )
+
+        build_window_duration = time.monotonic() - build_window_start
+        self._record_timing(
+            "RC/MC CodePipeline window (overlap)",
+            build_window_duration,
+            "FAILED" if failed else "SUCCEEDED",
+        )
+
+        artifact_path = None
+        artifact_collection_start = time.monotonic()
+        artifact_collection_status = "SUCCEEDED"
+        try:
+            artifact_path = self.collect_codebuild_logs()
+        except Exception:
+            artifact_collection_status = "FAILED"
+            log.exception("Failed to collect CodeBuild logs")
+        artifact_collection_duration = time.monotonic() - artifact_collection_start
+        self._record_timing(
+            "CodeBuild artifact collection",
+            artifact_collection_duration,
+            artifact_collection_status,
+        )
+        self._provision_builds = builds
+        self._provision_results = results
+        self._provision_artifact_path = artifact_path
+
+        if failed:
+            rc_failed = self.rc_project in failed
+            mc_failed = [project for project in failed if project != self.rc_project]
+            resume_command = self._provision_resume_command()
+            if rc_failed:
+                mc_detail = (
+                    f"; dependent MC build(s) also failed: "
+                    f"{self._format_failed_builds(mc_failed, results)}"
+                    if mc_failed
+                    else "; MC build(s) completed, but overall provisioning is failed because RC failed"
+                )
+                raise RuntimeError(
+                    f"RC provisioning failed: "
+                    f"{self._format_failed_builds([self.rc_project], results)}{mc_detail}. "
+                    f"Fix the RC failure and resume with: {resume_command}"
+                )
+            raise RuntimeError(
+                f"MC provisioning failed: {self._format_failed_builds(mc_failed, results)}. "
+                f"Fix the MC failure and resume with: {resume_command}"
+            )
+
+        log.info("All builds completed successfully.")
+
+    def _provision_resume_command(self) -> str:
+        """Return the local command that retries this environment's provisioning."""
+        env_id = self.eph_prefix.removeprefix("eph-")
+        return f"make ephemeral-provision-resume ID={env_id}"
+
+    @staticmethod
+    def _format_failed_builds(
+        projects: list[str | None], results: dict[str, BuildResult]
+    ) -> str:
+        """Format concise terminal details for failed RC/MC builds."""
+        details = []
+        for project in projects:
+            result = results.get(project) if project else None
+            if result is None:
+                details.append(f"{project or '<unknown>'}: no result")
+                continue
+            detail = result.error or f"status={result.status}"
+            details.append(f"{project}: {' '.join(detail.split())[:300]}")
+        return "; ".join(details)
+
+    def _log_provision_timing_summary(self) -> None:
+        """Print one table covering orchestration and CodeBuild timings."""
+        operation_start = self._operation_started_at or time.monotonic()
+        total_duration = time.monotonic() - operation_start
+        format_duration = (
+            self.target_monitor._format_duration
+            if self.target_monitor
+            else BuildMonitor._format_duration
+        )
+
+        rows = []
+        for timing in self._timing_steps:
+            rows.append(
+                (
+                    timing["scope"],
+                    timing["step"],
+                    timing["status"],
+                    timing["status"],
+                    format_duration(timing["duration"]),
+                    "",
+                )
+            )
+
+        for project_name, build_id in self._provision_builds:
+            result = self._provision_results.get(
+                project_name,
+                BuildResult(
+                    build_id=build_id,
+                    status="UNKNOWN",
+                    total_duration=None,
+                    error="No result was returned by the build monitor",
+                ),
+            )
+            outcome = "SUCCEEDED" if result.error is None else "FAILED"
+            short_build_id = result.build_id.rsplit(":", 1)[-1][:8]
+            rows.append(
+                (
+                    project_name,
+                    "CodeBuild total",
+                    outcome,
+                    result.status,
+                    format_duration(result.total_duration),
+                    short_build_id,
+                )
+            )
+
+            for phase in result.phases:
+                phase_status = phase["status"] or "UNKNOWN"
+                phase_outcome = (
+                    "SUCCEEDED"
+                    if phase_status == "SUCCEEDED"
+                    else "FAILED"
+                    if phase_status in {"FAILED", "FAULT", "STOPPED", "TIMED_OUT"}
+                    else phase_status
+                )
+                rows.append(
+                    (
+                        project_name,
+                        f"phase: {phase['name']}",
+                        phase_outcome,
+                        phase_status,
+                        format_duration(phase["duration"]),
+                        short_build_id,
+                    )
+                )
+
+        rows.append(
+            (
+                "ORCHESTRATOR",
+                "TOTAL operation",
+                "FAILED" if self._operation_failed else "SUCCEEDED",
+                "FAILED" if self._operation_failed else "SUCCEEDED",
+                format_duration(total_duration),
+                "",
+            )
+        )
+
+        report_lines = [
+            "",
+            "==========================================",
+            "Provision: Timing and Build Summary",
+            "==========================================",
+            "Provision timing and build report:",
+            "%-32s %-42s %-10s %-10s %-10s %-8s" % (
+                "SCOPE", "STEP / PHASE", "OUTCOME", "STATUS", "DURATION", "BUILD"
+            ),
+            "%-32s %-42s %-10s %-10s %-10s %-8s" % (
+                "-----", "-----------", "-------", "------", "--------", "-----"
+            ),
+        ]
+        report_lines.extend(
+            "%-32s %-42s %-10s %-10s %-10s %-8s" % row for row in rows
+        )
+
+        for project_name, build_id in self._provision_builds:
+            result = self._provision_results.get(project_name)
+            if result is None:
+                continue
+            if result.log_url:
+                report_lines.append(
+                    f"Build report: project={project_name} CloudWatch={result.log_url}"
+                )
+
+        if self._provision_artifact_path:
+            report_lines.append(f"Build report: artifacts={self._provision_artifact_path}")
+        else:
+            report_lines.append("Build report: artifacts=unavailable (ARTIFACT_DIR is not set)")
+
+        report_text = "\n".join(report_lines) + "\n"
+        for line in report_lines:
+            log.info("%s", line)
+        self._write_provision_timing_artifact(report_text)
+
+    def _write_provision_timing_artifact(self, report_text: str) -> None:
+        """Write the unified provisioning report to the configured artifact directory."""
+        artifact_dir = os.environ.get("ARTIFACT_DIR")
+        if not artifact_dir:
+            return
+
+        report_path = Path(artifact_dir) / "provision-timing-summary.txt"
+        try:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(report_text)
+            log.info("Build report: timing summary=%s", report_path)
+        except OSError as exc:
+            log.warning("Unable to write provisioning timing artifact %s: %s", report_path, exc)
 
     def _save_terraform_outputs(self, git: GitManager, dest: str):
         """Fetch RC terraform outputs and write them to a file.
@@ -457,7 +1081,9 @@ class EphemeralEnvOrchestrator:
 
         regional_account_id = self.aws.get_target_account_id("regional")
         state_bucket = f"terraform-state-{regional_account_id}-{self.region}"
-        state_key = f"regional-cluster/{self.eph_prefix}-regional.tfstate"
+        if not self.rc_project:
+            raise RuntimeError("Cannot read RC state: RC project name is unavailable")
+        state_key = f"regional-cluster/{self.rc_project}.tfstate"
         tf_dir = git.work_dir / "terraform" / "config" / "regional-cluster"
 
         env = os.environ.copy()
@@ -520,16 +1146,12 @@ class EphemeralEnvOrchestrator:
         management_account_id = self.aws.get_target_account_id("management")
         state_bucket = f"terraform-state-{management_account_id}-{self.region}"
 
-        # MC management_id follows the pattern: {eph_prefix}-{mc_key}
-        # Ephemeral envs support at most 1 MC, so we use the first key from provision_mcs.
-        region_file = git.work_dir / "config" / TARGET_ENVIRONMENT / f"{self.region}.yaml"
-        with open(region_file) as f:
-            region_config = yaml.safe_load(f) or {}
-        mc_keys = list(region_config.get("provision_mcs", {}).keys())
-        if not mc_keys:
+        # The state-file interface currently stores one MC output file. Use the
+        # first rendered project so state lookup and output validation agree.
+        if not self.mc_projects:
             log.warning("No MCs in provision_mcs — skipping MC state save")
             return
-        mc_id = f"{self.eph_prefix}-{mc_keys[0]}"
+        mc_id = self.mc_projects[0]
 
         state_key = f"management-cluster/{mc_id}.tfstate"
         tf_dir = git.work_dir / "terraform" / "config" / "management-cluster"
@@ -579,6 +1201,62 @@ class EphemeralEnvOrchestrator:
         dest_path.parent.mkdir(parents=True, exist_ok=True)
         dest_path.write_text(result.stdout)
         log.info("MC terraform outputs written to %s", dest)
+
+    def _validate_saved_outputs(
+        self,
+        output_path: str,
+        cluster_type: str,
+    ):
+        """Validate and summarize the outputs exposed to downstream workflows.
+
+        CodeBuild success only proves that the build command exited zero. This
+        check makes the saved Terraform-output contract explicit, so a
+        successful provision cannot be recorded as ready with missing URLs or
+        missing RC-to-MC hand-off data.
+        """
+        try:
+            outputs = json.loads(Path(output_path).read_text())
+        except (OSError, json.JSONDecodeError) as e:
+            raise RuntimeError(
+                f"Unable to validate {cluster_type} provisioning outputs at {output_path}: {e}"
+            ) from e
+
+        required = [
+            "cluster_name",
+            "cluster_endpoint",
+            "vpc_id",
+        ]
+        if cluster_type == "RC":
+            required.extend(["api_gateway_invoke_url", "rhobs_api_url"])
+        else:
+            required.extend(["oidc_bucket_name", "oidc_cloudfront_domain"])
+
+        invalid = []
+        for name in required:
+            value = outputs.get(name, {}).get("value")
+            if value in (None, ""):
+                invalid.append(f"{name}=empty")
+                continue
+            if name.endswith("_endpoint") or name.endswith("_url"):
+                if not str(value).startswith("https://"):
+                    invalid.append(f"{name}=invalid-url")
+            if name == "vpc_id" and not str(value).startswith("vpc-"):
+                invalid.append(f"{name}=invalid-vpc-id")
+
+        log.info("")
+        log.info("==========================================")
+        log.info("Provision: %s Output Summary", cluster_type)
+        log.info("==========================================")
+        log.info("  source=%s", output_path)
+
+        if invalid:
+            raise RuntimeError(
+                f"Required {cluster_type} Terraform outputs are missing or invalid: "
+                f"{', '.join(invalid)}"
+            )
+
+        for name in required:
+            log.info("  ✓ %s", name)
 
     def _purge_clusters(self, git: GitManager):
         """Delete all clusters and resource bundles via Platform API before infra teardown.
@@ -750,7 +1428,9 @@ class EphemeralEnvOrchestrator:
         try:
             regional_account_id = self.aws.get_target_account_id("regional")
             state_bucket = f"terraform-state-{regional_account_id}-{self.region}"
-            state_key = f"regional-cluster/{self.eph_prefix}-regional.tfstate"
+            if not self.rc_project:
+                raise RuntimeError("Cannot read RC state: RC project name is unavailable")
+            state_key = f"regional-cluster/{self.rc_project}.tfstate"
             tf_dir = git.work_dir / "terraform" / "config" / "regional-cluster"
 
             env = os.environ.copy()
@@ -789,13 +1469,8 @@ class EphemeralEnvOrchestrator:
             log.warning("Failed to fetch API URL from terraform state: %s", e)
             return None
 
-    def _run_teardown(
-        self,
-        git: GitManager,
-        fire_and_forget: bool = False,
-        force_first_push: bool = False,
-    ):
-        """Tear down infrastructure via GitOps and destroy the pipeline-provisioner."""
+    def _run_teardown(self, git: GitManager, fire_and_forget: bool = False):
+        """Tear down infrastructure via GitOps and destroy the bootstrap infrastructure."""
 
         # Phase 1: Infrastructure teardown
         log.info("")
@@ -803,104 +1478,175 @@ class EphemeralEnvOrchestrator:
         log.info("Teardown: Infrastructure Destroy")
         log.info("==========================================")
 
-        # Snapshot known executions (RC/MC pipelines are in the target region)
-        pipeline_known = self.target_monitor.snapshot_pipeline_executions(self.pipeline_prefix)
+        # Use the existing branch revision without pushing delete flags. The
+        # IS_DESTROY pipeline variable makes every build phase honor teardown
+        # semantics without requiring a source-triggered execution.
+        desired_sha = git.current_sha()
+        destroy_overrides = {"IS_DESTROY": "true"}
 
-        def set_delete_flag(region_config):
-            region_config["delete"] = True
-            for mc_name, mc_config in region_config.get("provision_mcs", {}).items():
-                if mc_config is None:
-                    region_config["provision_mcs"][mc_name] = mc_config = {}
-                mc_config["delete"] = True
+        if not self.rc_project:
+            raise RuntimeError("Cannot start RC teardown: RC project name is unavailable")
 
-        git.modify_config(
-            TARGET_ENVIRONMENT,
-            self.region,
-            set_delete_flag,
-            force=force_first_push,
-        )
+        # Start all cluster destroys before waiting for any to finish.
+        destroy_projects = [p for p in [self.rc_project, *self.mc_projects] if p]
+        pipeline_names = [self.target_monitor.pipeline_name(p) for p in destroy_projects]
+
+        # Remove push triggers before starting any destroy: under SUPERSEDED a
+        # push during/after the destroy would queue an apply that recreates the
+        # cluster. Then abandon any execution still running (e.g. a provision step
+        # that timed out mid-apply) so the destroy isn't blocked.
+        for pipeline_name in pipeline_names:
+            self.target_monitor.disable_push_triggers(pipeline_name)
+        self.target_monitor.stop_active_executions(pipeline_names)
+
+        teardown_builds = []
+        for project in destroy_projects:
+            pipeline = self.target_monitor.pipeline_name(project)
+            execution_id = self.target_monitor.start_pipeline(
+                pipeline,
+                desired_sha,
+                environment_variables=destroy_overrides,
+            )
+            teardown_builds.append((project, execution_id))
 
         if fire_and_forget:
             log.info(
-                "Fire-and-forget mode: pushed infrastructure delete flags (Phase 1) "
-                "and exiting. Phases 2 (delete_pipeline) and 3 (pipeline-provisioner "
-                "destroy) will NOT run — complete teardown must be triggered separately."
+                "Fire-and-forget mode: MC and RC teardown started and "
+                "will continue asynchronously. Phases 2 (delete projects) and 3 "
+                "(terraform destroy) will NOT run."
             )
             return
 
-        # Discover and wait for RC/MC pipeline executions (infra destroy, target region)
-        teardown_pipelines = [
-            (name, exec_id)
-            for name, exec_id in self.target_monitor.discover_pipelines(self.pipeline_prefix, pipeline_known)
-            if name != self.provisioner_name
-        ]
+        failed = self._wait_for_teardown_builds(teardown_builds, desired_sha)
+        self._raise_teardown_failure(failed)
 
-        # Monitor all teardown pipelines concurrently
+        # Phase 2: Delete CodePipelines and CodeBuild projects through the
+        # same per-cluster lifecycle commands used by the autoscaler.
+        log.info("")
+        log.info("==========================================")
+        log.info("Teardown: Delete Cluster Resources")
+        log.info("==========================================")
+
+        self._delete_cluster_resources(git)
+
+        log.info("CodePipelines and CodeBuild projects deleted.")
+
+        # Phase 3: Destroy bootstrap infrastructure via terraform destroy
+        log.info("")
+        log.info("==========================================")
+        log.info("Teardown: Destroy Bootstrap Infrastructure")
+        log.info("==========================================")
+        self._destroy_provisioner(git)
+
+        # Delete the ephemeral branch last, once infra and pipelines are gone.
+        # Pipelines source config from this branch, so it must survive until the
+        # destroys and deletes above complete. Skipped in fire-and-forget mode.
+        git.delete_eph_branch()
+
+        log.info("Teardown complete.")
+
+    def _run_cluster_resource_action(self, git: GitManager, action: str, config_path: Path):
+        """Run one explicit cluster-resource lifecycle action."""
+        script = git.work_dir / "scripts" / "provision-cluster-resources.sh"
+        if not script.exists():
+            raise FileNotFoundError(f"Cluster resource script not found at {script}")
+
+        env = os.environ.copy()
+        env.update(self.aws.subprocess_env)
+        env["ENVIRONMENT"] = TARGET_ENVIRONMENT
+
+        log.info("Running cluster resource action: %s (%s)", action, config_path)
+        subprocess.run(
+            [
+                "/bin/bash",
+                str(script),
+                action,
+                "--config",
+                str(config_path),
+                "--region-deployment",
+                self.region,
+            ],
+            cwd=git.work_dir,
+            env=env,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
+            check=True,
+            timeout=TEARDOWN_TIMEOUT,
+        )
+
+    def _delete_cluster_resources(self, git: GitManager):
+        """Delete all rendered MC resources, followed by the RC resources."""
+        deploy_dir = git.work_dir / "deploy" / TARGET_ENVIRONMENT / self.region
+        resource_config_dir = deploy_dir / "pipeline-provisioner-inputs"
+
+        for config_path in sorted(resource_config_dir.glob("management-cluster-*.json")):
+            self._run_cluster_resource_action(git, "delete-mc", config_path)
+
+        rc_config_path = resource_config_dir / "regional-cluster.json"
+        if rc_config_path.exists():
+            self._run_cluster_resource_action(git, "delete-rc", rc_config_path)
+
+    def _wait_for_teardown_builds(
+        self,
+        builds: list[tuple[str, str]],
+        desired_sha: str,
+    ) -> list[str]:
+        """Wait for a teardown phase and return projects that failed."""
+        if not builds:
+            return []
+
         failed = []
-        if teardown_pipelines:
-            with ThreadPoolExecutor(max_workers=len(teardown_pipelines)) as executor:
-                future_to_pipeline = {
-                    executor.submit(self.target_monitor.wait_for_completion, name, exec_id): name
-                    for name, exec_id in teardown_pipelines
-                }
+        with ThreadPoolExecutor(max_workers=len(builds)) as executor:
+            future_to_build = {
+                executor.submit(
+                    self.target_monitor.wait_for_pipeline,
+                    self.target_monitor.pipeline_name(project_name),
+                    execution_id,
+                    desired_sha,
+                ): project_name
+                for project_name, execution_id in builds
+            }
 
-                for future in as_completed(future_to_pipeline):
-                    pipeline_name = future_to_pipeline[future]
-                    try:
-                        future.result()
-                    except (RuntimeError, TimeoutError) as e:
-                        log.error("Teardown pipeline '%s' failed: %s", pipeline_name, e)
-                        failed.append(pipeline_name)
+            for future in as_completed(future_to_build):
+                project_name = future_to_build[future]
+                try:
+                    result = future.result()
+                except Exception:
+                    # Catch everything (e.g. botocore ClientError) so one failed
+                    # future doesn't abort monitoring of the remaining teardowns.
+                    log.exception("Teardown build '%s' failed", project_name)
+                    failed.append(project_name)
+                    continue
 
+                if result.status != "SUCCEEDED" or result.error:
+                    log.error(
+                        "Teardown build '%s' did not succeed (status=%s): %s",
+                        project_name,
+                        result.status,
+                        result.error or "no failure detail returned",
+                    )
+                    failed.append(project_name)
+                    continue
+                log.info("✓ Teardown build succeeded: %s", project_name)
+        return failed
+
+    def _raise_teardown_failure(self, failed: list[str]) -> None:
         if failed:
             try:
                 self.collect_codebuild_logs()
             except Exception:
                 log.exception("Failed to collect teardown CodeBuild logs")
             raise RuntimeError(
-                f"{len(failed)} pipeline(s) failed during teardown: {', '.join(failed)}"
+                f"{len(failed)} teardown build(s) failed: {', '.join(failed)}"
             )
 
-        # Phase 2: Pipeline teardown
-        log.info("")
-        log.info("==========================================")
-        log.info("Teardown: Pipeline Destroy")
-        log.info("==========================================")
+    def _destroy_provisioner(self, git: GitManager):
+        """Destroy bootstrap infrastructure via terraform destroy.
 
-        # Snapshot again before pushing delete_pipeline flags (provisioner is in central region)
-        provisioner_known = self.central_monitor.get_execution_ids(self.provisioner_name)
-
-        def set_delete_pipeline_flag(region_config):
-            region_config["delete_pipeline"] = True
-            for mc_name, mc_config in region_config.get("provision_mcs", {}).items():
-                if mc_config is None:
-                    region_config["provision_mcs"][mc_name] = mc_config = {}
-                mc_config["delete_pipeline"] = True
-
-        git.modify_config(TARGET_ENVIRONMENT, self.region, set_delete_pipeline_flag)
-
-        # Wait for pipeline-provisioner to destroy the pipelines (central region)
-        provisioner_exec_id = self.central_monitor.wait_for_new_execution(
-            self.provisioner_name, provisioner_known
-        )
-        self.central_monitor.wait_for_completion(self.provisioner_name, provisioner_exec_id)
-
-        # Phase 3: Destroy pipeline-provisioner via terraform destroy
-        log.info("")
-        log.info("==========================================")
-        log.info("Teardown: Pipeline Provisioner Destroy")
-        log.info("==========================================")
-        self._destroy_pipeline_provisioner(git)
-
-        # Delete the ephemeral branch last, once infra and pipelines are gone.
-        # Earlier phases push delete flags to this branch, so it must survive
-        # until here. Skipped in fire-and-forget mode (returns at Phase 1).
-        git.delete_eph_branch()
-
-        log.info("Teardown complete.")
-
-    def _destroy_pipeline_provisioner(self, git: GitManager):
-        """Destroy the pipeline-provisioner via terraform destroy."""
+        Removes the connection from state first so it persists across CI runs,
+        then destroys everything else (platform image ECR, build-platform-image
+        CodeBuild, RC/MC IAM roles).
+        """
         bootstrap_dir = git.work_dir / "terraform" / "config" / "central-account-bootstrap"
 
         account_id = self.aws.session.client("sts").get_caller_identity()["Account"]
@@ -927,13 +1673,39 @@ class EphemeralEnvOrchestrator:
                 timeout=TEARDOWN_TIMEOUT,
             )
 
-            # Destroy only the modules we own — the shared CodeStar
-            # connection stays in state (harmless, per-CI-run state)
-            # and is imported fresh on each apply.
+            # The connection is shared across environments. An unsuccessful
+            # state removal must never turn into deletion of that connection.
+            connection_resource = "aws_codestarconnections_connection.github"
+
+            def connection_in_state():
+                result = subprocess.run(
+                    ["terraform", "state", "list"],
+                    cwd=bootstrap_dir,
+                    env=env,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                return connection_resource in result.stdout.splitlines()
+
+            if connection_in_state():
+                subprocess.run(
+                    ["terraform", "state", "rm", connection_resource],
+                    cwd=bootstrap_dir,
+                    env=env,
+                    check=True,
+                    timeout=60,
+                )
+            if connection_in_state():
+                raise RuntimeError(
+                    "Refusing bootstrap destruction: the shared GitHub connection "
+                    "is still managed by this Terraform state"
+                )
+
+            # Full destroy (connection already removed from state)
             subprocess.run(
                 ["terraform", "destroy", "-auto-approve",
-                 "-target=module.pipeline_provisioner",
-                 "-target=module.platform_image",
                  f"-var=github_repository={git.fork_repo}"],
                 cwd=bootstrap_dir,
                 env=env,
@@ -944,7 +1716,7 @@ class EphemeralEnvOrchestrator:
             raise RuntimeError(
                 f"Terraform teardown timed out after {TEARDOWN_TIMEOUT}s"
             )
-        log.info("Pipeline-provisioner destroyed.")
+        log.info("Bootstrap infrastructure destroyed.")
 
 
 # Patterns that match AWS secrets we don't want in Prow artifacts

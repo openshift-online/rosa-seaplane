@@ -4,6 +4,7 @@
 .vscode
 *.tfvars
 *.tfvars.json
+!deploy/**/static.tfvars.json
 *.terraform.lock.hcl
 *_override.tf
 override.tf

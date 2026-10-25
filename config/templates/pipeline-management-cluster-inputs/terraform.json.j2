@@ -25,6 +25,5 @@
 {%- endif %}
 {%- if mc.enable_bastion is defined %},
   "enable_bastion": {{ mc.enable_bastion | tojson }}{% elif management_cluster_defaults.enable_bastion %},
-  "enable_bastion": {{ management_cluster_defaults.enable_bastion | tojson }}{% endif %}{% if mc.delete %},
-  "delete": true{% endif %}
+  "enable_bastion": {{ management_cluster_defaults.enable_bastion | tojson }}{% endif %}
 }

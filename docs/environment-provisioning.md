@@ -1,6 +1,8 @@
 # Provision a New Environment
 
-Set up a central pipeline that provisions Regional and Management Clusters with ArgoCD and kube-applier connectivity.
+Set up shared central resources and one CodePipeline with a combined CodeBuild worker per Regional or Management Cluster. The cluster builds provision infrastructure, bootstrap ArgoCD, and establish kube-applier connectivity.
+
+For an existing environment using Terraform-managed pipelines, review [migration from the previous pipeline architecture](design/codepipeline-cluster-lifecycle.md#migration-from-terraform-managed-pipelines) before running bootstrap.
 
 ---
 
@@ -12,6 +14,7 @@ Set up a central pipeline that provisions Regional and Management Clusters with 
 aws --version
 terraform --version
 python --version
+uv --version
 jq --version
 ```
 
@@ -25,9 +28,18 @@ Three accounts are needed:
 
 The Regional and Management accounts must allow assume-role from Central (see 1.2).
 
+Bootstrap authorizes the exact account IDs and `aws.child_admin_role_name` from
+the rendered configuration, resolving SSM account references in the Central
+account. The RC worker can assume its configured Regional account role; MC
+workers can assume the configured Management account roles and the Regional
+account role needed for registration and cleanup. Update the configuration and
+rerun bootstrap before using a new target account or administrator role.
+
 ### 1.2 Enable assume-role
 
 Add the Central account to the `OrganizationAccountAccessRole` trust policy in both the Regional and Management accounts:
+
+If `aws.child_admin_role_name` selects another role, use that role below.
 
 ```bash
 CENTRAL_ACCOUNT_ID="123456789012"
@@ -82,7 +94,7 @@ Create a new region config file at `config/<environment>/<region>.yaml`. This in
 
 ```yaml
 # config/my-env/us-east-1.yaml
-management_clusters:
+provision_mcs:
   mc01: {}
 ```
 
@@ -90,9 +102,11 @@ To enable the bastion:
 
 ```yaml
 # config/my-env/us-east-1.yaml
-terraform_vars:
+regional_cluster:
   enable_bastion: true
-management_clusters:
+management_cluster_defaults:
+  enable_bastion: true
+provision_mcs:
   mc01: {}
 ```
 
@@ -100,7 +114,7 @@ management_clusters:
 
 ```bash
 uv run scripts/render.py
-ls deploy/<environment>/<region>/    # verify argocd/ and terraform/ dirs exist
+ls deploy/<environment>/<region>/    # verify pipeline-*-inputs/ and argocd-* outputs exist
 
 git add config/ deploy/
 git commit -m "Add <environment>/<region> configuration"
@@ -109,9 +123,9 @@ git push origin <your-branch>
 
 ---
 
-## 3. Bootstrap the Central Pipeline
+## 3. Bootstrap Central Resources and Cluster Pipelines
 
-Switch to your Central AWS profile and create the CodePipelines.
+Switch to your Central AWS profile. Bootstrap applies Terraform for shared resources (connection, IAM roles, artifact bucket, and platform-image builder), ensures the platform image exists, and invokes `scripts/provision-cluster-resources.sh` to create or update each cluster's CodeBuild project and CodePipeline through AWS APIs. There is no pipeline-provisioner meta-pipeline.
 
 ### 3.1 Run the bootstrap script
 
@@ -134,7 +148,22 @@ The bootstrap script creates a CodeStar connection and polls until it becomes AV
 2. Find the **Pending** connection and click **Update pending connection**
 3. Click **Install a new app**, then install the GitHub App on the repository you are targeting — this is required for the GitOps pipeline triggers to pick up changes
 
-The script proceeds automatically once the connection is authorized.
+The script proceeds automatically once the connection is authorized. Newly created CodePipelines start their first execution automatically. Bootstrap returns after reconciling their definitions; check the RC/MC executions for completion before verification.
+
+### 3.3 Reconcile cluster definitions
+
+Push rendered configuration changes to the tracked branch. Existing pipelines run when their branch and file filters match. Adding a cluster or changing a CodeBuild/CodePipeline definition also requires rerunning bootstrap with the same environment and branch so the per-cluster resources are reconciled. Updating an existing pipeline definition alone does not start an execution; use the [manual trigger](#trigger-pipelines-via-cli) when needed.
+
+Use `cluster_naming` to customize project names. The lifecycle commands also
+support dynamically created MCs in accounts already authorized by bootstrap;
+they do not require names beginning with `mc` or containing `regional`. Adding a
+new target account or changing its administrator role requires a bootstrap rerun
+to update authorization before creating its pipeline.
+
+Cluster build logs are grouped under
+`/aws/codebuild/<pipeline-role-name>/regional` or
+`/aws/codebuild/<pipeline-role-name>/management` in CloudWatch. Use the build's log
+stream to distinguish individual clusters and executions.
 
 ## 4. Verification
 
@@ -191,15 +220,15 @@ argocd      storageclass    Synced        Healthy
 
 ### 4.3 Verify the Platform API
 
-From the Central account, extract the API Gateway endpoint from terraform output:
+From the Regional account, extract the API Gateway endpoint from the cluster's Terraform state. Use the `regional_id` from `deploy/<environment>/<region>/pipeline-regional-cluster-inputs/terraform.json`:
 
 ```bash
-export AWS_PROFILE=<central-profile>
-cd terraform/config/pipeline-regional-cluster/
+export AWS_PROFILE=<regional-profile>
+cd terraform/config/regional-cluster/
 
 terraform init -reconfigure \
-  -backend-config="bucket=terraform-state-<CENTRAL_ACCOUNT_ID>" \
-  -backend-config="key=regional-cluster/regional-<region>.tfstate" \
+  -backend-config="bucket=terraform-state-<REGIONAL_ACCOUNT_ID>-<region>" \
+  -backend-config="key=regional-cluster/<regional_id>.tfstate" \
   -backend-config="region=<region>"
 
 terraform output -raw api_test_command
@@ -239,5 +268,5 @@ aws codepipeline list-pipelines \
   --output table
 
 # Trigger a specific pipeline (fetches latest commit)
-aws codepipeline start-pipeline-execution --name rc-pipe-<hash>
+aws codepipeline start-pipeline-execution --name <regional_id>-pipeline
 ```

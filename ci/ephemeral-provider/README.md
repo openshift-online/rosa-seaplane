@@ -6,11 +6,18 @@ For local development usage via Make targets, see [Provisioning a Development En
 
 ## Credentials
 
-The `--creds-dir` directory (default: `/var/run/rosa-credentials/`) must contain:
+Provide the token through an environment variable or the `--creds-dir` directory
+(default: `/var/run/rosa-credentials/`):
 
-| File           | Purpose                              | Fallback               |
-| -------------- | ------------------------------------ | ---------------------- |
-| `github_token` | GitHub token for pushing CI branches | `GITHUB_TOKEN` env var |
+| File           | Purpose                              | Environment variable               |
+| -------------- | ------------------------------------ | ---------------------------------- |
+| `github_token` | GitHub token for pushing CI branches | `SEAPLANE_CI_GITHUB_TOKEN` env var |
+
+Token lookup order is `SEAPLANE_CI_GITHUB_TOKEN`, `GITHUB_TOKEN`, then the
+`github_token` file.
+Empty environment variables are skipped. Local Make wrappers pass the selected
+token into containers as `SEAPLANE_CI_GITHUB_TOKEN`; if no token variable is set,
+they fetch `/ephemeral-provider/github-token` from SSM Parameter Store.
 
 The provider also expects AWS CLI profiles `rrp-central`, `rrp-rc`, and `rrp-mc` to be available via `AWS_CONFIG_FILE`. See the [AWS Profiles](../README.md#aws-profiles) section in the CI README for details.
 
@@ -28,12 +35,23 @@ The provider also expects AWS CLI profiles `rrp-central`, `rrp-rc`, and `rrp-mc`
 # Teardown (same --id)
 ./ci/ephemeral-provider/main.py --teardown --id abc123 --repo owner/repo --branch my-feature --creds-dir /path/to/credentials
 
+# Start RC/MC teardown without waiting for cluster destruction
+./ci/ephemeral-provider/main.py --teardown-fire-and-forget --id abc123 --repo owner/repo --branch my-feature --creds-dir /path/to/credentials
+
 # Teardown after updating the CI branch from --branch (same as make ephemeral-teardown RESYNC=1)
 ./ci/ephemeral-provider/main.py --teardown --resync --id abc123 --repo owner/repo --branch my-feature --creds-dir /path/to/credentials
+
+# Resync and resume a failed provisioning run using the existing ephemeral branch
+./ci/ephemeral-provider/main.py --resume --resync-before-resume --id abc123 --repo owner/repo --branch my-feature --eph-branch eph-abc123-my-feature-ci --creds-dir /path/to/credentials
+
+# Resume without resyncing the existing ephemeral branch
+./ci/ephemeral-provider/main.py --resume --id abc123 --repo owner/repo --branch my-feature --eph-branch eph-abc123-my-feature-ci --creds-dir /path/to/credentials
 
 # Resync (rebase ephemeral branch onto latest source branch, same --id)
 ./ci/ephemeral-provider/main.py --resync --id abc123 --repo owner/repo --branch my-feature --creds-dir /path/to/credentials
 ```
+
+Teardown starts the RC and all MC destroy executions before waiting, so cluster destruction runs concurrently. `--teardown` waits for every execution to succeed before deleting the cluster pipelines/projects and shared bootstrap resources. `--teardown-fire-and-forget` exits after starting all destroy executions, without waiting for cluster destruction or deleting those pipeline/bootstrap resources; run a full teardown later to complete cleanup.
 
 ## Overrides
 
@@ -69,10 +87,10 @@ Can be specified multiple times. Format is `<target-path>:<override-file>` where
 
 | Module              | Description                                                                  |
 | ------------------- | ---------------------------------------------------------------------------- |
-| `main.py`           | CLI entrypoint — parses args, runs provision, teardown, or resync            |
-| `orchestrator.py`   | Top-level orchestration logic for provision and teardown workflows           |
+| `main.py`           | CLI entrypoint — parses args, runs provision, resume, teardown, or resync    |
+| `orchestrator.py`   | Top-level orchestration logic for provision, resume, and teardown workflows  |
 | `aws.py`            | AWS credential management and session helpers                                |
 | `git.py`            | Git operations for ephemeral branch creation, rendering, and resync (rebase) |
-| `pipeline.py`       | CodeBuild pipeline monitoring (discovery, polling, status)                   |
+| `codepipeline.py`   | CodePipeline execution monitoring and underlying CodeBuild status validation |
 | `codebuild_logs.py` | CloudWatch log fetching and formatting for CodeBuild projects                |
 | `yaml_utils.py`     | YAML deep-merge utilities for applying provision overrides                   |

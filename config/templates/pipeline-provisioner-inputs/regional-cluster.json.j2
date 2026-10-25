@@ -3,6 +3,5 @@
   "region": "{{ aws_region }}",
   "account_id": "{{ account_id }}",
   "child_admin_role_name": "{{ child_admin_role_name }}",
-  "regional_id": "{% if eph_prefix %}{{ eph_prefix }}-regional{% else %}regional{% endif %}"{% if delete_pipeline %},
-  "delete_pipeline": true{% endif %}
+  "regional_id": "{{ regional_id }}"
 }

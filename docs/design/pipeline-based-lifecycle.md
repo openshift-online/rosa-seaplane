@@ -2,11 +2,11 @@
 
 **Last Updated Date**: 2026-09-22
 
-> **Superseded for orchestration.** Cluster create, update, and destroy are moving to standalone CodeBuild (`concurrentBuildLimit: 1`, early-return, SDK-managed projects). See [codebuild-optimization.md](codebuild-optimization.md). This document remains the description of the **current** CodePipeline hierarchy until that cutover.
+> Historical architecture. The modules, paths, and commands below describe the previous Terraform-managed pipeline hierarchy and are not instructions for the current checkout. See [CodePipeline Cluster Lifecycle](codepipeline-cluster-lifecycle.md) for the current design and migration requirements.
 
 ## Summary
 
-The ROSA Seaplane implements a hierarchical, Git-driven pipeline architecture where a central pipeline-provisioner dynamically creates and manages per-cluster CodePipeline pipelines based on declarative configuration files, enabling scalable, auditable, and automated infrastructure lifecycle management across multiple AWS accounts and regions.
+The previous ROSA Seaplane architecture used a central pipeline-provisioner to dynamically create and manage Terraform-owned per-cluster CodePipelines from declarative configuration files across multiple AWS accounts and regions.
 
 ## Architecture Overview
 

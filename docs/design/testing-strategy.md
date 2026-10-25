@@ -10,7 +10,7 @@ The ROSA Seaplane testing strategy validates every change by provisioning real r
 
 - **Problem Statement**: The platform provisions and manages real AWS infrastructure (EKS clusters, RDS, networking). Changes must be validated against actual environments, not mocks, to catch integration issues before they reach production.
 - **Constraints**: Provisioning a full region takes significant time and AWS resources. Tests must balance thoroughness with cost and feedback speed.
-- **Assumptions**: A dedicated CI AWS account is available for ephemeral environments. The pipeline-provisioner can create and tear down full environments reliably.
+- **Assumptions**: Dedicated CI AWS accounts are available for ephemeral environments. The ephemeral provider can create and tear down full environments through per-cluster pipelines.
 
 ## Testing Suite
 
@@ -66,12 +66,12 @@ flowchart LR
     E -->|Done| F[Delete and Cleanup]
 ```
 
-1. Fork the PR branch to a CI-owned temp branch (CI needs to push commits, e.g. for the deletion flow)
-2. Provision a new environment from the temp branch, including the pipeline-provisioner
+1. Fork the PR branch to a CI-owned temp branch for rendered configuration and resyncs
+2. Provision a new environment from the temp branch, including shared bootstrap resources and per-cluster CodePipelines and CodeBuild projects
 3. Run the Testing Suite
-4. Optionally reconfigure the environment (modify `config.yaml` on the temp branch) and re-run the Testing Suite (repeatable N times)
-5. Commit `delete: true` to the temp branch, wait for RC, MCs, and their pipelines to be deleted
-6. Clean up the environment, including pipeline-provisioner deletion
+4. Optionally resync configuration changes from `config/` and re-run the Testing Suite (repeatable N times)
+5. Run teardown through the ephemeral provider, which starts cluster pipeline executions with `IS_DESTROY=true`
+6. After infrastructure teardown succeeds, delete the cluster pipelines/projects and shared bootstrap resources
 
 ### Nightly: Integration (from main, persistent env)
 
@@ -84,7 +84,7 @@ flowchart LR
     D[Nightly] --> E[Testing Suite] --> B
 ```
 
-- The integration environment is deployed from `main` and has a pre-existing pipeline-provisioner (set up once)
+- The integration environment is deployed from `main` with persistent shared bootstrap resources and per-cluster pipelines
 - A nightly job runs the Testing Suite against this environment
 - The RRP team is on-call during business hours; alerts come from the environment itself, not from the nightly job
 
@@ -126,7 +126,7 @@ flowchart TB
     B -->|push rendered config| C
 
     subgraph PROVISION ["Provision"]
-        C[bootstrap-central-account.sh] --> D[Pipeline-provisioner\nCodePipeline]
+        C[bootstrap-central-account.sh] --> D[provision-cluster-resources.sh]
         D -->|creates| E[RC pipeline] -->|provisions| F[Regional Cluster]
         D -->|creates| G[MC pipeline] -->|provisions| H[Management Cluster]
     end
@@ -140,16 +140,16 @@ flowchart TB
     TEST --> TEARDOWN
 
     subgraph TEARDOWN ["Teardown"]
-        J["Push delete: true"] -->|RC/MC pipelines destroy| K[Infrastructure]
-        L["Push delete_pipeline: true"] -->|Provisioner destroys| M[RC/MC pipelines]
-        N[terraform destroy] -->|Remove| O[Pipeline-provisioner]
+        J["IS_DESTROY execution"] -->|RC/MC pipelines destroy| K[Infrastructure]
+        L["delete-rc / delete-mc"] -->|Remove| M[RC/MC pipelines & projects]
+        N[terraform destroy] -->|Remove| O[Bootstrap infrastructure]
     end
 ```
 
 ## Design Rationale
 
-- **Temp branches**: CI forks to a temp branch so it can push GitOps commits (e.g. config changes, `delete: true`) during testing without affecting the source branch.
-- **Reconfig loops**: Reconfiguration includes both changes to the underlying regional infrastructure through GitOps (`config.yaml`) and HCP lifecycle operations through the Platform API. This validates that the platform handles day-2 operations correctly.
+- **Temp branches**: CI forks to a temp branch so it can push rendered configuration and resync changes during testing without affecting the source branch.
+- **Reconfig loops**: Reconfiguration includes both changes to the underlying regional infrastructure through GitOps (`config/` → `deploy/`) and HCP lifecycle operations through the Platform API. This validates that the platform handles day-2 operations correctly.
 - **Persistent integration env**: Catches issues that only manifest over time (state drift, resource leaks) and provides a stable target for alerting and on-call validation.
 - **Ephemeral envs from main**: Validates the full lifecycle (provision → test → teardown) against `main`, complementing the persistent integration environment.
 
@@ -168,5 +168,5 @@ flowchart TB
 
 ### Operability
 
-- The pipeline-provisioner is set up once for the integration environment but provisioned and torn down per-run for ephemeral environments
+- Shared bootstrap resources and per-cluster pipelines persist for integration but are provisioned and torn down per-run for ephemeral environments
 - CI-owned temp branches and a dedicated CI repo avoid polluting source repositories

@@ -1,12 +1,51 @@
 #!/usr/bin/env bash
 # Provision or destroy Regional Cluster infrastructure.
-# Called from: terraform/config/pipeline-regional-cluster/buildspec-provision-infra.yml
+# Called from: scripts/buildspec/provision-cluster.sh
 set -euo pipefail
 
 source scripts/pipeline-common/lib.sh
+source scripts/pipeline-common/terraform-lib.sh
 
 preflight_check
 config_load regional
+
+DEPLOY_DIR=$(dirname "$DEPLOY_CONFIG_FILE")
+STATIC_TFVARS="${DEPLOY_DIR}/static.tfvars.json"
+_REPO_BRANCH="${REPOSITORY_BRANCH:-main}"
+
+require_nonempty_vars "RC core runtime" \
+    TARGET_ACCOUNT_ID TARGET_REGION REGIONAL_ID REPOSITORY_URL PLATFORM_IMAGE
+validate_aws_account_id "TARGET_ACCOUNT_ID" "${TARGET_ACCOUNT_ID}"
+tf_require_static_vars "${STATIC_TFVARS}" "RC core" \
+    regional_id environment deployment_name app_code service_phase cost_center
+tf_require_static_keys "${STATIC_TFVARS}" "RC" \
+    zoa_lambda_image_tag zoa_runner_image_tag \
+    zoa_lambda_source_image zoa_runner_source_image worker_node_ami_id eph_prefix \
+    enable_rate_limit_redis seaplane_db_instance_class \
+    seaplane_db_skip_final_snapshot seaplane_db_performance_insights_enabled \
+    seaplane_db_monitoring_interval worker_node_root_volume_size \
+    zoa_boundary_session_idle_timeout_seconds zoa_boundary_session_max_duration_hours \
+    zoa_lambda_api_concurrency zoa_lambda_worker_concurrency zoa_lambda_access_concurrency \
+    zoa_access_trusted_assumer_role_names zoa_access_trusted_assumer_role_name_suffixes
+tf_require_static_vars "${STATIC_TFVARS}" "RC ZOA boundary" zoa_boundary_image
+
+_STATIC_REGIONAL_ID=$(jq -r '.regional_id // empty' "${STATIC_TFVARS}")
+_STATIC_ENVIRONMENT=$(jq -r '.environment // empty' "${STATIC_TFVARS}")
+if [[ "${_STATIC_REGIONAL_ID}" != "${REGIONAL_ID}" ]]; then
+    echo "ERROR: RC regional_id mismatch: static=${_STATIC_REGIONAL_ID}, runtime=${REGIONAL_ID}" >&2
+    exit 1
+fi
+if [[ "${_STATIC_ENVIRONMENT}" != "${ENVIRONMENT}" ]]; then
+    echo "ERROR: RC environment mismatch: static=${_STATIC_ENVIRONMENT}, runtime=${ENVIRONMENT}" >&2
+    exit 1
+fi
+
+_ZOA_LAMBDA_IMAGE_TAG=$(jq -r '.zoa_lambda_image_tag // empty' "$STATIC_TFVARS")
+if [[ "${IS_DESTROY:-false}" != "true" ]]; then
+    tf_require_static_vars "${STATIC_TFVARS}" "RC ZOA" \
+        zoa_lambda_image_tag zoa_runner_image_tag \
+        zoa_lambda_source_image zoa_runner_source_image
+fi
 
 # Save central credentials as a named AWS profile so Terraform's aws.central
 # provider can access the central account after use_mc_account switches
@@ -17,19 +56,10 @@ aws configure set aws_session_token     "$_CENTRAL_AWS_SESSION_TOKEN"     --prof
 aws configure set region                "${TARGET_REGION}"                --profile central
 export TF_VAR_central_aws_profile="central"
 
-export TF_VAR_zoa_access_trusted_assumer_role_names=$(jq -c '.zoa_access_trusted_assumer_role_names // []' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_access_trusted_assumer_role_name_suffixes=$(jq -c '.zoa_access_trusted_assumer_role_name_suffixes // []' "$DEPLOY_CONFIG_FILE")
-
-# Fetch PagerDuty config if enabled
+# Fetch PagerDuty token if enabled (config moved to static.tfvars.json)
 _RAW_PD=$(jq -r '.enable_pagerduty // false' "$DEPLOY_CONFIG_FILE")
 if [ "$_RAW_PD" == "true" ] || [ "$_RAW_PD" == "1" ]; then
-    export TF_VAR_enable_pagerduty="true"
-    export TF_VAR_pagerduty_escalation_policy_id=$(jq -r '.pagerduty_escalation_policy_id // ""' "$DEPLOY_CONFIG_FILE")
-    PAGERDUTY_TOKEN=$(aws secretsmanager get-secret-value \
-        --secret-id "pagerduty/service-account" \
-        --region us-east-1 \
-        --query SecretString \
-        --output text)
+    PAGERDUTY_TOKEN=$(secrets_manager_get "pagerduty/service-account" "us-east-1" required)
     export PAGERDUTY_TOKEN
 fi
 
@@ -44,34 +74,18 @@ export TF_STATE_BUCKET="terraform-state-${TARGET_ACCOUNT_ID}-${TARGET_REGION}"
 export TF_STATE_KEY="regional-cluster/${REGIONAL_ID}.tfstate"
 export TF_STATE_REGION="${TARGET_REGION}"
 
-# Set Terraform variables
+# Set dynamic Terraform variables (static vars in static.tfvars.json)
 export TF_VAR_region="${TARGET_REGION}"
-TF_VAR_deployment_name=$(jq -r '.deployment_name' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_deployment_name
-export TF_VAR_app_code="${APP_CODE}"
-export TF_VAR_service_phase="${SERVICE_PHASE}"
-export TF_VAR_cost_center="${COST_CENTER}"
 
-_REPO_BRANCH="${REPOSITORY_BRANCH:-main}"
 export TF_VAR_repository_url="${REPOSITORY_URL}"
 export TF_VAR_repository_branch="${_REPO_BRANCH}"
 
-if [ -z "${PLATFORM_IMAGE:-}" ]; then
-    echo "ERROR: PLATFORM_IMAGE is not set" >&2
-    exit 1
-fi
 export TF_VAR_container_image="${PLATFORM_IMAGE}"
 
-export TF_VAR_enable_bastion="${ENABLE_BASTION}"
-export TF_VAR_seaplane_db_deletion_protection=$(parseBool '.seaplane_db_deletion_protection' true "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_cloudtrail=$(parseBool '.enable_cloudtrail' false "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_api_custom_domain=$(parseBool '.enable_api_custom_domain' false "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zone_shard_count=$(jq -r '.zone_shard_count // 1' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_sns_alerting=$(parseBool '.enable_sns_alerting' false "$DEPLOY_CONFIG_FILE")
-TF_VAR_enable_sre_tools_gateway=$(parseBool '.enable_sre_tools_gateway' false "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_sre_tools_gateway
+# Static config vars (enable_bastion, seaplane_db_*, enable_cloudtrail, etc)
+# moved to static.tfvars.json
+
 TF_VAR_enable_sre_public_access=$(parseBool '.enable_sre_public_access' false "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_sre_public_access
 # SRE UI ALB allowed source CIDRs from SSM (public mode only; not committed to the repo)
 if [ "$TF_VAR_enable_sre_public_access" = "true" ]; then
     TF_VAR_sre_allowed_source_cidrs=$(aws ssm get-parameter \
@@ -87,58 +101,25 @@ else
     TF_VAR_sre_allowed_source_cidrs=$(jq -c '.sre_allowed_source_cidrs // []' "$DEPLOY_CONFIG_FILE")
 fi
 export TF_VAR_sre_allowed_source_cidrs
+
+# SRE OIDC config (enable_sre_oidc_auth, sre_oidc_issuer_url, sre_*_oidc_client_id)
+# moved to static.tfvars.json; only secrets remain dynamic
 TF_VAR_enable_sre_oidc_auth=$(parseBool '.enable_sre_oidc_auth' false "$DEPLOY_CONFIG_FILE")
-export TF_VAR_enable_sre_oidc_auth
-TF_VAR_sre_oidc_issuer_url=$(jq -r '.sre_oidc_issuer_url // "https://auth.redhat.com/auth/realms/EmployeeIDP"' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_sre_oidc_issuer_url
-
 if [ "$TF_VAR_enable_sre_oidc_auth" = "true" ]; then
-    TF_VAR_sre_grafana_oidc_client_id=$(jq -r '.sre_grafana_oidc_client_id // ""' "$DEPLOY_CONFIG_FILE")
-    export TF_VAR_sre_grafana_oidc_client_id
-    TF_VAR_sre_argocd_oidc_client_id=$(jq -r '.sre_argocd_oidc_client_id // ""' "$DEPLOY_CONFIG_FILE")
-    export TF_VAR_sre_argocd_oidc_client_id
-    TF_VAR_sre_prometheus_oidc_client_id=$(jq -r '.sre_prometheus_oidc_client_id // ""' "$DEPLOY_CONFIG_FILE")
-    export TF_VAR_sre_prometheus_oidc_client_id
-    TF_VAR_sre_thanos_oidc_client_id=$(jq -r '.sre_thanos_oidc_client_id // ""' "$DEPLOY_CONFIG_FILE")
-    export TF_VAR_sre_thanos_oidc_client_id
-
     for svc in grafana argocd prometheus thanos; do
-        secret=$(aws secretsmanager get-secret-value \
-            --secret-id "sre-ui-alb/${svc}/oidc-client-secret" \
-            --region "${TARGET_REGION}" \
-            --query SecretString \
-            --output text 2>/dev/null || true)
-        if [ -z "${secret}" ]; then
-            echo "ERROR: Secrets Manager secret 'sre-ui-alb/${svc}/oidc-client-secret' not found in account ${TARGET_ACCOUNT_ID} region ${TARGET_REGION}" >&2
-            exit 1
-        fi
+        secret=$(secrets_manager_get "sre-ui-alb/${svc}/oidc-client-secret" "${TARGET_REGION}" required)
         export "TF_VAR_sre_${svc}_oidc_client_secret=${secret}"
     done
 fi
 
 # MC OU path from SSM - backward-compatible: try new nested path first, fall back to legacy flat path
-TF_VAR_mc_ou_path=$(aws ssm get-parameter \
-    --name "/infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path" \
-    --with-decryption \
-    --query 'Parameter.Value' \
-    --output text \
-    --region "${TARGET_REGION}" 2>/dev/null || true)
+TF_VAR_mc_ou_path=$(ssm_get_param_with_fallback \
+    "${TARGET_REGION}" \
+    "/infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path" \
+    "/infra/region-ou-path") || TF_VAR_mc_ou_path=""
 
 if [ -z "${TF_VAR_mc_ou_path}" ]; then
-    echo "INFO: New SSM path /infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path not found, trying legacy path..." >&2
-    TF_VAR_mc_ou_path=$(aws ssm get-parameter \
-        --name "/infra/region-ou-path" \
-        --with-decryption \
-        --query 'Parameter.Value' \
-        --output text \
-        --region "${TARGET_REGION}" 2>/dev/null || true)
-    if [ -n "${TF_VAR_mc_ou_path}" ]; then
-        echo "INFO: Using legacy SSM path /infra/region-ou-path" >&2
-    fi
-fi
-
-if [ -z "${TF_VAR_mc_ou_path}" ]; then
-    echo "ERROR: SSM parameter not found at either /infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path or /infra/region-ou-path in account ${TARGET_ACCOUNT_ID} region ${TARGET_REGION}" >&2
+    echo "ERROR: MC OU path not found in SSM" >&2
     echo "For stage: parameter is created by rosa-seaplane-internal/infra/modules/account-config" >&2
     echo "For ephemeral/integration: manually create at /infra/region-ou-path (legacy) or /infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path (new)" >&2
     exit 1
@@ -153,49 +134,73 @@ if [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
     export TF_VAR_environment_hosted_zone_id="${ENVIRONMENT_HOSTED_ZONE_ID}"
 fi
 
-export TF_VAR_regional_id=$(jq -r '.regional_id' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_environment=$(jq -r '.environment' "$DEPLOY_CONFIG_FILE")
-
-# ZOA images — read from deploy config (config/defaults.yaml → terraform.json)
-export TF_VAR_zoa_lambda_image_tag=$(jq -r '.zoa_lambda_image_tag // ""' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_runner_image_tag=$(jq -r '.zoa_runner_image_tag // ""' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_lambda_source_image=$(jq -r '.zoa_lambda_source_image // ""' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_runner_source_image=$(jq -r '.zoa_runner_source_image // ""' "$DEPLOY_CONFIG_FILE")
-# Boundary ECS pulls Quay directly (no ECR skopeo mirror); compose full ref for TF_VAR_zoa_boundary_image.
-_zoa_boundary_image_tag=$(jq -r '.zoa_boundary_image_tag // ""' "$DEPLOY_CONFIG_FILE")
-_zoa_boundary_source_image=$(jq -r '.zoa_boundary_source_image // ""' "$DEPLOY_CONFIG_FILE")
-if [ -z "${_zoa_boundary_image_tag}" ] || [ -z "${_zoa_boundary_source_image}" ]; then
-    echo "ERROR: zoa_boundary_image_tag and zoa_boundary_source_image must be set in deploy config (full ZOA stack is always deployed)" >&2
-    exit 1
-fi
-export TF_VAR_zoa_boundary_image="${_zoa_boundary_source_image}:${_zoa_boundary_image_tag}"
-export TF_VAR_zoa_boundary_session_idle_timeout_seconds=$(jq -r '.zoa_boundary_session_idle_timeout_seconds // 3600' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_boundary_session_max_duration_hours=$(jq -r '.zoa_boundary_session_max_duration_hours // 4' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_lambda_api_concurrency=$(jq -r '.zoa_lambda_api_concurrency' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_lambda_worker_concurrency=$(jq -r '.zoa_lambda_worker_concurrency' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_zoa_lambda_access_concurrency=$(jq -r '.zoa_lambda_access_concurrency' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_worker_node_ami_id=$(jq -r '.worker_node_ami_id // ""' "$DEPLOY_CONFIG_FILE")
-export TF_VAR_eph_prefix=$(jq -r '.eph_prefix // ""' "$DEPLOY_CONFIG_FILE")
+# Static vars (regional_id, environment, zoa_*, worker_node_ami_id, eph_prefix)
+# moved to static.tfvars.json
 export ENVIRONMENT="${ENVIRONMENT:-staging}"
 
 # Determine terraform action
-DELETE_FLAG=$(jq -r '.delete // false' "$DEPLOY_CONFIG_FILE")
-[ "${IS_DESTROY:-false}" == "true" ] && DELETE_FLAG="true"
+DELETE_FLAG="${IS_DESTROY:-false}"
 
 TERRAFORM_ACTION="apply"
 [ "${DELETE_FLAG}" == "true" ] && TERRAFORM_ACTION="destroy"
 
 echo "RC ${REGIONAL_ID}: terraform ${TERRAFORM_ACTION} in ${TARGET_ACCOUNT_ID}/${TARGET_REGION}"
 
-cd terraform/config/regional-cluster
-terraform init -reconfigure \
-    -backend-config="bucket=${TF_STATE_BUCKET}" \
-    -backend-config="key=${TF_STATE_KEY}" \
-    -backend-config="region=${TF_STATE_REGION}" \
-    -backend-config="use_lockfile=true"
+print_provision_param_summary "RC" \
+    "regional_id" "static" "${_STATIC_REGIONAL_ID}" \
+    "REGIONAL_ID" "runtime" "${REGIONAL_ID}" \
+    "TARGET_ACCOUNT_ID" "runtime" "${TARGET_ACCOUNT_ID}" \
+    "TARGET_REGION" "runtime" "${TARGET_REGION}" \
+    "REPOSITORY_URL" "runtime" "${REPOSITORY_URL}" \
+    "REPOSITORY_BRANCH" "runtime" "${_REPO_BRANCH}" \
+    "PLATFORM_IMAGE" "runtime" "${PLATFORM_IMAGE}" \
+    "TF_VAR_management_clusters" "derived" "${TF_VAR_management_clusters}" \
+    "TF_VAR_region_ou_path" "SSM" "${TF_VAR_region_ou_path}" \
+    "zoa_lambda_image_tag" "static" "${_ZOA_LAMBDA_IMAGE_TAG}" \
+    "zoa_runner_image_tag" "static" "$(jq -r '.zoa_runner_image_tag // empty' "${STATIC_TFVARS}")" \
+    "TF_STATE_BUCKET" "runtime" "${TF_STATE_BUCKET}" \
+    "TF_STATE_KEY" "runtime" "${TF_STATE_KEY}"
 
-if [ "${TERRAFORM_ACTION}" == "apply" ] && [ -f imports.sh ]; then
-    source imports.sh
+# Initialize backend
+tf_init_backend \
+    terraform/config/regional-cluster \
+    "${TF_STATE_BUCKET}" \
+    "${TF_STATE_KEY}" \
+    "${TF_STATE_REGION}"
+
+# Apply or destroy
+tf_apply_with_static_vars \
+    terraform/config/regional-cluster \
+    "${TERRAFORM_ACTION}" \
+    "${DEPLOY_DIR}/static.tfvars.json"
+
+if [[ "${TERRAFORM_ACTION}" == "apply" ]]; then
+    _RC_REQUIRED_OUTPUTS=(
+        "cluster_name"
+        "cluster_endpoint|^https://"
+        "vpc_id|^vpc-"
+        "api_gateway_invoke_url|^https://"
+        "rhobs_api_url|^https://"
+    )
+    if [[ -n "${TF_VAR_management_clusters}" ]]; then
+        _RC_REQUIRED_OUTPUTS+=(
+            "oidc_cloudfront_domain"
+            "oidc_bucket_name"
+            "oidc_bucket_arn|^arn:"
+            "oidc_bucket_region"
+        )
+    fi
+    _RC_REQUIRED_OUTPUTS+=(
+        "zoa_bucket_arn|^arn:"
+        "zoa_kms_key_arn|^arn:"
+        "zoa_table_name"
+        "zoa_audit_table_name"
+        "zoa_sessions_table_name"
+        "zoa_uploader_role_arn|^arn:"
+        "zoa_data_access_role_arn|^arn:"
+        "zoa_access_lambda_role_arn|^arn:"
+        "zoa_lambda_ecr_url"
+        "zoa_api_function_url|^https://"
+    )
+    tf_validate_outputs terraform/config/regional-cluster "RC" "${_RC_REQUIRED_OUTPUTS[@]}" || exit 1
 fi
-
-terraform "${TERRAFORM_ACTION}" -auto-approve

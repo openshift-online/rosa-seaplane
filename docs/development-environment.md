@@ -61,6 +61,30 @@ The region is derived from the environment config (see [Customizing Your Environ
 
 To view and interact with provisioned environments at a later point in time, see [List Environments](#list-environments).
 
+## Resume Failed Provisioning
+
+If provisioning fails after the ephemeral branch has been created, resync and resume the same environment without creating another branch or environment state record:
+
+```bash
+make ephemeral-provision-resume ID=6bd2d3d7
+```
+
+By default, resume first resets the ephemeral branch to the latest source branch, reapplies `.ephemeral-env/` overrides, renders, and force-pushes the result. It then reuses existing Terraform state, CodePipelines, and CodeBuild resources and retries the infrastructure executions. Use `RESYNC=false` to resume from the existing remote branch without changing it:
+
+```bash
+make ephemeral-provision-resume ID=6bd2d3d7 RESYNC=false
+```
+
+Ephemeral CodePipeline push triggers remain enabled. A push matching a pipeline's
+branch and file-path filters starts that pipeline, and the provider adopts the
+execution for the pushed SHA. On initial creation, the provider adopts the
+pipeline's automatically started execution. A resume without a matching push
+reuses an active execution at that SHA or starts a retry if the pipeline is idle.
+See [CodePipeline Cluster Lifecycle](design/codepipeline-cluster-lifecycle.md)
+for the trigger and execution details.
+
+Automatic resync stops before the force-push if the environment has active CodePipeline executions or a platform-image CodeBuild build, preventing concurrent infrastructure changes. Wait for those executions to finish and retry, or use `RESYNC=false` if the existing branch should be retained.
+
 ## Customizing Your Environment
 
 By default, ephemeral environments use the preset in `config/ephemeral/` (bastion enabled, single MC in `us-east-1`). You can replace this config entirely for your local development by creating a `.ephemeral-env/` directory in the repo root.
@@ -80,7 +104,7 @@ This directory is gitignored — it only affects your local machine.
 ### Constraints
 
 - Exactly **one region file** (besides `defaults.yaml`) must exist — the ephemeral provisioner deploys to a single region.
-- The region file must define **`provision_mcs`** with at most **one management cluster** (only one MC account is available in the shared dev setup).
+- The region file must define **`provision_mcs`**. The default ephemeral topology contains one management cluster (`mc01`), while additional entries can be rendered when the corresponding account and runtime support are available.
 - AWS account IDs are injected automatically from credentials — do not set `aws.account_id` or `aws.management_cluster_account_id`.
 
 ### Examples
@@ -303,7 +327,7 @@ This skips both the cleanup-labeled ginkgo specs and the `DeferCleanup` safety n
 
 ZOA automated tests live in [`rosa-seaplane-zoa`](https://github.com/openshift-online/rosa-seaplane-zoa); this repo clones and runs them — it does not duplicate test logic. For laptop operator workflows, see [ZOA](#zoa).
 
-- **`make ephemeral-e2e`** — runs platform e2e plus ZOA **smoke** (`ci/e2e-tests.sh` clones `rosa-seaplane-zoa@main` and runs `test-e2e-smoke` when RC/MC Lambda URLs are available).
+- **`make ephemeral-e2e`** — runs platform e2e plus required ZOA **smoke** unless `E2E_SKIP_ZOA=true`. `ci/e2e-tests.sh` fails if neither RC nor MC Lambda URL resolves; the local Make wrapper requires both URLs before starting tests, including when ZOA is skipped.
 - **`make ephemeral-zoa-e2e`** / **`make ephemeral-zoa-e2e-smoke`** — ZOA **full** or **smoke** only; same clone-by-ref pattern as API e2e (`ZOA_REF` / `ZOA_REPO`).
 
 ```bash
@@ -395,6 +419,8 @@ make ephemeral-teardown ID=6bd2d3d7
 ```
 
 Teardown destroys using whatever is already on the ephemeral CI branch; it does not pull from your feature branch.
+
+The RC and all MC destroy executions start before waiting, so cluster destruction runs concurrently. The command waits for every execution to succeed before deleting cluster pipelines/projects and shared bootstrap resources.
 
 If destroy failed and you pushed a fix on your feature branch, resync the CI branch from that branch and then destroy (do not use `make ephemeral-resync` — that runs apply):
 

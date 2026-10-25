@@ -24,7 +24,7 @@ class AWSCredentials:
     """Manages AWS sessions via named profiles.
 
     Expects an AWS config file (pointed to by AWS_CONFIG_FILE) with profiles:
-      - rrp-central  — central account (pipeline-provisioner, SSM parameters)
+      - rrp-central  — central account (CodePipeline/CodeBuild, SSM parameters)
       - rrp-rc       — regional account
       - rrp-mc       — management account
 

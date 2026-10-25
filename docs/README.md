@@ -35,14 +35,15 @@ Detailed architecture and rationale for key technical decisions:
 | [Logging Platform](design/logging-platform.md)                                       | Application-level log collection (Vector + Loki)                          |
 | [MC Metrics Remote Write](design/mc-metrics-remote-write.md)                         | MC-to-RC metrics forwarding via RHOBS API Gateway                         |
 | [Monitoring Platform](design/monitoring-platform.md)                                 | Metrics pipeline (Prometheus + Thanos)                                    |
-| [Pipeline-Based Lifecycle](design/pipeline-based-lifecycle.md)                       | Current CodePipeline hierarchy (superseded for orchestration)             |
+| [Pipeline-Based Lifecycle](design/pipeline-based-lifecycle.md)                       | Historical multi-stage pipeline architecture                              |
 | [Rate Limiting](design/rate-limiting-architecture.md)                                | Per-account rate limiting for Platform API                                |
 | [Regional Account Minting](design/regional-account-minting.md)                       | AWS account structure and minting pipelines                               |
 | [Regional Control Plane Architecture](design/regional-control-plane-architecture.md) | Operator + PostgreSQL control plane (seaplane-operator, seaplane-db)      |
 | [Regional OIDC Ownership](design/regional-oidc-ownership.md)                         | Shared OIDC bucket per region, cross-account MC writes                    |
 | [Spec-to-PR Agent](design/spec-to-pr-agent.md)                                       | AI agent workflow for spec-driven implementation                          |
 | [SRE UI Access](design/sre-ui-access.md)                                             | ALB + OIDC access to SRE UIs replacing SSM port-forward                   |
-| [Standalone CodeBuild Provisioning](design/codebuild-optimization.md)                | CodeBuild-only RC/MC provisioning, concurrency 1, early-return            |
+| [CodePipeline Cluster Lifecycle](design/codepipeline-cluster-lifecycle.md)           | Per-cluster CodePipeline orchestration with retained CodeBuild workers    |
+| [CodeBuild Provisioning](design/codebuild-optimization.md)                           | Superseded standalone-CodeBuild design                                    |
 | [Terraform Resource Adoption](design/terraform-resource-adoption.md)                 | Idempotent import of auto-created AWS resources into Terraform            |
 | [Testing Strategy](design/testing-strategy.md)                                       | Ephemeral and long-lived test environments                                |
 | [Thanos Metrics Infrastructure](design/thanos-metrics-infrastructure.md)             | Thanos S3 storage, operator, and Pod Identity setup                       |

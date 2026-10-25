@@ -27,7 +27,9 @@ git:
 
 # @doc deployment_name Logical deployment identifier. Equals aws_region for normal deployments; override in ephemeral/CI to disambiguate multiple deployments in the same region (e.g. "us-east-1-xg4y"). Used for DNS zone naming and resource identification.
 # @used-by deployment_name _context
+# @used-by deployment_name pipeline-management-cluster-inputs/static.tfvars.json.j2
 # @used-by deployment_name pipeline-management-cluster-inputs/terraform.json.j2
+# @used-by deployment_name pipeline-regional-cluster-inputs/static.tfvars.json.j2
 # @used-by deployment_name pipeline-regional-cluster-inputs/terraform.json.j2
 deployment_name: "{{ aws_region }}"
 
@@ -60,29 +62,47 @@ dns:
   # @used-by dns.create_environment_zone pipeline-provisioner-inputs/terraform.json.j2
   create_environment_zone: true
 
+cluster_naming:
+  # @doc cluster_naming.rc_pattern CodeBuild project name pattern for Regional Cluster. Placeholders: {prefix} (name_prefix or eph_prefix).
+  # @used-by cluster_naming.rc_pattern _context
+  rc_pattern: "{prefix}-regional"
+  # @doc cluster_naming.mc_pattern CodeBuild project name pattern for Management Clusters. Placeholders: {prefix} (name_prefix or eph_prefix), {mc_key} (provision_mcs key).
+  # @used-by cluster_naming.mc_pattern _context
+  mc_pattern: "{prefix}-{mc_key}"
+
 terraform_tags:
   # @doc terraform_tags.app_code Application code for cost tagging.
+  # @used-by terraform_tags.app_code pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.app_code pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by terraform_tags.app_code pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.app_code pipeline-regional-cluster-inputs/terraform.json.j2
   app_code: "OSD-002"
   # @doc terraform_tags.service_phase Service deployment phase.
+  # @used-by terraform_tags.service_phase pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.service_phase pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by terraform_tags.service_phase pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.service_phase pipeline-regional-cluster-inputs/terraform.json.j2
   service_phase: "stage"
   # @doc terraform_tags.cost_center Cost center code for billing.
+  # @used-by terraform_tags.cost_center pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.cost_center pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by terraform_tags.cost_center pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by terraform_tags.cost_center pipeline-regional-cluster-inputs/terraform.json.j2
   cost_center: "732"
 
 # @doc worker_node_ami Pin a specific AMI for all worker nodes across both regional and management clusters. Drives both the Karpenter EC2NodeClass and the Terraform bootstrap node group. Null uses the default bottlerocket FIPS name selector (Karpenter) and the EKS-optimized AL2023 AMI (bootstrap group). When set, both family and id must be provided together (e.g. {family: AL2023, id: ami-0abc123}).
 # @used-by worker_node_ami _context
+# @used-by worker_node_ami pipeline-management-cluster-inputs/static.tfvars.json.j2
 # @used-by worker_node_ami pipeline-management-cluster-inputs/terraform.json.j2
+# @used-by worker_node_ami pipeline-regional-cluster-inputs/static.tfvars.json.j2
 # @used-by worker_node_ami pipeline-regional-cluster-inputs/terraform.json.j2
 worker_node_ami:
 
 # @doc worker_node_root_volume_size Root EBS volume size (GiB) for worker nodes. Drives both the Karpenter EC2NodeClass and the Terraform bootstrap node group.
 # @used-by worker_node_root_volume_size _context
+# @used-by worker_node_root_volume_size pipeline-management-cluster-inputs/static.tfvars.json.j2
 # @used-by worker_node_root_volume_size pipeline-management-cluster-inputs/terraform.json.j2
+# @used-by worker_node_root_volume_size pipeline-regional-cluster-inputs/static.tfvars.json.j2
 # @used-by worker_node_root_volume_size pipeline-regional-cluster-inputs/terraform.json.j2
   family: AL2023
   id: ami-056d5e72aa5cf51f1
@@ -91,82 +111,107 @@ worker_node_root_volume_size: 50
 
 regional_cluster:
   # @doc regional_cluster.enable_bastion Enable bastion host for regional cluster access.
+  # @used-by regional_cluster.enable_bastion pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_bastion pipeline-regional-cluster-inputs/terraform.json.j2
   enable_bastion: true
   # @doc regional_cluster.enable_cloudtrail Enable CloudTrail audit logging (FedRAMP AU-12). Off by default; enable for environments requiring compliance.
+  # @used-by regional_cluster.enable_cloudtrail pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_cloudtrail pipeline-regional-cluster-inputs/terraform.json.j2
   enable_cloudtrail: true
   # @doc regional_cluster.enable_api_custom_domain Enable API Gateway custom domain and ACM certificate. Off by default; adds ~20 minutes for certificate validation.
+  # @used-by regional_cluster.enable_api_custom_domain pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_api_custom_domain pipeline-regional-cluster-inputs/terraform.json.j2
   enable_api_custom_domain: true
   # @doc regional_cluster.enable_rate_limit_redis Enable ElastiCache Redis for Platform API rate limiting.
+  # @used-by regional_cluster.enable_rate_limit_redis pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_rate_limit_redis pipeline-regional-cluster-inputs/terraform.json.j2
   enable_rate_limit_redis: true
   # @doc regional_cluster.enable_write_sre_tools Enable write/admin access to SRE tools (Grafana, ArgoCD). Off by default. Can only be set to true for ephemeral environments — render.py enforces this.
   # @used-by regional_cluster.enable_write_sre_tools _context
   enable_write_sre_tools: false
   # @doc regional_cluster.zone_shard_count Number of DNS zone shards under the regional zone. Each shard supports ~10k records.
+  # @used-by regional_cluster.zone_shard_count pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zone_shard_count pipeline-regional-cluster-inputs/terraform.json.j2
   zone_shard_count: 1
   # @doc regional_cluster.node_instance_families EC2 instance families for regional cluster Karpenter NodePool (e.g. m8i, m7i). Sizes are generated by the eks-nodepool Helm chart.
   # @used-by regional_cluster.node_instance_families _context
   node_instance_families: ["m8i", "m7i"]
   # @doc regional_cluster.seaplane_db_instance_class Aurora instance class for Seaplane DB.
+  # @used-by regional_cluster.seaplane_db_instance_class pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.seaplane_db_instance_class pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_instance_class: "db.r6g.large"
   # @doc regional_cluster.seaplane_db_deletion_protection Enable deletion protection for Seaplane DB Aurora cluster.
+  # @used-by regional_cluster.seaplane_db_deletion_protection pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.seaplane_db_deletion_protection pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_deletion_protection: true
   # @doc regional_cluster.seaplane_db_skip_final_snapshot Skip final snapshot when destroying Seaplane DB (ephemeral only).
+  # @used-by regional_cluster.seaplane_db_skip_final_snapshot pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.seaplane_db_skip_final_snapshot pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_skip_final_snapshot: false
   # @doc regional_cluster.seaplane_db_performance_insights_enabled Enable Performance Insights for Seaplane DB Aurora.
+  # @used-by regional_cluster.seaplane_db_performance_insights_enabled pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.seaplane_db_performance_insights_enabled pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_performance_insights_enabled: true
   # @doc regional_cluster.seaplane_db_monitoring_interval Enhanced Monitoring interval in seconds for Seaplane DB Aurora (0 to disable).
+  # @used-by regional_cluster.seaplane_db_monitoring_interval pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.seaplane_db_monitoring_interval pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_monitoring_interval: 60
   # @doc regional_cluster.enable_sre_tools_gateway Enable internal ALB for SRE UI tools (Grafana, ArgoCD, Prometheus, Thanos, Loki). Requires dns.domain to be set for DNS/TLS.
   # @used-by regional_cluster.enable_sre_tools_gateway _context
+  # @used-by regional_cluster.enable_sre_tools_gateway pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_sre_tools_gateway pipeline-regional-cluster-inputs/terraform.json.j2
   enable_sre_tools_gateway: true
   # @doc regional_cluster.enable_sre_public_access When true, the SRE UI ALB is internet-facing. Combine with sre_allowed_source_cidrs to restrict access to known CIDRs.
+  # @used-by regional_cluster.enable_sre_public_access pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_sre_public_access pipeline-regional-cluster-inputs/terraform.json.j2
   enable_sre_public_access: true
   # @doc regional_cluster.sre_allowed_source_cidrs Source IP CIDRs allowed to reach the SRE UI ALB when enable_sre_public_access is true. Leave empty in config — the buildspec fetches the actual list from SSM (/infra/sre-ui-alb/allowed-source-cidrs in the RC account) at pipeline time.
   # @used-by regional_cluster.sre_allowed_source_cidrs pipeline-regional-cluster-inputs/terraform.json.j2
   sre_allowed_source_cidrs: []
   # @doc regional_cluster.enable_sre_oidc_auth When true, ALB listener rules require OIDC authentication via Red Hat SSO. Requires per-service client IDs in config and client secrets in Secrets Manager (sre-ui-alb/{service}/oidc-client-secret).
+  # @used-by regional_cluster.enable_sre_oidc_auth pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.enable_sre_oidc_auth pipeline-regional-cluster-inputs/terraform.json.j2
   enable_sre_oidc_auth: true
   # @doc regional_cluster.sre_oidc_issuer_url OIDC issuer base URL for the SRE UI ALB. Authorization, token, and userinfo endpoints are derived from this. Defaults to Red Hat SSO EmployeeIDP.
+  # @used-by regional_cluster.sre_oidc_issuer_url pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.sre_oidc_issuer_url pipeline-regional-cluster-inputs/terraform.json.j2
   sre_oidc_issuer_url: "https://auth.redhat.com/auth/realms/EmployeeIDP"
   # @doc regional_cluster.sre_grafana_oidc_client_id OIDC client ID for Grafana. Required when enable_sre_oidc_auth is true.
+  # @used-by regional_cluster.sre_grafana_oidc_client_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.sre_grafana_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
   sre_grafana_oidc_client_id: "rosa-seaplane-grafana-sre-stage-us-east-1"
   # @doc regional_cluster.sre_argocd_oidc_client_id OIDC client ID for ArgoCD. Required when enable_sre_oidc_auth is true.
+  # @used-by regional_cluster.sre_argocd_oidc_client_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.sre_argocd_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
   sre_argocd_oidc_client_id: "rosa-seaplane-argocd-sre-stage-us-east-1"
   # @doc regional_cluster.sre_prometheus_oidc_client_id OIDC client ID for Prometheus. Required when enable_sre_oidc_auth is true.
+  # @used-by regional_cluster.sre_prometheus_oidc_client_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.sre_prometheus_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
   sre_prometheus_oidc_client_id: "rosa-seaplane-prometheus-sre-stage-us-east-1"
   # @doc regional_cluster.sre_thanos_oidc_client_id OIDC client ID for Thanos. Required when enable_sre_oidc_auth is true.
+  # @used-by regional_cluster.sre_thanos_oidc_client_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.sre_thanos_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
   sre_thanos_oidc_client_id: "rosa-seaplane-thanos-sre-stage-us-east-1"
   # @doc regional_cluster.zoa_lambda_image_tag Immutable tag for the ZOA Lambda image. Defaults to a known-good Konflux on-push build. Override via --provision-override-file for ephemeral e2e with a CI-built tag (e.g. ci-<PR>-<BUILD_ID>).
+  # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_image_tag: "3e94eef"
   # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image. Defaults to same Konflux build as Lambda. Override independently when testing a new runner with the current Lambda (or vice versa).
+  # @used-by regional_cluster.zoa_runner_image_tag pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_runner_image_tag pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_runner_image_tag: "3e94eef"
   # @doc regional_cluster.zoa_lambda_source_image Source registry image for the ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag when pointing at a fork or CI registry (e.g. quay.io/rrp-dev-ci/zoa-lambda).
+  # @used-by regional_cluster.zoa_lambda_source_image pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_source_image pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_source_image: "quay.io/rrp-dev-ci/zoa-lambda"
   # @doc regional_cluster.zoa_runner_source_image Source registry image for the ZOA Runner (pulled directly by K8s, no ECR mirror). Override together with zoa_runner_image_tag when pointing at a fork or CI registry.
+  # @used-by regional_cluster.zoa_runner_source_image pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_runner_source_image pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_runner_source_image pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_runner_source_image pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_runner_source_image: "quay.io/rrp-dev-ci/zoa-runner"
   # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image. Required; same commit tag as Lambda/Runner when bumped together.
@@ -178,29 +223,38 @@ regional_cluster:
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_source_image: "quay.io/rrp-dev-ci/zoa-boundary"
   # @doc regional_cluster.zoa_boundary_session_idle_timeout_seconds Terminal inactivity (seconds) before the boundary reaper stops a session. Wired to RC zoa-lambda (worker reaper) and zoa-access (RunTask MOTD); MC zoa-lambda uses the same value for MC-target reaping.
-  # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/static.tfvars.json.j2
+  # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_idle_timeout_seconds: 3600
   # @doc regional_cluster.zoa_boundary_session_max_duration_hours Default/max boundary session length (hours). RC zoa-access only (deadline in Dynamo + ZOA_SESSION_DEADLINE on task).
+  # @used-by regional_cluster.zoa_boundary_session_max_duration_hours pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_boundary_session_max_duration_hours pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_max_duration_hours: 4
   # Fleet defaults for ZOA Lambda reserved concurrency (SSOT for deploy). Ephemeral overrides in config/ephemeral/defaults.yaml only.
   # Module defaults in terraform/modules/zoa-lambda|zoa-access should match these unless a stack omits TF_VAR (local module tests).
   # @doc regional_cluster.zoa_lambda_api_concurrency Reserved concurrency for ZOA API Lambda (-1 = unreserved account pool per Terraform aws_lambda_function). Ephemeral: -1 — see config/ephemeral/.
-  # @used-by regional_cluster.zoa_lambda_api_concurrency pipeline-regional-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_lambda_api_concurrency pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_api_concurrency pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_lambda_api_concurrency pipeline-regional-cluster-inputs/static.tfvars.json.j2
+  # @used-by regional_cluster.zoa_lambda_api_concurrency pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_api_concurrency: 50
   # @doc regional_cluster.zoa_lambda_worker_concurrency Reserved concurrency for ZOA Worker Lambda (-1 = unreserved). Ephemeral uses -1 for all ZOA Lambdas — see config/ephemeral/.
-  # @used-by regional_cluster.zoa_lambda_worker_concurrency pipeline-regional-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_lambda_worker_concurrency pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_worker_concurrency pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_lambda_worker_concurrency pipeline-regional-cluster-inputs/static.tfvars.json.j2
+  # @used-by regional_cluster.zoa_lambda_worker_concurrency pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_worker_concurrency: 10
   # @doc regional_cluster.zoa_lambda_access_concurrency Reserved concurrency for ZOA Access Lambda on RC only (-1 = unreserved, or >= 1 reserved). Ephemeral: -1 — see config/ephemeral/.
+  # @used-by regional_cluster.zoa_lambda_access_concurrency pipeline-regional-cluster-inputs/static.tfvars.json.j2
   # @used-by regional_cluster.zoa_lambda_access_concurrency pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_access_concurrency: 10
 
 management_cluster_defaults:
   # @doc management_cluster_defaults.enable_bastion Default enable bastion for management clusters.
   # @used-by management_cluster_defaults.enable_bastion _context
+  # @used-by management_cluster_defaults.enable_bastion pipeline-management-cluster-inputs/static.tfvars.json.j2
   # @used-by management_cluster_defaults.enable_bastion pipeline-management-cluster-inputs/terraform.json.j2
   enable_bastion: true
   # @doc management_cluster_defaults.node_instance_families Default EC2 instance families for MC Karpenter NodePool (e.g. m8i, m7i). Sizes are generated by the eks-nodepool Helm chart.
@@ -211,16 +265,19 @@ observability:
   pagerduty:
     # @doc observability.pagerduty.enabled Enable PagerDuty service provisioning for the region.
     # @used-by observability.pagerduty.enabled _context
+    # @used-by observability.pagerduty.enabled pipeline-regional-cluster-inputs/static.tfvars.json.j2
     # @used-by observability.pagerduty.enabled pipeline-regional-cluster-inputs/terraform.json.j2
     enabled: false
     # @doc observability.pagerduty.escalation_policy_id PagerDuty escalation policy ID for regional services.
     # @used-by observability.pagerduty.escalation_policy_id _context
+    # @used-by observability.pagerduty.escalation_policy_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
     # @used-by observability.pagerduty.escalation_policy_id pipeline-regional-cluster-inputs/terraform.json.j2
     escalation_policy_id: "P5KE444"
 
   sns_alerting:
     # @doc observability.sns_alerting.enabled Enable SNS alerting for regional cluster alert consumption by automated/external services.
     # @used-by observability.sns_alerting.enabled _context
+    # @used-by observability.sns_alerting.enabled pipeline-regional-cluster-inputs/static.tfvars.json.j2
     # @used-by observability.sns_alerting.enabled pipeline-regional-cluster-inputs/terraform.json.j2
     enabled: true
 
@@ -310,21 +367,21 @@ applications:
 #     # @used-by mc.account_id pipeline-provisioner-inputs/management-cluster.json.j2
 #     account_id: "123456789012"
 #     # @doc mc.enable_bastion Per-MC bastion override. Defaults to management_cluster_defaults.enable_bastion.
+#     # @used-by mc.enable_bastion pipeline-management-cluster-inputs/static.tfvars.json.j2
 #     # @used-by mc.enable_bastion pipeline-management-cluster-inputs/terraform.json.j2
 #     enable_bastion: true
 #     # @doc mc.node_instance_families Per-MC instance families. Defaults to management_cluster_defaults.node_instance_families.
 #     # @used-by mc.node_instance_families _context
 #     node_instance_families: ["m7i"]
-#     # @doc mc.delete Triggers infrastructure destruction for this MC.
-#     # @used-by mc.delete pipeline-management-cluster-inputs/terraform.json.j2
-#     delete: true
-#     # @doc mc.delete_pipeline Triggers pipeline removal for this MC.
-#     # @used-by mc.delete_pipeline pipeline-provisioner-inputs/management-cluster.json.j2
-#     delete_pipeline: true
 
 # Computed fields — generated by render.py, not from config values.
 #
+# @doc regional_id Regional cluster identifier generated from the configured naming pattern.
+# @used-by regional_id pipeline-provisioner-inputs/regional-cluster.json.j2
+# @used-by regional_id pipeline-regional-cluster-inputs/static.tfvars.json.j2
+# @used-by regional_id pipeline-regional-cluster-inputs/terraform.json.j2
 # @doc mc.management_id MC identifier, computed from cluster key + CI prefix.
+# @used-by mc.management_id pipeline-management-cluster-inputs/static.tfvars.json.j2
 # @used-by mc.management_id pipeline-management-cluster-inputs/terraform.json.j2
 # @used-by mc.management_id pipeline-provisioner-inputs/management-cluster.json.j2
 

@@ -1,0 +1,30 @@
+version: 0.2
+
+env:
+  shell: bash
+  exported-variables:
+    - APPLIED
+    - APPLIED_SHA
+
+phases:
+  install:
+    on-failure: RETRY-1
+    commands:
+      - chmod +x ./scripts/bootstrap-argocd.sh
+
+  build:
+    # Steps are idempotent (terraform, kube-applier, ECS bootstrap, register),
+    # so allow one retry to recover transient failures instead of failing the
+    # whole run.
+    on-failure: RETRY-1
+    commands:
+      # Source the wrapper so APPLIED/APPLIED_SHA exports reach CodeBuild.
+      # Accepts: management-cluster | MC | mc
+      - |
+        source ./scripts/buildspec/provision-cluster.sh management-cluster
+        test "${APPLIED:-}" = "true"
+        test "${APPLIED_SHA:-}" = "${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+        echo "CodeBuild contract verified: APPLIED=true, APPLIED_SHA=${APPLIED_SHA}"
+
+artifacts:
+  files: []

@@ -64,16 +64,16 @@ These tools are available in all CI job containers and can be used in scripts ru
 
 ## Ephemeral Environment
 
-The [ci/ephemeral-provider/main.py](ci/ephemeral-provider/main.py) script manages ephemeral environments for CI testing. It supports three modes — provision, teardown (`--teardown`), and resync (`--resync`) — designed to run as separate CI steps with tests in between.
+The [ci/ephemeral-provider/main.py](ci/ephemeral-provider/main.py) script manages ephemeral environments for CI testing. It supports provision, resume (`--resume`), teardown (`--teardown`), and resync (`--resync`) modes, designed to run as separate CI steps with tests in between.
 
-1. Creates a CI-owned git branch from the source repo/branch
-2. Bootstraps the pipeline-provisioner pointing at the CI branch
-3. Pushes rendered deploy files to trigger pipelines via GitOps
+1. Creates a CI-owned git branch from the source repo/branch and pushes rendered deploy files
+2. Bootstraps the central shared resources and per-cluster CodePipelines pointing at the CI branch
+3. Adopts each new pipeline's automatically started execution; later matching pushes trigger through the CodeStar connection
 4. Waits for RC/MC pipelines to provision infrastructure
 5. (Separate CI step) Runs the testing suite against the provisioned environment
-6. Tears down infrastructure via GitOps (`delete: true` in config.yaml)
-7. Destroys the pipeline-provisioner
-8. CI branch is retained for post-run troubleshooting (delete manually via `git push ci --delete <branch>`)
+6. Tears down infrastructure through pipeline executions with `IS_DESTROY=true`
+7. Destroys the per-cluster CodePipelines, CodeBuild projects, and shared bootstrap resources
+8. Deletes the CI branch after successful synchronous teardown; fire-and-forget leaves the branch and pipeline resources available for a later cleanup run
 
 ### Running locally
 
@@ -133,12 +133,12 @@ When a Prow job is running (e.g. `on-demand-e2e`), you can watch its logs in rea
 
 All CI scripts and the ephemeral provider use a standard set of named AWS CLI profiles. The profile names are the same across CI and local development so that downstream consumers (Terraform, boto3, e2e tests) work identically in both contexts.
 
-| Profile        | Account          | Purpose                              |
-| -------------- | ---------------- | ------------------------------------ |
-| `rrp-central`  | Central          | Pipeline-provisioner, SSM parameters |
-| `rrp-rc`       | Regional Cluster | API Gateway auth, regional infra     |
-| `rrp-mc`       | Management       | Management cluster provisioning      |
-| `rrp-customer` | Customer         | HCP creation e2e tests               |
+| Profile        | Account          | Purpose                                                |
+| -------------- | ---------------- | ------------------------------------------------------ |
+| `rrp-central`  | Central          | Bootstrap resources, cluster pipelines, SSM parameters |
+| `rrp-rc`       | Regional Cluster | API Gateway auth, regional infra                       |
+| `rrp-mc`       | Management       | Management cluster provisioning                        |
+| `rrp-customer` | Customer         | HCP creation e2e tests                                 |
 
 Not every job needs every profile. The table below shows which profiles each job type requires:
 
