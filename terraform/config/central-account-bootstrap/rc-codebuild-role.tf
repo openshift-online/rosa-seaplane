@@ -115,6 +115,12 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
         Effect   = "Allow"
         Action   = ["ssm:DescribeParameters"]
         Resource = "*"
+      },
+      {
+        # Match upstream/main: RC Terraform's central provider needs DNS access.
+        Effect   = "Allow"
+        Action   = ["route53:*"]
+        Resource = "*"
       }
       ], length(local.regional_assume_role_arns) > 0 ? [
       {
@@ -143,7 +149,6 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
           "elasticloadbalancing:*",
           "autoscaling:*",
           "cloudwatch:*",
-          "route53:*",
           "acm:*",
           "tag:*",
           "lambda:*",
