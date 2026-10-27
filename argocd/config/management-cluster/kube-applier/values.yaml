@@ -6,10 +6,9 @@ kubeApplier:
   # Container image configuration
   image:
     registry: "quay.io"
-    repository: "redhat-user-workloads/rosa-tenant/rosa-seaplane-kube-applier"
-    tag: "bfc366aea05925680eab80c4580c88604867eec7"
+    repository: "redhat-user-workloads/rosa-tenant/rosa-seaplane-kube-applier@sha256"
+    tag: "02dd17b931bafdb082c2fe7149646fffd20bb622f8a22401bad67d7289223e50"
     pullPolicy: IfNotPresent
-
   # Deployment configuration
   deployment:
     replicas: 1
