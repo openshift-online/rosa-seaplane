@@ -1033,7 +1033,7 @@ for _first_region_dir in deploy/${ENVIRONMENT}/*/; do
     break
 done
 
-if [[ -n "${_region_deployment:-}" ]]; then
+if [[ -n "${_region_deployment:-}" && "$FORCE_DELETE_ALL_PIPELINES" != "true" ]]; then
     resolve_environment_hosted_zone "$_region_deployment"
 fi
 
