@@ -27,13 +27,14 @@ sequenceDiagram
     RC-->>Console: Complete (may partially fail)
     Operator->>Console: Manually delete leftover resources
     Note over Operator,Console: Check RC and MC accounts for<br/>orphaned resources
-    Operator->>Operator: Reconcile cluster definitions through bootstrap
+    Operator->>Operator: Bootstrap cluster definitions with RC/MC push triggers disabled
     Operator->>Console: Start RC pipeline (IS_DESTROY=false)
     Console->>RC: Provision RC
     RC-->>Console: Complete
     Operator->>Console: Start MC pipeline (IS_DESTROY=false)
     Console->>MC: Provision MC
     MC-->>Console: Complete
+    Operator->>Operator: Re-enable push triggers after RC and MC succeed
     Operator->>Operator: Trigger nightly-integration to verify
 ```
 
@@ -79,17 +80,37 @@ If the teardown failed more broadly, also check for other leaked resources (ENIs
 
 ### Step 4: Re-provision
 
-Reconcile the current cluster definitions, then run the RC and MC pipelines:
+Reconcile the current cluster definitions and provision RC and MC while their
+source push triggers remain disabled. Keep the integration repository, branch,
+environment, and rendered resource-prefix configuration unchanged. Add only
+`ENABLE_CODEPIPELINE_PUSH_TRIGGERS=false` to the existing central-bootstrap
+command:
 
-1. Follow [central bootstrap](../environment-provisioning.md#3-bootstrap-central-resources-and-cluster-pipelines) with the integration environment's existing repository, branch, and resource prefix. This restores configured push triggers and creates or updates the per-cluster resources.
+```bash
+ENABLE_CODEPIPELINE_PUSH_TRIGGERS=false \
+GITHUB_REPOSITORY="<existing-owner>/rosa-seaplane" \
+GITHUB_BRANCH="<existing-branch>" \
+TARGET_ENVIRONMENT=integration \
+./scripts/bootstrap-central-account.sh
+```
 
-2. For existing pipelines, start `regional-pipeline` with `IS_DESTROY=false` and wait for it to succeed. A newly created pipeline starts automatically; monitor that execution instead of starting a duplicate.
+Replace the repository and branch placeholders with the values used by the
+existing integration pipelines. Do not change the source config or rendered
+cluster descriptors that contain the resource prefixes. The bootstrap updates
+the RC and MC pipelines with push triggers disabled.
 
-3. Start `mc01-pipeline` with `IS_DESTROY=false`, or monitor its automatic creation execution. The MC build waits for regional prerequisites before completing bootstrap and registration.
+1. For existing pipelines, start `regional-pipeline` with `IS_DESTROY=false` and wait for it to succeed. A newly created pipeline starts automatically; monitor that execution instead of starting a duplicate.
 
-4. Monitor both pipelines until they succeed.
+2. Start `mc01-pipeline` with `IS_DESTROY=false`, or monitor its automatic creation execution. The MC build waits for regional prerequisites before completing bootstrap and registration.
 
-   If the provision fails due to leftover resources from Step 3, delete the conflicting resources and re-trigger the failed pipeline.
+3. Monitor both pipelines until they succeed. If either fails, keep push triggers disabled while fixing or retrying it.
+
+   If provisioning fails due to leftover resources from Step 3, delete the conflicting resources and re-trigger the failed pipeline.
+
+4. After both pipelines succeed, rerun the same central-bootstrap command with
+   `ENABLE_CODEPIPELINE_PUSH_TRIGGERS=true` and the same repository, branch,
+   environment, and rendered resource-prefix configuration. This restores the
+   normal push-trigger behavior.
 
 ## Post-Rebuild
 

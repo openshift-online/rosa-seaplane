@@ -36,9 +36,20 @@ aws_cluster_pipeline() {
 # Platform Image Computation (ADR: fail-closed image check)
 # ──────────────────────────────────────────────────────────────────────────────
 
+sha256_stdin() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256
+    else
+        echo "ERROR: sha256sum or shasum is required" >&2
+        return 127
+    fi
+}
+
 DOCKERFILE="terraform/modules/platform-image/Dockerfile"
 if [ -f "$DOCKERFILE" ] && [ -n "${PLATFORM_IMAGE:-}" ]; then
-  _computed_tag=$(sha256sum "$DOCKERFILE" | cut -c1-12)
+  _computed_tag=$(sha256_stdin < "$DOCKERFILE" | cut -c1-12)
   _base_repo="${PLATFORM_IMAGE%:*}"
   PLATFORM_IMAGE="${_base_repo}:${_computed_tag}"
   echo "Platform image (computed from Dockerfile): ${PLATFORM_IMAGE}"
@@ -347,7 +358,7 @@ generate_project_spec() {
 # Compute hash1 (SHA256 of spec with .tags stripped)
 compute_spec_hash() {
     local spec="$1"
-    echo "$spec" | jq -S 'del(.tags)' | sha256sum | awk '{print $1}'
+    printf '%s\n' "$spec" | jq -S 'del(.tags)' | sha256_stdin | awk '{print $1}'
 }
 
 generate_pipeline_file_paths() {

@@ -7,6 +7,43 @@ Terraform owns shared resources; the cluster resource script owns dynamic
 CodeBuild/CodePipeline lifecycle. The platform-image CodeBuild remains on-demand
 with no webhook or dedicated pipeline.
 
+## Why this architecture
+
+The current decision keeps CodePipeline as the per-cluster source and execution
+controller, with one combined CodeBuild worker for each RC or MC. This preserves
+CodeStar branch and file-path triggers, pipeline variables such as
+`IS_DESTROY`, and the provider's ability to adopt, resume, retry, and monitor a
+specific pipeline execution. Combining the cluster phases into one CodeBuild
+project reduces the stage-specific project and handoff overhead while retaining
+those pipeline lifecycle features.
+
+Standalone CodeBuild was considered because it removes CodePipeline resources
+and artifact handoffs, and its per-project concurrency limit can serialize
+Terraform applies. It replaces CodePipeline source triggers and execution
+history with CodeBuild Git webhooks and SDK-managed build lifecycle; the
+provider would need to coordinate build adoption, retries, resume, and teardown
+around those builds. The current implementation keeps CodePipeline for its
+established source and execution semantics; the standalone CodeBuild design is
+a superseded proposal, not the selected architecture.
+
+The previous Terraform-managed design used a central provisioner and
+Terraform-owned per-cluster pipelines with separate CodeBuild projects for
+their stages. The current design keeps the shared central bootstrap in
+Terraform but creates and updates dynamic cluster pipelines/projects through
+the resource script. That removes per-cluster pipeline definitions from
+Terraform state and lets additional MC pipelines be managed without adding
+per-MC Terraform state or applies. It trades Terraform's resource tracking for
+custom lifecycle and migration handling, so existing environments still need a
+reviewed cutover.
+
+This split fits the regional layout: each RC and MC pipeline uses its own
+cluster configuration, target-account role, Terraform state, and regional
+inputs, while shared central resources remain bootstrapped once. RC and MC
+executions can be managed independently; MC waits for its required RC outputs
+before completing its dependent work. The combined CodeBuild worker also gives
+up stage-level isolation: retrying a failed later phase reruns the earlier
+idempotent phases in that cluster build.
+
 ## Lifecycle contract
 
 `scripts/provision-cluster-resources.sh` supports:

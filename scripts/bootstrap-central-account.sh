@@ -46,6 +46,7 @@ ENVIRONMENT VARIABLES:
                         for bootstrapping before any config files exist.
     ENABLE_SLACK_NOTIFICATIONS  Enable CodeBuild failure notifications to Slack (true|false).
                              Opt-in: defaults to false. Set to true to enable.
+    ENABLE_CODEPIPELINE_PUSH_TRIGGERS  Enable RC/MC source push triggers (true|false; default true).
     SLACK_WEBHOOK_SSM_PARAM  SSM Parameter Store path containing Slack webhook URL (only used when
                              notifications are enabled). Default: /rosa-regional/slack/webhook-url
     AWS_PROFILE         AWS CLI profile to use
