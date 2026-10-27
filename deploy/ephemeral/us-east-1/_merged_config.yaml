@@ -61,10 +61,10 @@ dns:
   create_environment_zone: false
 
 cluster_naming:
-  # @doc cluster_naming.rc_pattern CodeBuild project name pattern for Regional Cluster. Placeholders: {prefix} (name_prefix or eph_prefix).
+  # @doc cluster_naming.rc_pattern Pattern used to derive the Regional Cluster ID, which also determines CodeBuild/CodePipeline names and the RC Terraform state key. Placeholders: {prefix} (name_prefix or eph_prefix). Changing this for an existing environment changes resource identities and state lookup; migrate those names and state deliberately.
   # @used-by cluster_naming.rc_pattern _context
   rc_pattern: "{prefix}-regional"
-  # @doc cluster_naming.mc_pattern CodeBuild project name pattern for Management Clusters. Placeholders: {prefix} (name_prefix or eph_prefix), {mc_key} (provision_mcs key).
+  # @doc cluster_naming.mc_pattern Pattern used to derive each Management Cluster ID, which also determines CodeBuild/CodePipeline names and the MC Terraform state key. Placeholders: {prefix} (name_prefix or eph_prefix), {mc_key} (provision_mcs key). Changing this for an existing environment changes resource identities and state lookup; migrate those names and state deliberately.
   # @used-by cluster_naming.mc_pattern _context
   mc_pattern: "{prefix}-{mc_key}"
 

@@ -278,6 +278,7 @@ class EphemeralEnvOrchestrator:
                 log.info("Resyncing ephemeral branch before resuming provisioning")
                 git.resync_eph_branch(self.eph_prefix)
                 self._inject_ephemeral_config(git)
+                self._apply_provision_overrides(git)
                 desired_sha = git.render_and_push(
                     "ci: resync ephemeral environment config",
                     force=True,

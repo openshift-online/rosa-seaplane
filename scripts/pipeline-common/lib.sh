@@ -109,7 +109,7 @@ print_provision_param_summary() {
         shift 3
 
         case "$name" in
-            *SECRET*|*TOKEN*|*PASSWORD*|*KEY*) value="<redacted>" ;;
+            *SECRET*|*TOKEN*|*PASSWORD*|*PRIVATE_KEY*|*ACCESS_KEY*|*API_KEY*|*ENCRYPTION_KEY*|*SIGNING_KEY*) value="<redacted>" ;;
         esac
         [[ -n "$value" ]] || value="<empty>"
         printf '  %-36s %-12s %s\n' "$name" "$source" "$value"
