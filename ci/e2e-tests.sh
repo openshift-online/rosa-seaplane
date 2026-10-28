@@ -102,6 +102,10 @@ fi
 export AWS_PROFILE="rrp-rc"
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 
+# Print the real signing principal, not credentials, to diagnose grant mismatches.
+echo "Regional API caller (rrp-rc):"
+aws sts get-caller-identity --profile rrp-rc --query '{Account:Account,Arn:Arn}' --output json
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export REPO_ROOT
 export PATH="/usr/local/sessionmanagerplugin/bin:/usr/bin:/usr/local/bin:${PATH}"
