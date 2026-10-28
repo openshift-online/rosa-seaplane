@@ -1100,10 +1100,6 @@ cmd_e2e() {
     # Fetch credentials and write container config
     setup_aws_config
     write_eph_container_config
-    if [[ -z "${RRP_AWS_PROFILES_PRESET:-}" ]]; then
-        AWS_CONFIG_FILE="$_CONTAINER_CONFIG" AWS_SHARED_CREDENTIALS_FILE=/dev/null \
-            log_aws_profile_caller_identities rrp-central rrp-rc rrp-mc
-    fi
 
     local rhobs_api_url
     rhobs_api_url=$(get_field "$ENV_LINE" RHOBS_API_URL)

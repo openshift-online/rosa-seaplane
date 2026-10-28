@@ -14,7 +14,6 @@
 #   container_aws_role_session_name_flags — podman -e for AWS_ROLE_SESSION_NAME in e2e containers
 #   write_container_config — Resolve profiles to static creds for container mount
 #   write_e2e_host_aws_config — CI e2e host: resolve assume-role profiles (stable session name)
-#   log_aws_profile_caller_identities — Log STS ARN + session name for e2e diagnostics
 #   bastion_run_task      — Core ECS bastion task launch and readiness logic
 #   chain_exit_trap       — Chain a new EXIT handler with any existing trap
 #   bastion_port_forward  — kubectl port-forward on bastion + SSM to localhost
@@ -59,7 +58,8 @@ resolve_base_creds() {
 # Sets: _CRED_AK, _CRED_SK, _CRED_ST
 resolve_creds() {
     local profile="$1"
-    echo "Resolving credentials for profile $profile..."
+    local session_name="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
+    echo "Resolving credentials for profile ${profile} (RoleSessionName=${session_name})..."
 
     local role_arn base_profile
     role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null) \
