@@ -22,6 +22,16 @@ if [ "${DELETE_FLAG}" == "true" ]; then
     exit 0
 fi
 
+# Resolve the shared registry account from central SSM before switching accounts.
+IMAGE_REGISTRY_ACCOUNT_ID=$(resolve_central_ssm_value \
+    "$(jq -r '.image_registry_account_id // empty' "$DEPLOY_CONFIG_FILE")" \
+    "us-east-1")
+if [[ ! "$IMAGE_REGISTRY_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
+    echo "ERROR: image_registry_account_id must resolve to a 12-digit AWS account ID" >&2
+    exit 1
+fi
+export IMAGE_REGISTRY_ACCOUNT_ID
+
 # Read RHOBS API URL from RC terraform state.
 # The RC pipeline runs in parallel — wait for the output to appear.
 _resolve_rc_account
