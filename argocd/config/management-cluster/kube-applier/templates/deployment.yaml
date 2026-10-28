@@ -1,3 +1,11 @@
+{{- $registry := .Values.kubeApplier.image.registry -}}
+{{- if not $registry -}}
+{{- if .Values.global.image_registry_account_id -}}
+{{- $registry = printf "%s.dkr.ecr.us-east-1.amazonaws.com" .Values.global.image_registry_account_id -}}
+{{- else -}}
+{{- $registry = "quay.io" -}}
+{{- end -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,7 +31,7 @@ spec:
       serviceAccountName: {{ include "kube-applier.serviceAccountName" . }}
       containers:
         - name: kube-applier
-          image: "{{ .Values.kubeApplier.image.registry }}/{{ .Values.kubeApplier.image.repository }}:{{ .Values.kubeApplier.image.tag }}"
+          image: "{{ $registry }}/{{ .Values.kubeApplier.image.repository }}:{{ .Values.kubeApplier.image.tag }}"
           imagePullPolicy: {{ .Values.kubeApplier.image.pullPolicy }}
           securityContext:
             readOnlyRootFilesystem: true
