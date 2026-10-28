@@ -116,6 +116,7 @@ OVERRIDES_JSON=$(jq -nc \
   --arg repository_branch "$REPOSITORY_BRANCH" \
   --arg environment "$ENVIRONMENT" \
   --arg aws_region "$AWS_REGION" \
+  --arg image_registry_account_id "${IMAGE_REGISTRY_ACCOUNT_ID:-}" \
   --arg region_deployment "$REGION_DEPLOYMENT" \
   --arg api_target_group_arn "$API_TARGET_GROUP_ARN" \
   --arg thanos_target_group_arn "$THANOS_TARGET_GROUP_ARN" \
@@ -146,6 +147,7 @@ OVERRIDES_JSON=$(jq -nc \
         {name: "REPOSITORY_BRANCH", value: $repository_branch},
         {name: "ENVIRONMENT", value: $environment},
         {name: "AWS_REGION", value: $aws_region},
+        {name: "IMAGE_REGISTRY_ACCOUNT_ID", value: $image_registry_account_id},
         {name: "REGION_DEPLOYMENT", value: $region_deployment},
         {name: "API_TARGET_GROUP_ARN", value: $api_target_group_arn},
         {name: "THANOS_TARGET_GROUP_ARN", value: $thanos_target_group_arn},

@@ -9,6 +9,7 @@
   "alias": "{{ mc.management_id }}",
   "management_id": "{{ mc.management_id }}",
   "regional_aws_account_id": "{{ account_id }}",
+  "image_registry_account_id": {{ image_registry_account_id | tojson }},
   "zoa_lambda_image_tag": {{ regional_cluster.zoa_lambda_image_tag | default('') | tojson }},
   "zoa_runner_image_tag": {{ regional_cluster.zoa_runner_image_tag | default('') | tojson }},
   "zoa_runner_source_image": {{ regional_cluster.zoa_runner_source_image | default('') | tojson }},

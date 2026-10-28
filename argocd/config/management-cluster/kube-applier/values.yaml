@@ -5,7 +5,8 @@
 kubeApplier:
   # Container image configuration
   image:
-    registry: "quay.io"
+    # Set a registry to use an external registry. Empty uses the shared private ECR account.
+    registry: ""
     repository: "redhat-user-workloads/rosa-tenant/rosa-seaplane-kube-applier"
     tag: "bfc366aea05925680eab80c4580c88604867eec7"
     pullPolicy: IfNotPresent
@@ -55,6 +56,8 @@ global:
   cluster_name: ""
   aws_region: ""
   aws_account_id: ""
+  # Supplied by the ArgoCD cluster identity annotation; image registry is ECR us-east-1.
+  image_registry_account_id: ""
   rc_aws_account_id: ""
   environment: ""
   cluster_type: ""

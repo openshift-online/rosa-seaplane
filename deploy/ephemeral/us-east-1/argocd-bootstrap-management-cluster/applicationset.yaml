@@ -80,6 +80,7 @@ spec:
               aws_region: '{{ .metadata.labels.aws_region }}'
               cluster_name: '{{ .metadata.labels.cluster_name }}'
               aws_account_id: '{{ .metadata.annotations.aws_account_id }}'
+              image_registry_account_id: '{{ .metadata.annotations.image_registry_account_id }}'
 
               rc_aws_account_id: '{{ .metadata.annotations.rc_aws_account_id }}'
 

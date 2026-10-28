@@ -199,6 +199,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
               loki_query_frontend_target_group_arn: "$LOKI_QUERY_FRONTEND_TARGET_GROUP_ARN"
               aws_account_id: "$AWS_ACCOUNT_ID"
               rc_aws_account_id: "$RC_AWS_ACCOUNT_ID"
+              image_registry_account_id: "$IMAGE_REGISTRY_ACCOUNT_ID"
               management_clusters: "$MANAGEMENT_CLUSTERS"
               rhobs_api_url: "$RHOBS_API_URL"
               dns_zone_operator_role_arn: "$DNS_ZONE_OPERATOR_ROLE_ARN"
