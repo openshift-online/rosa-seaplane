@@ -12,10 +12,7 @@
 
 set -euo pipefail
 
-# Stable STS RoleSessionName for assume-role profiles in e2e (ZOA Access operator
-# attribution across subprocesses). AWS SDK/CLI apply this when assuming roles from
-# aws_config; it overrides per-profile role_session_name when set (see AWS CLI env
-# var docs). Override with AWS_CI_ROLE_SESSION_NAME for ad-hoc runs.
+# Stable RoleSessionName for resolve_creds (scripts/dev/env-common.sh) and AWS CLI.
 export AWS_ROLE_SESSION_NAME="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
 
 CREDS_DIR="${CREDS_DIR:-/var/run/rosa-credentials}"

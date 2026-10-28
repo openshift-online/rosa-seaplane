@@ -13,6 +13,9 @@
 #   init_aws_config       — Create temp AWS config dir + EXIT trap
 #   container_aws_role_session_name_flags — podman -e for AWS_ROLE_SESSION_NAME in e2e containers
 #   write_container_config — Resolve profiles to static creds for container mount
+#   write_e2e_host_aws_config — CI e2e host: materialize chained profiles (role_arn) in mounted aws_config
+#   aws_config_delete_profile — Remove one [profile NAME] section from a config file
+#   aws_config_append_static_profile — Append a static-credentials profile block
 #   bastion_run_task      — Core ECS bastion task launch and readiness logic
 #   chain_exit_trap       — Chain a new EXIT handler with any existing trap
 #   bastion_port_forward  — kubectl port-forward on bastion + SSM to localhost
@@ -57,7 +60,8 @@ resolve_base_creds() {
 # Sets: _CRED_AK, _CRED_SK, _CRED_ST
 resolve_creds() {
     local profile="$1"
-    echo "Resolving credentials for profile $profile..."
+    local session_name="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
+    echo "Resolving credentials for profile ${profile} (RoleSessionName=${session_name})..."
 
     local role_arn base_profile
     role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null) \
@@ -69,7 +73,6 @@ resolve_creds() {
 
     local creds creds_err
     creds_err=$(mktemp)
-    local session_name="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
     creds=$(AWS_ACCESS_KEY_ID="$_BASE_AK" AWS_SECRET_ACCESS_KEY="$_BASE_SK" AWS_SESSION_TOKEN="$_BASE_ST" \
         aws sts assume-role --role-arn "$role_arn" --role-session-name "$session_name" \
         --duration-seconds 3600 --output json 2>"$creds_err") \
@@ -193,7 +196,7 @@ write_container_config() {
     local spec host_profile container_profile region
     for spec in "$@"; do
         read -r host_profile container_profile region <<< "$spec"
-        resolve_creds "$host_profile"
+        resolve_creds "$host_profile" || die "Failed to resolve profile ${host_profile}"
 
         [[ "$first" == "true" ]] || echo "" >> "$_CONTAINER_CONFIG"
         first=false
@@ -208,6 +211,84 @@ EOF
     done
 
     _CONTAINER_AWS_FLAGS="-v ${_CONTAINER_CONFIG}:/tmp/aws-config:ro,z -e AWS_CONFIG_FILE=/tmp/aws-config -e AWS_SHARED_CREDENTIALS_FILE=/dev/null $(container_aws_role_session_name_flags)"
+}
+
+# Remove [profile NAME] and its settings from an AWS shared config file.
+# Args: $1 = config file path, $2 = profile name (without [profile ] prefix)
+aws_config_delete_profile() {
+    local config_file="$1"
+    local profile_name="$2"
+    local tmp
+    tmp=$(mktemp)
+    awk -v profile="$profile_name" '
+        BEGIN { skip = 0 }
+        /^\[profile / {
+            if (skip) { skip = 0 }
+            if ($0 == "[profile " profile "]") { skip = 1; next }
+        }
+        !skip { print }
+    ' "$config_file" > "$tmp"
+    mv "$tmp" "$config_file"
+}
+
+# Append a profile with static credentials (_CRED_* must be set).
+# Args: $1 = config file, $2 = profile name, $3 = region
+aws_config_append_static_profile() {
+    local config_file="$1"
+    local profile_name="$2"
+    local region="$3"
+    {
+        echo ""
+        echo "[profile ${profile_name}]"
+        echo "aws_access_key_id = ${_CRED_AK}"
+        echo "aws_secret_access_key = ${_CRED_SK}"
+        echo "aws_session_token = ${_CRED_ST}"
+        echo "region = ${region}"
+    } >> "$config_file"
+}
+
+# ci/e2e-tests.sh on Prow: mounted CREDS_DIR/aws_config shapes differ by job (static keys,
+# role_arn chains, or both). For every profile with role_arn, resolve_creds (explicit
+# RoleSessionName, same as dev write_container_config) and replace that section with static
+# keys so Go subprocesses do not re-assume with a random session name. Other profiles are
+# copied unchanged from the mounted file.
+write_e2e_host_aws_config() {
+    [[ "${E2E_HOST_AWS_CONFIG_READY:-}" == "1" ]] && return 0
+    [[ -r "${AWS_CONFIG_FILE:-}" ]] || return 0
+
+    local source_config="${AWS_CONFIG_FILE}"
+    local region="${AWS_DEFAULT_REGION:-us-east-1}"
+    local -a chained_profiles=()
+    local profile_name role_arn
+
+    while IFS= read -r profile_name; do
+        [[ -z "$profile_name" ]] && continue
+        role_arn=$(aws configure get role_arn --profile "$profile_name" 2>/dev/null || true)
+        [[ -n "$role_arn" ]] || continue
+        chained_profiles+=("$profile_name")
+    done < <(aws configure list-profiles 2>/dev/null)
+
+    if [[ ${#chained_profiles[@]} -eq 0 ]]; then
+        echo "E2e host AWS config: no chained profiles (role_arn) in ${source_config}; using mounted config unchanged"
+        export E2E_HOST_AWS_CONFIG_READY=1
+        return 0
+    fi
+
+    local merged_config
+    merged_config=$(mktemp)
+    cp "$source_config" "$merged_config"
+
+    for profile_name in "${chained_profiles[@]}"; do
+        export AWS_CONFIG_FILE="$source_config"
+        resolve_creds "$profile_name" || die "Failed to materialize profile ${profile_name}"
+        aws_config_delete_profile "$merged_config" "$profile_name"
+        aws_config_append_static_profile "$merged_config" "$profile_name" "$region"
+    done
+
+    export AWS_CONFIG_FILE="$merged_config"
+    export AWS_SHARED_CREDENTIALS_FILE=/dev/null
+    export E2E_HOST_AWS_CONFIG_READY=1
+    echo "E2e host AWS config: materialized chained profile(s): ${chained_profiles[*]} (RoleSessionName=${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e})"
 }
 
 # Core ECS bastion task launch and readiness logic.

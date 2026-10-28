@@ -12,6 +12,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CREDS_DIR="${CREDS_DIR:-/var/run/rosa-credentials}"
 
 source "${SCRIPT_DIR}/setup-aws-profiles.sh"
+# shellcheck source=../scripts/dev/env-common.sh
+source "${SCRIPT_DIR}/../scripts/dev/env-common.sh"
+write_e2e_host_aws_config
 
 if [[ -n "${BASE_URL:-}" ]]; then
   echo "Using BASE_URL from environment: ${BASE_URL}"
