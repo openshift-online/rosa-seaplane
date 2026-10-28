@@ -13,6 +13,7 @@
 #   init_aws_config       — Create temp AWS config dir + EXIT trap
 #   container_aws_role_session_name_flags — podman -e for AWS_ROLE_SESSION_NAME in e2e containers
 #   write_container_config — Resolve profiles to static creds for container mount
+#   write_e2e_host_aws_config — CI e2e host: resolve assume-role profiles (stable session name)
 #   bastion_run_task      — Core ECS bastion task launch and readiness logic
 #   chain_exit_trap       — Chain a new EXIT handler with any existing trap
 #   bastion_port_forward  — kubectl port-forward on bastion + SSM to localhost
@@ -208,6 +209,32 @@ EOF
     done
 
     _CONTAINER_AWS_FLAGS="-v ${_CONTAINER_CONFIG}:/tmp/aws-config:ro,z -e AWS_CONFIG_FILE=/tmp/aws-config -e AWS_SHARED_CREDENTIALS_FILE=/dev/null $(container_aws_role_session_name_flags)"
+}
+
+# ci/e2e-tests.sh on Prow: resolve assume-role profiles from the mounted aws_config
+# with resolve_creds (same RoleSessionName as dev write_container_config). Go SDK and
+# multi-process e2e need static keys; AWS CLI-only jobs can keep setup-aws-profiles alone.
+write_e2e_host_aws_config() {
+    [[ "${E2E_HOST_AWS_CONFIG_READY:-}" == "1" ]] && return 0
+    [[ -r "${AWS_CONFIG_FILE:-}" ]] || return 0
+
+    local region="${AWS_DEFAULT_REGION:-us-east-1}"
+    local -a specs=()
+    local p role_arn
+    while IFS= read -r p; do
+        [[ -z "$p" ]] && continue
+        role_arn=$(aws configure get role_arn --profile "$p" 2>/dev/null || true)
+        [[ -n "$role_arn" ]] || continue
+        specs+=("${p} ${p} ${region}")
+    done < <(aws configure list-profiles 2>/dev/null)
+
+    [[ ${#specs[@]} -eq 0 ]] && return 0
+
+    write_container_config "${specs[@]}"
+    export AWS_CONFIG_FILE="$_CONTAINER_CONFIG"
+    export AWS_SHARED_CREDENTIALS_FILE=/dev/null
+    export E2E_HOST_AWS_CONFIG_READY=1
+    echo "E2e host AWS config: ${#specs[@]} assume-role profile(s), session ${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
 }
 
 # Core ECS bastion task launch and readiness logic.
