@@ -12,8 +12,7 @@
 
 set -euo pipefail
 
-# Stable RoleSessionName for AWS CLI assume-role. Go ZOA CLI reads role_session_name
-# from the profile in aws_config — patched at ZOA e2e time (ci/zoa-e2e-aws-config.sh).
+# Stable RoleSessionName for resolve_creds (scripts/dev/env-common.sh) and AWS CLI.
 export AWS_ROLE_SESSION_NAME="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
 
 CREDS_DIR="${CREDS_DIR:-/var/run/rosa-credentials}"

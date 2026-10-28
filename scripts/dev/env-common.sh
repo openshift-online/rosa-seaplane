@@ -193,7 +193,7 @@ write_container_config() {
     local spec host_profile container_profile region
     for spec in "$@"; do
         read -r host_profile container_profile region <<< "$spec"
-        resolve_creds "$host_profile"
+        resolve_creds "$host_profile" || die "Failed to resolve profile ${host_profile}"
 
         [[ "$first" == "true" ]] || echo "" >> "$_CONTAINER_CONFIG"
         first=false
