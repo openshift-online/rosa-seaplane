@@ -170,6 +170,9 @@ if [[ "${REPO_NAME:-}" == "rosa-seaplane-zoa" ]]; then
   echo ""
   zoa_exit=0
   if [[ -n "${ZOA_RC_API_URL:-}" ]] || [[ -n "${ZOA_MC_API_URL:-}" ]]; then
+    # shellcheck source=zoa-e2e-aws-config.sh
+    source "${SCRIPT_DIR}/zoa-e2e-aws-config.sh"
+    prepare_zoa_e2e_aws_config
     if git clone --depth 1 --branch "${ZOA_REF}" "${ZOA_REPO}" "${WORK_DIR}/zoa"; then
       make -C "${WORK_DIR}/zoa" test-e2e || zoa_exit=$?
     else
@@ -245,6 +248,9 @@ if [[ "${E2E_SKIP_ZOA}" == "true" ]]; then
   echo "Skipped (E2E_SKIP_ZOA=${E2E_SKIP_ZOA})"
 else
   if [[ -n "${ZOA_RC_API_URL:-}" ]] || [[ -n "${ZOA_MC_API_URL:-}" ]]; then
+    # shellcheck source=zoa-e2e-aws-config.sh
+    source "${SCRIPT_DIR}/zoa-e2e-aws-config.sh"
+    prepare_zoa_e2e_aws_config
     if git clone --depth 1 --branch "${ZOA_REF}" "${ZOA_REPO}" "${WORK_DIR}/zoa"; then
       if [[ "${JOB_TYPE:-}" == "periodic" ]]; then
         echo "Nightly run — executing full ZOA e2e suite"

@@ -12,24 +12,14 @@
 
 set -euo pipefail
 
-# Stable STS RoleSessionName for host-side aws sts assume-role (materialization below
-# and scripts/dev/env-common.sh resolve_creds). AWS CLI honors AWS_ROLE_SESSION_NAME
-# for profile assume-role; Go aws-sdk-go-v2 does not — see materialize step.
+# Stable RoleSessionName for AWS CLI assume-role (host scripts). ZOA CLI (Go SDK)
+# needs an extra step before ZOA e2e — see ci/zoa-e2e-aws-config.sh.
 export AWS_ROLE_SESSION_NAME="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
-
-_SETUP_AWS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=aws-profile-resolve.sh
-source "${_SETUP_AWS_DIR}/aws-profile-resolve.sh"
-
-_finish_setup_aws_profiles() {
-  materialize_aws_profiles_for_go_sdk || return 1
-}
 
 CREDS_DIR="${CREDS_DIR:-/var/run/rosa-credentials}"
 
 # Already configured (e.g. local dev container mount) — skip path setup only.
 if [[ -n "${AWS_CONFIG_FILE:-}" ]]; then
-  _finish_setup_aws_profiles
   return 0 2>/dev/null || exit 0
 fi
 
@@ -40,4 +30,3 @@ fi
 
 export AWS_CONFIG_FILE="${CREDS_DIR}/aws_config"
 echo "AWS profiles configured (config: ${AWS_CONFIG_FILE})"
-_finish_setup_aws_profiles
