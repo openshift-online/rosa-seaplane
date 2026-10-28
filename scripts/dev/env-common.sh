@@ -4,9 +4,14 @@
 #
 # Sourced by ephemeral-env.sh and int-env.sh. Not executable on its own.
 #
+# Credential resolution for assume-role profiles lives in ci/aws-profile-resolve.sh
+# (shared with CI setup-aws-profiles materialization).
+
+_RRP_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=../../ci/aws-profile-resolve.sh
+source "${_RRP_REPO_ROOT}/ci/aws-profile-resolve.sh"
+
 # Functions provided:
-#   die                   — Print error and exit
-#   resolve_creds         — Resolve AWS profile to static credentials
 #   ensure_image          — Build CI container image if not present
 #   load_accounts         — Load account IDs from a JSON file (legacy flat format)
 #   load_accounts_stage   — Load account IDs from stage nested JSON format
@@ -28,56 +33,6 @@ die() {
         return 1
     fi
     exit 1
-}
-
-# Resolve the base SAML credentials from a credential_process profile.
-# The credential_process is not cached by the AWS CLI, so this always returns
-# fresh credentials. Results are cached in-process for the given profile.
-# Args: $1 = base profile name (the one with credential_process)
-# Sets: _BASE_AK, _BASE_SK, _BASE_ST
-resolve_base_creds() {
-    local base_profile="$1"
-    if [[ "${_BASE_RESOLVED_PROFILE:-}" == "$base_profile" ]]; then
-        return 0
-    fi
-    echo "Resolving base credentials..."
-    local creds creds_err
-    creds_err=$(mktemp)
-    creds=$(aws configure export-credentials --profile "$base_profile" --format process 2>"$creds_err") \
-        || { local err; err=$(<"$creds_err"); rm -f "$creds_err"; die "Failed to resolve base credentials ($base_profile):\n$err"; }
-    rm -f "$creds_err"
-    _BASE_AK=$(echo "$creds" | jq -r '.AccessKeyId')
-    _BASE_SK=$(echo "$creds" | jq -r '.SecretAccessKey')
-    _BASE_ST=$(echo "$creds" | jq -r '.SessionToken // empty')
-    _BASE_RESOLVED_PROFILE="$base_profile"
-}
-
-# Assume a role using the base SAML credentials, bypassing the CLI's profile cache.
-# Reads source_profile and role_arn from the given profile config.
-# Sets: _CRED_AK, _CRED_SK, _CRED_ST
-resolve_creds() {
-    local profile="$1"
-    echo "Resolving credentials for profile $profile..."
-
-    local role_arn base_profile
-    role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null) \
-        || die "No role_arn found for profile $profile"
-    base_profile=$(aws configure get source_profile --profile "$profile" 2>/dev/null) \
-        || die "No source_profile found for profile $profile"
-
-    resolve_base_creds "$base_profile"
-
-    local creds creds_err
-    creds_err=$(mktemp)
-    local session_name="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
-    creds=$(AWS_ACCESS_KEY_ID="$_BASE_AK" AWS_SECRET_ACCESS_KEY="$_BASE_SK" AWS_SESSION_TOKEN="$_BASE_ST" \
-        aws sts assume-role --role-arn "$role_arn" --role-session-name "$session_name" \
-        --duration-seconds 3600 --output json 2>"$creds_err") \
-        || { local err; err=$(<"$creds_err"); rm -f "$creds_err"; die "Failed to assume role $role_arn:\n$err"; }
-    rm -f "$creds_err"
-    _CRED_AK=$(echo "$creds" | jq -r '.Credentials.AccessKeyId')
-    _CRED_SK=$(echo "$creds" | jq -r '.Credentials.SecretAccessKey')
-    _CRED_ST=$(echo "$creds" | jq -r '.Credentials.SessionToken')
 }
 
 # Build the CI container image if not already present.
@@ -193,7 +148,7 @@ write_container_config() {
     local spec host_profile container_profile region
     for spec in "$@"; do
         read -r host_profile container_profile region <<< "$spec"
-        resolve_creds "$host_profile"
+        resolve_creds "$host_profile" || die "Failed to resolve profile ${host_profile}"
 
         [[ "$first" == "true" ]] || echo "" >> "$_CONTAINER_CONFIG"
         first=false
