@@ -52,6 +52,11 @@ aws:
   - rosa-seaplane-zoa-operator-dev   # future: rosa-seaplane-zoa-operator-eph
 
 
+# @doc image_registry_account_id AWS account ID that owns the private image registry. Stored as a central-account SSM parameter so RC and MC ArgoCD clusters use the same registry account.
+# @used-by image_registry_account_id pipeline-management-cluster-inputs/terraform.json.j2
+# @used-by image_registry_account_id pipeline-regional-cluster-inputs/terraform.json.j2
+image_registry_account_id: "ssm:///infra/image-registry/account_id"
+
 dns:
   # @doc dns.domain Base domain for the environment. Must be set per environment. See config/ephemeral/defaults.yaml for how the ephemeral template selects between CI and dev account pools.
   # @used-by dns.domain pipeline-provisioner-inputs/terraform.json.j2
