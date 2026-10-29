@@ -43,7 +43,7 @@ resource "aws_dynamodb_table" "executions" {
   name                        = local.table_name
   billing_mode                = var.billing_mode
   hash_key                    = "executionId"
-  deletion_protection_enabled = var.environment != "ephemeral"
+  deletion_protection_enabled = var.dynamodb_deletion_protection
 
   attribute {
     name = "executionId"
@@ -135,7 +135,7 @@ resource "aws_dynamodb_table" "audit_log" {
   billing_mode                = var.billing_mode
   hash_key                    = "accountId"
   range_key                   = "timestamp"
-  deletion_protection_enabled = var.environment != "ephemeral"
+  deletion_protection_enabled = var.dynamodb_deletion_protection
 
   attribute {
     name = "accountId"
@@ -224,7 +224,7 @@ resource "aws_dynamodb_table" "boundary_sessions" {
   name                        = local.sessions_table_name
   billing_mode                = var.billing_mode
   hash_key                    = "sessionId"
-  deletion_protection_enabled = var.environment != "ephemeral"
+  deletion_protection_enabled = var.dynamodb_deletion_protection
 
   attribute {
     name = "sessionId"

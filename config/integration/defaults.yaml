@@ -11,6 +11,8 @@ dns:
   domain: int0.rosa.devshift.org
 
 regional_cluster:
+  seaplane_db_deletion_protection: false
+  zoa_dynamodb_deletion_protection: false
   enable_bastion: true
   enable_cloudtrail: true
   enable_api_custom_domain: true
