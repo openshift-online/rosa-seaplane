@@ -232,7 +232,7 @@ aws_config_delete_profile() {
 }
 
 # Append a profile with static credentials (_CRED_* must be set).
-# Args: $1 = config file, $2 = profile name, $3 = region
+# Args: $1 = config file, $2 = profile name, $3 = region (optional; omit line when empty)
 aws_config_append_static_profile() {
     local config_file="$1"
     local profile_name="$2"
@@ -243,7 +243,9 @@ aws_config_append_static_profile() {
         echo "aws_access_key_id = ${_CRED_AK}"
         echo "aws_secret_access_key = ${_CRED_SK}"
         echo "aws_session_token = ${_CRED_ST}"
-        echo "region = ${region}"
+        if [[ -n "$region" ]]; then
+            echo "region = ${region}"
+        fi
     } >> "$config_file"
 }
 
@@ -257,16 +259,22 @@ write_e2e_host_aws_config() {
     [[ -r "${AWS_CONFIG_FILE:-}" ]] || return 0
 
     local source_config="${AWS_CONFIG_FILE}"
-    local region="${AWS_DEFAULT_REGION:-us-east-1}"
     local -a chained_profiles=()
-    local profile_name role_arn
+    local profile_name role_arn profile_region
+    local profile_list
+
+    # list-profiles must succeed when we have a readable config; a silent empty list
+    # would skip materialization and restore random RoleSessionName per Go subprocess.
+    if ! profile_list=$(aws configure list-profiles 2>&1); then
+        die "Failed to list AWS profiles (AWS_CONFIG_FILE=${source_config}): ${profile_list}"
+    fi
 
     while IFS= read -r profile_name; do
         [[ -z "$profile_name" ]] && continue
-        role_arn=$(aws configure get role_arn --profile "$profile_name" 2>/dev/null || true)
+        role_arn=$(aws configure get role_arn --profile "$profile_name" 2>/dev/null) || role_arn=""
         [[ -n "$role_arn" ]] || continue
         chained_profiles+=("$profile_name")
-    done < <(aws configure list-profiles 2>/dev/null)
+    done <<< "$profile_list"
 
     if [[ ${#chained_profiles[@]} -eq 0 ]]; then
         echo "E2e host AWS config: no chained profiles (role_arn) in ${source_config}; using mounted config unchanged"
@@ -280,9 +288,10 @@ write_e2e_host_aws_config() {
 
     for profile_name in "${chained_profiles[@]}"; do
         export AWS_CONFIG_FILE="$source_config"
+        profile_region=$(aws configure get region --profile "$profile_name" 2>/dev/null) || profile_region=""
         resolve_creds "$profile_name" || die "Failed to materialize profile ${profile_name}"
         aws_config_delete_profile "$merged_config" "$profile_name"
-        aws_config_append_static_profile "$merged_config" "$profile_name" "$region"
+        aws_config_append_static_profile "$merged_config" "$profile_name" "$profile_region"
     done
 
     export AWS_CONFIG_FILE="$merged_config"
