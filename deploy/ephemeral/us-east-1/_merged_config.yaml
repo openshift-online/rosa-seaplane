@@ -131,6 +131,9 @@ regional_cluster:
   # @doc regional_cluster.seaplane_db_deletion_protection Enable deletion protection for Seaplane DB Aurora cluster.
   # @used-by regional_cluster.seaplane_db_deletion_protection pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_deletion_protection: false
+  # @doc regional_cluster.zoa_dynamodb_deletion_protection Enable deletion protection for ZOA DynamoDB tables.
+  # @used-by regional_cluster.zoa_dynamodb_deletion_protection pipeline-regional-cluster-inputs/terraform.json.j2
+  zoa_dynamodb_deletion_protection: false
   # @doc regional_cluster.seaplane_db_skip_final_snapshot Skip final snapshot when destroying Seaplane DB (ephemeral only).
   # @used-by regional_cluster.seaplane_db_skip_final_snapshot pipeline-regional-cluster-inputs/terraform.json.j2
   seaplane_db_skip_final_snapshot: true

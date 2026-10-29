@@ -30,6 +30,7 @@
   "eph_prefix": "{{ eph_prefix | default('') }}",
   "seaplane_db_instance_class": {{ regional_cluster.seaplane_db_instance_class | default('db.r6g.large') | tojson }},
   "seaplane_db_deletion_protection": {{ regional_cluster.seaplane_db_deletion_protection | default(true) | tojson }},
+  "zoa_dynamodb_deletion_protection": {{ regional_cluster.zoa_dynamodb_deletion_protection | default(true) | tojson }},
   "seaplane_db_skip_final_snapshot": {{ regional_cluster.seaplane_db_skip_final_snapshot | default(false) | tojson }},
   "seaplane_db_performance_insights_enabled": {{ regional_cluster.seaplane_db_performance_insights_enabled | default(true) | tojson }},
   "seaplane_db_monitoring_interval": {{ regional_cluster.seaplane_db_monitoring_interval | default(60) | tojson }},

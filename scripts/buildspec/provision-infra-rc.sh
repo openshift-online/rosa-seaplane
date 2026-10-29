@@ -53,6 +53,7 @@ tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
     regional_id environment deployment_name app_code service_phase cost_center \
     enable_bastion enable_cloudtrail enable_pagerduty pagerduty_escalation_policy_id \
     enable_rate_limit_redis seaplane_db_instance_class seaplane_db_deletion_protection \
+    zoa_dynamodb_deletion_protection \
     seaplane_db_skip_final_snapshot seaplane_db_performance_insights_enabled \
     seaplane_db_monitoring_interval enable_api_custom_domain zone_shard_count \
     enable_sns_alerting enable_sre_tools_gateway enable_sre_public_access \
