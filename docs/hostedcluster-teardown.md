@@ -7,23 +7,23 @@
 > Under normal operation, clusters are automatically cleaned up after 24 hours
 > and no manual teardown is needed.
 
-## Preferred: rosactl
+## Preferred: ROSA CLI
 
-When the platform API is reachable, use [`rosactl`](https://github.com/openshift-online/rosa-seaplane-cli)
-— it handles cluster deletion and CloudFormation stack cleanup without requiring
-break-glass access:
+When the platform API is reachable, use the
+[ROSA CLI (`seaplane-v2` branch)](https://github.com/openshift/rosa/tree/seaplane-v2)
+— it handles cluster deletion without requiring break-glass access:
 
 ```bash
-# Delete the cluster record and trigger platform-side cleanup (steps 1–4 below)
-rosactl cluster delete <cluster-name> --wait
-
-# Delete CloudFormation stacks in the customer AWS account (step 5 below)
-rosactl cluster-oidc delete <cluster-name>
-rosactl cluster-vpc delete <cluster-name>
-rosactl cluster-iam delete <cluster-name>
+./bin/rosa delete cluster -c <cluster-name>
 ```
 
-Use the manual procedure below only when `rosactl cluster delete` is not viable
+CloudFormation stacks in the customer AWS account (`cluster-iam`, `cluster-vpc`,
+`cluster-oidc`) are **not** deleted automatically. You can reuse them for the next
+cluster with the same name. To delete them manually, first complete step 4 and
+confirm the HostedCluster and NodePool are removed. Then delete them via the AWS
+Console / `aws cloudformation delete-stack` (step 5 below).
+
+Use the manual procedure below only when `rosa delete cluster` is not viable
 (e.g. platform API is down, CLM is stuck, or a force-cleanup of all clusters is needed).
 
 ## Manual Teardown
