@@ -13,7 +13,7 @@ global:
 sigv4ProxyLogs:
   image:
     repository: public.ecr.aws/aws-observability/aws-sigv4-proxy
-    tag: "1.11"
+    tag: "1.13"
     pullPolicy: IfNotPresent
   port: 8006
   replicas: 2
