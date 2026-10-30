@@ -81,7 +81,6 @@ def _create_config_structure(
         },
         "dns": {
             "domain": "",
-            "create_environment_zone": False,
         },
         "terraform_tags": {
             "app_code": "infra",

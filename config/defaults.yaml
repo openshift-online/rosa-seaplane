@@ -55,9 +55,6 @@ dns:
   # @used-by dns.domain pipeline-provisioner-inputs/terraform.json.j2
   # @used-by dns.domain pipeline-regional-cluster-inputs/terraform.json.j2
   domain: ""
-  # @doc dns.create_environment_zone Create the environment hosted zone in the central account. Set false to reuse an existing zone with pre-configured delegation.
-  # @used-by dns.create_environment_zone pipeline-provisioner-inputs/terraform.json.j2
-  create_environment_zone: false
 
 cluster_naming:
   # @doc cluster_naming.rc_pattern Pattern used to derive the Regional Cluster ID, which also determines CodeBuild/CodePipeline names and the RC Terraform state key. Placeholders: {prefix} (name_prefix or eph_prefix). Changing this for an existing environment changes resource identities and state lookup; migrate those names and state deliberately.

@@ -67,10 +67,13 @@ init_central_state() {
     fi
 }
 
+# The environment hosted zone is created and owned externally (by the
+# rosa-seaplane-internal control account). Here we only look it up by name so
+# the regional cluster provisioner can delegate into it.
 resolve_environment_hosted_zone() {
     local region_deployment="$1"
     local config_file="deploy/${ENVIRONMENT}/${region_deployment}/pipeline-provisioner-inputs/terraform.json"
-    local zone_name hosted_zones attempt wait_time
+    local zone_name hosted_zones
 
     ENVIRONMENT_DOMAIN=""
     ENVIRONMENT_HOSTED_ZONE_ID=""
@@ -78,73 +81,24 @@ resolve_environment_hosted_zone() {
 
     ENVIRONMENT_DOMAIN=$(jq -r '.domain // empty' "$config_file") || return 1
     [[ -n "$ENVIRONMENT_DOMAIN" ]] || return 0
-    CREATE_ENVIRONMENT_ZONE=$(jq -r '.create_environment_zone // false' "$config_file") || return 1
 
-    if [[ "$CREATE_ENVIRONMENT_ZONE" == "true" ]]; then
-        init_central_state || return 1
-        TF_STATE_REGION=$(jq -r '.tf_state_region // empty' "$config_file") || return 1
-        if [[ -z "$TF_STATE_REGION" ]]; then
-            local bucket_region
-            bucket_region=$(aws s3api get-bucket-location --bucket "$TF_STATE_BUCKET" \
-                --region us-east-1 --query LocationConstraint --output text --no-cli-pager) || return 1
-            if [[ "$bucket_region" == "None" || "$bucket_region" == "null" || -z "$bucket_region" ]]; then
-                TF_STATE_REGION="us-east-1"
-            else
-                TF_STATE_REGION="$bucket_region"
-            fi
-        fi
-
-        echo "Provisioning DNS environment zone: $ENVIRONMENT_DOMAIN"
-        terraform -chdir=terraform/config/dns-environment-zone init \
-            -reconfigure \
-            -backend-config="bucket=$TF_STATE_BUCKET" \
-            -backend-config="key=dns/environment-zone-${ENVIRONMENT}.tfstate" \
-            -backend-config="region=$TF_STATE_REGION" \
-            -backend-config="use_lockfile=true" || return 1
-
-        attempt=1
-        wait_time=30
-        while (( attempt <= 3 )); do
-            if terraform -chdir=terraform/config/dns-environment-zone apply -auto-approve \
-                -var="environment_domain=${ENVIRONMENT_DOMAIN}" \
-                -var="environment=${ENVIRONMENT}"; then
-                if ! ENVIRONMENT_HOSTED_ZONE_ID=$(terraform -chdir=terraform/config/dns-environment-zone output -raw zone_id); then
-                    echo "ERROR: Failed to read zone_id after creating $ENVIRONMENT_DOMAIN" >&2
-                    return 1
-                fi
-                [[ -n "$ENVIRONMENT_HOSTED_ZONE_ID" ]] || {
-                    echo "ERROR: Terraform returned an empty zone_id for $ENVIRONMENT_DOMAIN" >&2
-                    return 1
-                }
-                break
-            fi
-            if (( attempt == 3 )); then
-                echo "ERROR: Failed to create environment zone: $ENVIRONMENT_DOMAIN" >&2
-                return 1
-            fi
-            echo "DNS zone apply attempt $attempt failed, retrying in ${wait_time}s..."
-            sleep "$wait_time"
-            wait_time=$((wait_time * 2))
-            attempt=$((attempt + 1))
-        done
-    else
-        zone_name="${ENVIRONMENT_DOMAIN%.}."
-        if ! hosted_zones=$(aws route53 list-hosted-zones-by-name \
-            --dns-name "$zone_name" --output json --no-cli-pager); then
-            echo "ERROR: Failed to look up Route 53 zone $zone_name" >&2
-            return 1
-        fi
-        ENVIRONMENT_HOSTED_ZONE_ID=$(jq -r --arg name "$zone_name" \
-            '[.HostedZones[]? | select(.Name == $name and .Config.PrivateZone == false) | .Id][0] // empty' \
-            <<< "$hosted_zones") || return 1
-        if [[ -z "$ENVIRONMENT_HOSTED_ZONE_ID" ]]; then
-            echo "ERROR: No public Route 53 hosted zone found for $zone_name" >&2
-            return 1
-        fi
-        ENVIRONMENT_HOSTED_ZONE_ID="${ENVIRONMENT_HOSTED_ZONE_ID##*/}"
+    zone_name="${ENVIRONMENT_DOMAIN%.}."
+    if ! hosted_zones=$(aws route53 list-hosted-zones-by-name \
+        --dns-name "$zone_name" --output json --no-cli-pager); then
+        echo "ERROR: Failed to look up Route 53 zone $zone_name" >&2
+        return 1
     fi
+    ENVIRONMENT_HOSTED_ZONE_ID=$(jq -r --arg name "$zone_name" \
+        '[.HostedZones[]? | select(.Name == $name and .Config.PrivateZone == false) | .Id][0] // empty' \
+        <<< "$hosted_zones") || return 1
+    if [[ -z "$ENVIRONMENT_HOSTED_ZONE_ID" ]]; then
+        echo "ERROR: No public Route 53 hosted zone found for $zone_name" >&2
+        echo "       The environment zone must be provisioned by rosa-seaplane-internal first." >&2
+        return 1
+    fi
+    ENVIRONMENT_HOSTED_ZONE_ID="${ENVIRONMENT_HOSTED_ZONE_ID##*/}"
 
-    export ENVIRONMENT_DOMAIN ENVIRONMENT_HOSTED_ZONE_ID TF_STATE_REGION
+    export ENVIRONMENT_DOMAIN ENVIRONMENT_HOSTED_ZONE_ID
 }
 
 # Save central credentials for account switching
@@ -880,7 +834,7 @@ FORCE_DELETE_ALL_PIPELINES="${FORCE_DELETE_ALL_PIPELINES:-false}"
 PROVISION_FAILURES=0
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DNS Environment Zone (terraform block preserved)
+# DNS Environment Zone (looked up; created/owned by rosa-seaplane-internal)
 # ──────────────────────────────────────────────────────────────────────────────
 
 for _first_region_dir in deploy/${ENVIRONMENT}/*/; do

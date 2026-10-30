@@ -255,8 +255,8 @@ The DNS zone hierarchy splits into two tiers:
 
 - **Persistent (pre-provisioned, survives across e2e runs)**:
   - Environment zone in the central account (e.g., `ci00.rosa.devshift.net`)
-  - For production/staging: created by `dns-environment-zone` terraform (`create_environment_zone: true`)
-  - For CI/dev: pre-provisioned once and reused across runs (`create_environment_zone: false`)
+  - Created and owned externally by the [rosa-seaplane-internal](https://github.com/openshift-online/rosa-seaplane-internal) control account (`aws_route53_zone.environment`); rosa-seaplane only looks it up by name to delegate into it
+  - Pre-provisioned once per environment and reused across runs
 - **Per-run (created and destroyed with each e2e run)**:
   - Regional zone in the regional account — the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.ci00.rosa.devshift.net`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
   - Cluster-specific records (api, oauth, ACME challenge) in the regional zone — created by external-dns and cert-manager on the MC
@@ -267,9 +267,8 @@ This reuses the existing RC terraform for regional zone management — no extrac
 
 ### Skipping the API Gateway Custom Domain
 
-Two flags control provisioning speed for e2e environments:
+The environment hosted zone is always created and owned externally by rosa-seaplane-internal; rosa-seaplane looks it up by name rather than creating it. One flag controls provisioning speed for e2e environments:
 
-- `create_environment_zone` (default `false`) — when false, skips creating the environment hosted zone in the central account and reuses an existing one. Production/staging set this to `true`.
 - `enable_api_custom_domain` (default `false`) — when false, skips the ACM certificate and API Gateway custom domain (~20 minutes). The API Gateway invoke URL is sufficient for testing. Production/staging set this to `true`.
 
 ### Per-Environment DNS Domains
@@ -293,6 +292,6 @@ The environment zone scales to 10k regional NS delegations. Adding regional or M
 Each new environment requires a one-time setup:
 
 1. Cloudflare/app-interface delegation from `rosa.devshift.net` to the new environment subdomain
-2. `terraform apply` of `dns-environment-zone` in the central account
+2. Creation of the environment hosted zone in the central account via rosa-seaplane-internal (`control-account` module)
 
 DNSSEC is not required for CI/dev — only for FedRAMP compliance in staging and production.
