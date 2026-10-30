@@ -5,8 +5,8 @@ aws:
   # shared provisioning resources live). The RC account ID lives under the /rc/
   # segment and each MC under /<cluster_prefix>/ (published by the internal
   # account-config module). management_cluster_account_id falls back to the
-  # base default (ssm:///infra/<env>/<region>/<cluster_prefix>/account_id).
-  account_id: "ssm:///infra/{{ environment }}/{{ aws_region }}/rc/account_id"
+  # base default (ssm:///infra/<region>/<cluster_prefix>/account_id).
+  account_id: "ssm:///infra/{{ aws_region }}/rc/account_id"
   # Stage children are minted by the internal repo, which provisions the scoped
   # day-2 role instead of the AWS Organizations role. Pipelines assume this for
   # both state-bucket bootstrap (hop 1) and infra apply (hop 2).

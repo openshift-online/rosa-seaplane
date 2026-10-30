@@ -133,8 +133,8 @@ git:
   bootstrap_revision: main
 
 aws:
-  account_id: "ssm:///infra/{{ environment }}/{{ aws_region }}/account_id"
-  management_cluster_account_id: "ssm:///infra/{{ environment }}/{{ aws_region }}/{{ cluster_prefix }}/account_id"
+  account_id: "ssm:///infra/{{ aws_region }}/account_id"
+  management_cluster_account_id: "ssm:///infra/{{ aws_region }}/{{ cluster_prefix }}/account_id"
 
 dns:
   domain: ""
