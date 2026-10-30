@@ -20,5 +20,5 @@ keywords:
 
 dependencies:
   - name: loki
-    version: "7.0.0"
+    version: "7.5.0"
     repository: "https://grafana.github.io/helm-charts"
