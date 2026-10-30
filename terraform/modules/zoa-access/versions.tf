@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source                = "hashicorp/aws"
-      version               = "~> 6.56.0"
+      version               = "~> 6.70.0"
       configuration_aliases = [aws.central_deployments, aws.central_deployments_replica]
     }
   }
