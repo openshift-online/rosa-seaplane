@@ -5,6 +5,7 @@
   "cost_center": "000",
   "environment": "integration",
   "account_id": "ssm:///infra/integration/us-east-1/account_id",
+  "image_registry_account_id": "ssm:///infra/image-registry/account_id",
   "region": "us-east-1",
   "deployment_name": "us-east-1",
   "alias": "regional-us-east-1",

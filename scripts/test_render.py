@@ -1825,6 +1825,60 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
+    def test_image_registry_account_id_flows_to_both_cluster_types(self, tmp_path):
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+                "image_registry_account_id": "ssm:///infra/image-registry/account_id",
+            },
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {
+                        "us-east-1": {"provision_mcs": {"mc01": {}}},
+                    },
+                }
+            },
+        )
+
+        rc_input = json.loads(
+            (
+                deploy_dir
+                / "staging"
+                / "us-east-1"
+                / "pipeline-regional-cluster-inputs"
+                / "terraform.json"
+            ).read_text()
+        )
+        mc_input = json.loads(
+            (
+                deploy_dir
+                / "staging"
+                / "us-east-1"
+                / "pipeline-management-cluster-mc01-inputs"
+                / "terraform.json"
+            ).read_text()
+        )
+        assert rc_input["image_registry_account_id"] == "ssm:///infra/image-registry/account_id"
+        assert mc_input["image_registry_account_id"] == "ssm:///infra/image-registry/account_id"
+
+        for cluster_type in ("regional-cluster", "management-cluster"):
+            appset_file = (
+                deploy_dir
+                / "staging"
+                / "us-east-1"
+                / f"argocd-bootstrap-{cluster_type}"
+                / "applicationset.yaml"
+            )
+            assert (
+                "image_registry_account_id: '{{ .metadata.annotations.image_registry_account_id }}'"
+                in appset_file.read_text()
+            )
+
     def test_argocd_bootstrap_pinned_revision(self, tmp_path):
         deploy_dir = self._run_main(
             tmp_path,

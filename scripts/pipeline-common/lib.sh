@@ -155,6 +155,7 @@ get_rc_account_id() {
 # Read SSM from the central CodeBuild account. /infra/* params live there, not in RC/MC.
 get_central_ssm_parameter() {
     local param_name="$1"
+    local region="${2:-${TARGET_REGION}}"
     AWS_ACCESS_KEY_ID="$_CENTRAL_AWS_ACCESS_KEY_ID" \
         AWS_SECRET_ACCESS_KEY="$_CENTRAL_AWS_SECRET_ACCESS_KEY" \
         AWS_SESSION_TOKEN="$_CENTRAL_AWS_SESSION_TOKEN" \
@@ -163,7 +164,19 @@ get_central_ssm_parameter() {
             --with-decryption \
             --query 'Parameter.Value' \
             --output text \
-            --region "${TARGET_REGION}"
+            --region "${region}"
+}
+
+# Resolve a whole-field SSM reference using central credentials. The registry
+# account parameter is in us-east-1; callers may pass a different SSM region.
+resolve_central_ssm_value() {
+    local value="$1"
+    local region="${2:-${TARGET_REGION}}"
+    if [[ "$value" == ssm://* ]]; then
+        get_central_ssm_parameter "${value#ssm://}" "$region"
+    else
+        echo "$value"
+    fi
 }
 
 _resolve_rc_account() {
