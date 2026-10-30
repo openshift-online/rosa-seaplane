@@ -36,10 +36,10 @@ platform_image: "669421954122.dkr.ecr.us-east-1.amazonaws.com/rosa-seaplane-ci:7
 aws:
   # @doc aws.account_id Regional AWS account ID.
   # @used-by aws.account_id _context
-  account_id: "ssm:///infra/{{ environment }}/{{ aws_region }}/account_id"
+  account_id: "ssm:///infra/{{ aws_region }}/account_id"
   # @doc aws.management_cluster_account_id Default account for MCs when entry has no account_id.
   # @used-by aws.management_cluster_account_id _context
-  management_cluster_account_id: "ssm:///infra/{{ environment }}/{{ aws_region }}/{{ cluster_prefix }}/account_id"
+  management_cluster_account_id: "ssm:///infra/{{ aws_region }}/{{ cluster_prefix }}/account_id"
   # @doc aws.child_admin_role_name Name of the IAM role the pipelines assume in RC/MC child accounts for state-bucket bootstrap (hop 1) and infra apply (hop 2). Defaults to the AWS Organizations role; override per environment to use a scoped day-2 role.
   # @used-by aws.child_admin_role_name _context
   child_admin_role_name: "OrganizationAccountAccessRole"

@@ -4,7 +4,7 @@
   "service_phase": "dev",
   "cost_center": "000",
   "environment": "ephemeral",
-  "account_id": "ssm:///infra/ephemeral/us-east-1/account_id",
+  "account_id": "ssm:///infra/us-east-1/account_id",
   "region": "us-east-1",
   "deployment_name": "us-east-1",
   "alias": "regional-us-east-1",
@@ -49,5 +49,5 @@
   "zoa_access_trusted_assumer_role_name_suffixes": ["rosa-seaplane-zoa-operator-dev"],
   "worker_node_ami_id": "ami-056d5e72aa5cf51f1",
   "worker_node_root_volume_size": 50,
-  "management_clusters_info": [{"account_id": "ssm:///infra/ephemeral/us-east-1/mc01/account_id", "id": "mc01"}]
+  "management_clusters_info": [{"account_id": "ssm:///infra/us-east-1/mc01/account_id", "id": "mc01"}]
 }

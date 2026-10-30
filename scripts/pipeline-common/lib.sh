@@ -187,7 +187,7 @@ _resolve_rc_account() {
 # Only the *source* of each MC AWS account ID in deploy JSON differs by environment:
 #
 #   Static (integration, stage, production, …):
-#     render.py leaves account_id as ssm:///infra/<env>/<region>/<mc>/account_id
+#     render.py leaves account_id as ssm:///infra/<region>/<mc>/account_id
 #     in pipeline-regional-cluster-inputs/terraform.json. Values live in the
 #     central pipeline account; provision-infra-rc.sh resolves before assume-role
 #     (get_central_ssm_parameter also works after assume into RC).
@@ -251,7 +251,7 @@ build_management_clusters_tf_var() {
     mc_info_len=$(echo "$mc_info" | jq 'length')
     if [[ "$mc_info_len" -gt 0 && ${#parts[@]} -eq 0 ]]; then
         echo "ERROR: management_clusters_info lists ${mc_info_len} cluster(s) but none resolved to id:account_id" >&2
-        echo "  static envs: check central SSM /infra/${ENVIRONMENT:-<env>}/<region>/<mc>/account_id" >&2
+        echo "  static envs: check central SSM /infra/<region>/<mc>/account_id" >&2
         echo "  ephemeral: use literal account_id in deploy JSON (provider inject + render)" >&2
         exit 1
     fi

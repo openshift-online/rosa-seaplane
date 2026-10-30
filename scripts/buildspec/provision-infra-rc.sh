@@ -131,16 +131,19 @@ if [ "$TF_VAR_enable_sre_oidc_auth" = "true" ]; then
     done
 fi
 
-# MC OU path from SSM - backward-compatible: try new nested path first, fall back to legacy flat path
+# MC OU path from SSM - backward-compatible: try new env-less path first, then the
+# legacy env-scoped path, then the oldest flat path. The env segment is being
+# dropped because each account holds exactly one environment (see account-config).
 TF_VAR_mc_ou_path=$(ssm_get_param_with_fallback \
     "${TARGET_REGION}" \
+    "/infra/${TARGET_REGION}/ou-path" \
     "/infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path" \
     "/infra/region-ou-path") || TF_VAR_mc_ou_path=""
 
 if [ -z "${TF_VAR_mc_ou_path}" ]; then
     echo "ERROR: MC OU path not found in SSM" >&2
     echo "For stage: parameter is created by rosa-seaplane-internal/infra/modules/account-config" >&2
-    echo "For ephemeral/integration: manually create at /infra/region-ou-path (legacy) or /infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path (new)" >&2
+    echo "For ephemeral/integration: manually create at /infra/${TARGET_REGION}/ou-path (new), /infra/${ENVIRONMENT}/${TARGET_REGION}/ou-path (legacy) or /infra/region-ou-path (oldest)" >&2
     exit 1
 fi
 export TF_VAR_mc_ou_path

@@ -21,7 +21,7 @@ platformApi:
     args:
       defaultClusterExpiration: ''
 seaplane:
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/ephemeral/us-east-1/account_id
+  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/account_id
 pagerduty:
   enabled: false
 grafana:
