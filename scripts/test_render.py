@@ -2579,7 +2579,7 @@ def _assert_rc_grants(bundle, account, role):
 
 class TestAuthzDelivery:
     @pytest.mark.parametrize("env,ci,eph_prefix,role", [
-        ("integration", False, "", "OrganizationAccountAccessRole"),
+        ("integration", False, "", "rosa-seaplane-account-admin"),
         ("stage", False, "", "rosa-seaplane-account-admin"),
         ("ephemeral", False, "", "OrganizationAccountAccessRole"),
         ("ephemeral", False, "authz-test", "OrganizationAccountAccessRole"),
@@ -2741,7 +2741,7 @@ class TestRuntimeIdentityDelivery:
         ).replace("@@AWS_REGION@@", "us-east-1") + "\n"
         bundle = yaml.safe_load(config)
         assert bundle["registeredAccounts"] == ["012345678901"]
-        _assert_rc_grants(bundle, "012345678901", "rosa-seaplane-account-admin" if env == "stage" else "OrganizationAccountAccessRole")
+        _assert_rc_grants(bundle, "012345678901", "OrganizationAccountAccessRole" if env == "ephemeral" else "rosa-seaplane-account-admin")
         _assert_bundle_fields(bundle)
 
     @pytest.mark.parametrize("field,invalid", [
