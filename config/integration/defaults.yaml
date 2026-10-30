@@ -14,7 +14,6 @@ aws:
 
 dns:
   domain: int0.rosa.devshift.org
-  create_environment_zone: true
 
 # Pin a specific AMI for all worker nodes (RC + MC), covering both the Karpenter
 # EC2NodeClass and the Terraform bootstrap node group. ami-056d5e72aa5cf51f1 is a
