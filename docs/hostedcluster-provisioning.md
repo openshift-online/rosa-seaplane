@@ -112,7 +112,8 @@ SUBNETS=$(aws cloudformation describe-stacks --stack-name $CLUSTER_NAME-vpc --qu
     --subnet-ids $SUBNETS \
     --hosted-cp \
     --compute-machine-type m5.xlarge \
-    --oidc-config-id $OIDC_ID
+    --oidc-config-id $OIDC_ID \
+    --version quay.io/openshift-release-dev/ocp-release:5.0.0-rc.7-multi
 
 ./bin/rosa create machinepool --cluster=$CLUSTER_NAME --name=workers --replicas=2 --instance-type=m5.xlarge --subnet <subnet-id> --region us-east-1
 
