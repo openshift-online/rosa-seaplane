@@ -504,14 +504,14 @@ module "dns_zone_operator" {
 module "zoa" {
   source = "../../modules/zoa"
 
-  regional_id                   = var.regional_id
-  mc_ou_path                    = var.mc_ou_path
-  environment                   = var.environment
-  dynamodb_deletion_protection  = var.zoa_dynamodb_deletion_protection
-  zoa_lambda_image_tag          = var.zoa_lambda_image_tag
-  zoa_runner_image_tag          = var.zoa_runner_image_tag
-  zoa_lambda_source_image       = var.zoa_lambda_source_image
-  zoa_runner_source_image       = var.zoa_runner_source_image
+  regional_id                  = var.regional_id
+  mc_ou_path                   = var.mc_ou_path
+  environment                  = var.environment
+  dynamodb_deletion_protection = var.zoa_dynamodb_deletion_protection
+  zoa_lambda_image_tag         = var.zoa_lambda_image_tag
+  zoa_runner_image_tag         = var.zoa_runner_image_tag
+  zoa_lambda_source_image      = var.zoa_lambda_source_image
+  zoa_runner_source_image      = var.zoa_runner_source_image
 }
 
 module "zoa_lambda" {
