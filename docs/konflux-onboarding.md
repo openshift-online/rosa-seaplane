@@ -28,6 +28,8 @@ Team reference for onboarding Seaplane container images to Konflux and keeping n
 
 Repo-specific Quay tag conventions for `platform-api` and `seaplane-operator`: [rosa-seaplane-api `docs/konflux/quay-image-tags.md`](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/konflux/quay-image-tags.md).
 
+To apply this checklist to a new `openshift-online` HyperFleet repository, use the `onboard-konflux` skill (`.claude/skills/onboard-konflux/SKILL.md`). It registers the component in `rosa-tenant`, copies the `.tekton` pipelines, and adds MintMaker config. It does not open the GitLab or GitHub merge requests unless asked.
+
 ## Onboarding checklist (per component)
 
 Copy this checklist for each new image. **Onboarded** means steps 1–5 are complete: green PR build before merge, green `main` push build after merge, and GitOps pointed at the Konflux image.
