@@ -1,6 +1,15 @@
+# registry.redhat.io requires the cluster pull secret (see templates/pull-secret.yaml).
+# ApplicationSet already injects global.cluster_name / cluster_type; this merges.
+global:
+  imagePullSecrets:
+    - name: pull-secret
+
 kube-prometheus-stack:
   nameOverride: "monitoring"
   namespaceOverride: "monitoring"
+  global:
+    imagePullSecrets:
+      - name: pull-secret
 
   crds:
     enabled: true
@@ -15,10 +24,32 @@ kube-prometheus-stack:
   # and alertmanager. All of these metrics will be forwarded into RHOBS
   alertmanager:
     enabled: false
+    # Pin anyway so a later enable does not pull quay.io.
+    alertmanagerSpec:
+      image:
+        registry: registry.redhat.io
+        repository: openshift4/ose-prometheus-alertmanager-rhel9
+        tag: v4.20.0
+        sha: d384ffd4977e0ffdf2aff5d8f8ea64b1b79b08b8fd543c8ce9b9d840fd134e22
+      version: v0.28.1
   grafana:
     enabled: false
 
+  # CMO 4.20 images. kube-prometheus-stack sha fields are digest hex only
+  # (templates prepend @sha256:). prometheusSpec.version is Prometheus
+  # semver — CMO tags are OCP versions, not Prometheus versions.
   prometheusOperator:
+    image:
+      registry: registry.redhat.io
+      repository: openshift4/ose-prometheus-rhel9-operator
+      tag: v4.20.0
+      sha: 7e5d688d1dee582dc4767d055d13a04860e2bec164193ed6d9008f5b80a89fb4
+    prometheusConfigReloader:
+      image:
+        registry: registry.redhat.io
+        repository: openshift4/ose-prometheus-config-reloader-rhel9
+        tag: v4.20.0
+        sha: 439db56f052595228d47fe82988ebec5539c48a8fe0e7480b6c184c43452a075
     admissionWebhooks:
       # During bootstrap, ArgoCD syncs itself and restarts its controllers
       # while other app syncs are in flight. If a PreSync hook Job completes
@@ -39,6 +70,12 @@ kube-prometheus-stack:
         memory: 256Mi
 
   kube-state-metrics:
+    image:
+      registry: registry.redhat.io
+      repository: openshift4/ose-kube-state-metrics-rhel9
+      tag: v4.20.0
+      # Subchart concatenates sha as-is; include the sha256: prefix.
+      sha: sha256:78f2c2e887484c4455447ae2c1eb770bbae7946e0bcfe99366506266bf7bba91
     rbac:
       extraRules:
         - apiGroups: ["hypershift.openshift.io"]
@@ -77,6 +114,11 @@ kube-prometheus-stack:
         memory: 256Mi
 
   prometheus-node-exporter:
+    image:
+      registry: registry.redhat.io
+      repository: openshift4/ose-prometheus-node-exporter-rhel9
+      tag: v4.20.0
+      digest: sha256:0d91bf8ba5d4261a97c465d9f9d14463c0b588204478077bed57b848bc45034b
     priorityClassName: system-node-critical
     tolerations:
       - operator: Exists
@@ -89,6 +131,12 @@ kube-prometheus-stack:
 
   prometheus:
     prometheusSpec:
+      image:
+        registry: registry.redhat.io
+        repository: openshift4/ose-prometheus-rhel9
+        tag: v4.20.0
+        sha: 6ed77dd79cfce5801cc15e3efdef29498cdfe88f93e857a39cbf0e37f58f0059
+      version: v3.5.0
       replicas: 2
       retention: "14d"
       retentionSize: "85GB"
