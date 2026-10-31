@@ -27,6 +27,8 @@ worker_node_ami:
   id: ami-056d5e72aa5cf51f1
 
 regional_cluster:
+  seaplane_db_deletion_protection: false
+  zoa_dynamodb_deletion_protection: false
   enable_bastion: true
   enable_cloudtrail: true
   enable_api_custom_domain: true
