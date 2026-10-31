@@ -174,3 +174,14 @@ Each `aws_config` field contains a complete AWS CLI config file with only the pr
 The ephemeral tests create AWS resources across multiple accounts. Teardown relies on `terraform destroy`, which can fail and leak resources. To clean up leaked resources, a CloudFormation-based [aws-nuke-cf](https://github.com/openshift-online/aws-nuke-cf) stack is deployed into each AWS account. It runs aws-nuke on a schedule using an in-account IAM role.
 
 See [ci/janitor/README.md](janitor/README.md) for the nuke configuration, preservation rules, and deployment instructions.
+
+## Client E2E Testing
+
+The Platform API and clientset SDK support will support a number of clients. The on-demand-e2e will trigger these client e2e tests.
+
+| client e2e   | target                 | scope                                              |
+|--------------|----------------------------------|------------------------------------------|
+| rosa cli e2e | make test-rosa-cli-e2e           | minimal, mvp, hcp CRUD                   |
+| rosa cli e2e | make test-rosa-cli-e2e-validated | comprehensive V1 test coverage in V2     |
+| rosa tf e2e  | make test-tf-cli-e2e | |
+ 
