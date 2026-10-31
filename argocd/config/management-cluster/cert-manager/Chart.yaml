@@ -5,6 +5,9 @@ type: application
 version: 0.1.0
 
 dependencies:
+  # Vendored from the Jetstack chart so we can set container command. Red Hat's
+  # all-in-one operand image has no ENTRYPOINT; OpenShift's operator sets
+  # command to /app/cmd/<component>/<component>.
   - name: cert-manager
     version: v1.19.2
-    repository: oci://quay.io/jetstack/charts
+    repository: file://upstream/cert-manager
