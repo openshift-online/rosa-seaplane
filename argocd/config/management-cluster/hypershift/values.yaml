@@ -15,4 +15,4 @@ hypershift:
 
   # Hypershift configuration
   hypershift:
-    image: quay.io/acm-d/rhtap-hypershift-operator@sha256:19d4055eb8e83378a7427688cac597d8a0c326d65524a7e124f4f9e3f1f345da
+    image: quay.io/acm-d/rhtap-hypershift-operator@sha256:56ad8cd8a5bf5e2682a03c1f971d10c93117d58d1e08257186ad51775df2b720
