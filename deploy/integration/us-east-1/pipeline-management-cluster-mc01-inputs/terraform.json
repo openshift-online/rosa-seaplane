@@ -8,7 +8,7 @@
   "region": "us-east-1",
   "alias": "mc01",
   "management_id": "mc01",
-  "regional_aws_account_id": "ssm:///infra/us-east-1/account_id",
+  "regional_aws_account_id": "ssm:///infra/us-east-1/rc/account_id",
   "zoa_lambda_image_tag": "f8fb152",
   "zoa_runner_image_tag": "f8fb152",
   "zoa_runner_source_image": "quay.io/rrp-dev-ci/zoa-runner",

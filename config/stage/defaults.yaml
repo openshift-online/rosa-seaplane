@@ -1,16 +1,6 @@
 # Stage environment defaults.
 
 aws:
-  # Account IDs are resolved from SSM parameters in the CONTROL account (where
-  # shared provisioning resources live). The RC account ID lives under the /rc/
-  # segment and each MC under /<cluster_prefix>/ (published by the internal
-  # account-config module). management_cluster_account_id falls back to the
-  # base default (ssm:///infra/<region>/<cluster_prefix>/account_id).
-  account_id: "ssm:///infra/{{ aws_region }}/rc/account_id"
-  # Stage children are minted by the internal repo, which provisions the scoped
-  # day-2 role instead of the AWS Organizations role. Pipelines assume this for
-  # both state-bucket bootstrap (hop 1) and infra apply (hop 2).
-  child_admin_role_name: "rosa-seaplane-account-admin"
   zoa_access_trusted_assumer_role_names:
     - OrganizationAccountAccessRole
   zoa_access_trusted_assumer_role_name_suffixes:
@@ -24,25 +14,12 @@ terraform_tags:
   service_phase: "stage"
   cost_center: "732"
 
-# Pin a specific AMI for all worker nodes (RC + MC), covering both the Karpenter
-# EC2NodeClass and the Terraform bootstrap node group. ami-00ad69a77c77c2a61 is a
-# RHEL EKS image bootstrapped via nodeadm. amiFamily AL2023: Karpenter generates
-# the nodeadm NodeConfig itself, including apiServerEndpoint, certificateAuthority,
-# and cidr. The image is nodeadm-compatible, so the AL2023-family bootstrap works
-# on RHEL. (A name-only Custom NodeConfig fails: nodeadm hard-fails validation with
-# "Apiserver endpoint is missing" rather than resolving it via eks:DescribeCluster.)
-worker_node_ami:
-  family: AL2023
-  id: ami-00ad69a77c77c2a61
-
 regional_cluster:
   enable_bastion: true
   enable_cloudtrail: true
   enable_api_custom_domain: true
-  node_instance_families: ["m8i", "m7i"]
   enable_sre_tools_gateway: true
   enable_sre_public_access: true
-  sre_allowed_source_cidrs: []
   enable_sre_oidc_auth: true
   sre_oidc_issuer_url: "https://auth.redhat.com/auth/realms/EmployeeIDP"
   sre_grafana_oidc_client_id: "rosa-seaplane-grafana-sre-stage-us-east-1"
@@ -55,8 +32,3 @@ cluster_lifecycle:
 
 management_cluster_defaults:
   enable_bastion: true
-  node_instance_families: ["m8i", "m7i"]
-
-observability:
-  pagerduty:
-    enabled: false

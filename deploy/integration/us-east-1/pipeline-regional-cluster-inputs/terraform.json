@@ -4,7 +4,7 @@
   "service_phase": "dev",
   "cost_center": "000",
   "environment": "integration",
-  "account_id": "ssm:///infra/us-east-1/account_id",
+  "account_id": "ssm:///infra/us-east-1/rc/account_id",
   "region": "us-east-1",
   "deployment_name": "us-east-1",
   "alias": "regional-us-east-1",
