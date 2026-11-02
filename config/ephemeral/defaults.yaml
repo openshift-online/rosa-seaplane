@@ -17,6 +17,10 @@
 deployment_name: "{{ aws_region }}{% if eph_prefix %}-{{ eph_prefix }}{% endif %}"
 
 aws:
+  # Temporary: ephemeral runs in shared CI/dev accounts, not the accounts minted
+  # here, so it keeps the pre-alignment account_id path and the Organizations role.
+  account_id: "ssm:///infra/{{ aws_region }}/account_id"
+  child_admin_role_name: "OrganizationAccountAccessRole"
   # Prow ephemeral Vault rrp-central assumes central role ci (user ci cannot assume OrgAccess).
   zoa_access_trusted_assumer_role_names:
     - OrganizationAccountAccessRole
@@ -26,17 +30,6 @@ aws:
 
 dns:
   domain: "{% if ci %}ci00{% else %}dev0{% endif %}.rosa.devshift.net"
-
-# Pin a specific AMI for all worker nodes (RC + MC), covering both the Karpenter
-# EC2NodeClass and the Terraform bootstrap node group. ami-00ad69a77c77c2a61 is a
-# RHEL EKS image bootstrapped via nodeadm. amiFamily AL2023: Karpenter generates
-# the nodeadm NodeConfig itself, including apiServerEndpoint, certificateAuthority,
-# and cidr. The image is nodeadm-compatible, so the AL2023-family bootstrap works
-# on RHEL. (A name-only Custom NodeConfig fails: nodeadm hard-fails validation with
-# "Apiserver endpoint is missing" rather than resolving it via eks:DescribeCluster.)
-worker_node_ami:
-  family: AL2023
-  id: ami-00ad69a77c77c2a61
 
 regional_cluster:
   enable_bastion: true
@@ -66,7 +59,3 @@ applications:
 management_cluster_defaults:
   enable_bastion: true
   node_instance_families: ["m8i-flex", "m7i-flex"]
-
-observability:
-  pagerduty:
-    enabled: false

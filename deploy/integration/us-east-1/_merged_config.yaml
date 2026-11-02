@@ -39,7 +39,7 @@ platform_image: "669421954122.dkr.ecr.us-east-1.amazonaws.com/rosa-seaplane-ci:7
 aws:
   # @doc aws.account_id Regional AWS account ID.
   # @used-by aws.account_id _context
-  account_id: "ssm:///infra/{{ aws_region }}/account_id"
+  account_id: "ssm:///infra/{{ aws_region }}/rc/account_id"
   # @doc aws.management_cluster_account_id Default account for MCs when entry has no account_id.
   # @used-by aws.management_cluster_account_id _context
   management_cluster_account_id: "ssm:///infra/{{ aws_region }}/{{ cluster_prefix }}/account_id"
@@ -92,14 +92,13 @@ terraform_tags:
 # @used-by worker_node_ami pipeline-management-cluster-inputs/terraform.json.j2
 # @used-by worker_node_ami pipeline-regional-cluster-inputs/terraform.json.j2
 worker_node_ami:
+  family: AL2023
+  id: ami-00ad69a77c77c2a61
 
 # @doc worker_node_root_volume_size Root EBS volume size (GiB) for worker nodes. Drives both the Karpenter EC2NodeClass and the Terraform bootstrap node group.
 # @used-by worker_node_root_volume_size _context
 # @used-by worker_node_root_volume_size pipeline-management-cluster-inputs/terraform.json.j2
 # @used-by worker_node_root_volume_size pipeline-regional-cluster-inputs/terraform.json.j2
-  family: AL2023
-  id: ami-00ad69a77c77c2a61
-
 worker_node_root_volume_size: 50
 
 regional_cluster:
