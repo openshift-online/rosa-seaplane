@@ -197,13 +197,6 @@ resolve_image_registry_account_id_from_target() {
     export IMAGE_REGISTRY_ACCOUNT_ID
 }
 
-# Switch to the cluster's target account, then resolve its local SSM parameter.
-switch_to_target_account_and_resolve_image_registry_account_id() {
-    local parameter_reference="$1"
-    use_mc_account
-    resolve_image_registry_account_id_from_target "$parameter_reference"
-}
-
 _resolve_rc_account() {
     if [ -n "$_RESOLVED_RC_ACCOUNT_ID" ]; then
         return
