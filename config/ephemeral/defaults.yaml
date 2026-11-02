@@ -28,7 +28,7 @@ dns:
   domain: "{% if ci %}ci00{% else %}dev0{% endif %}.rosa.devshift.net"
 
 # Pin a specific AMI for all worker nodes (RC + MC), covering both the Karpenter
-# EC2NodeClass and the Terraform bootstrap node group. ami-056d5e72aa5cf51f1 is a
+# EC2NodeClass and the Terraform bootstrap node group. ami-00ad69a77c77c2a61 is a
 # RHEL EKS image bootstrapped via nodeadm. amiFamily AL2023: Karpenter generates
 # the nodeadm NodeConfig itself, including apiServerEndpoint, certificateAuthority,
 # and cidr. The image is nodeadm-compatible, so the AL2023-family bootstrap works
@@ -36,7 +36,7 @@ dns:
 # "Apiserver endpoint is missing" rather than resolving it via eks:DescribeCluster.)
 worker_node_ami:
   family: AL2023
-  id: ami-056d5e72aa5cf51f1
+  id: ami-00ad69a77c77c2a61
 
 regional_cluster:
   enable_bastion: true
