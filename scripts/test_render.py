@@ -13,6 +13,7 @@
 import copy
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -3001,6 +3002,114 @@ class TestRuntimeIdentityDelivery:
         annotation = lambda resources: _resource(resources, "Deployment", "platform-api")["spec"]["template"]["metadata"]["annotations"]
         assert annotation(before)["checksum/authz-config"] != annotation(after)["checksum/authz-config"]
         assert annotation(before)["checksum/rate-limits"] == annotation(after)["checksum/rate-limits"]
+
+
+class TestTargetImageRegistrySSMResolution:
+    synthetic_registry_account_id = "123456789012"
+    parameter_reference = "ssm:///infra/image-registry/account_id"
+
+    def _run_lookup(self, tmp_path, ssm_result="", aws_status="0"):
+        trace_file = tmp_path / "aws-trace.log"
+        shell = r'''
+set -euo pipefail
+source "$PIPELINE_LIB"
+TARGET_REGION="us-west-2"
+TARGET_ACCOUNT_ID="000000000000"
+use_mc_account() {
+  printf 'switch-to-target\n' >> "$TRACE_FILE"
+  export AWS_ACCESS_KEY_ID="synthetic-target-key"
+  export AWS_SECRET_ACCESS_KEY="synthetic-target-secret"
+  export AWS_SESSION_TOKEN="synthetic-target-token"
+}
+aws() {
+  printf 'aws|%s|%s|%s|%s\n' \
+    "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN" "$*" \
+    >> "$TRACE_FILE"
+  [[ "$AWS_ACCESS_KEY_ID" == "synthetic-target-key" ]] || return 91
+  [[ "$AWS_STATUS" == "0" ]] || return "$AWS_STATUS"
+  printf '%s' "$SSM_RESULT"
+}
+if switch_to_target_account_and_resolve_image_registry_account_id "$PARAMETER_REFERENCE"; then
+  printf 'LOOKUP_OK:%s\n' "$IMAGE_REGISTRY_ACCOUNT_ID"
+else
+  printf 'LOOKUP_FAILED:%s\n' "$?"
+fi
+'''
+        env = {
+            **os.environ,
+            "PIPELINE_LIB": str(PROJECT_ROOT / "scripts/pipeline-common/lib.sh"),
+            "TRACE_FILE": str(trace_file),
+            "PARAMETER_REFERENCE": self.parameter_reference,
+            "AWS_ACCESS_KEY_ID": "synthetic-central-key",
+            "AWS_SECRET_ACCESS_KEY": "synthetic-central-secret",
+            "AWS_SESSION_TOKEN": "synthetic-central-token",
+            "AWS_STATUS": aws_status,
+            "SSM_RESULT": ssm_result,
+        }
+        result = subprocess.run(
+            ["bash", "-c", shell],
+            cwd=PROJECT_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        trace = trace_file.read_text().splitlines() if trace_file.exists() else []
+        return result, trace
+
+    def test_valid_lookup_uses_target_credentials_and_target_region(self, tmp_path):
+        result, trace = self._run_lookup(tmp_path, self.synthetic_registry_account_id)
+
+        assert result.returncode == 0
+        assert f"LOOKUP_OK:{self.synthetic_registry_account_id}" in result.stdout
+        assert trace[0] == "switch-to-target"
+        assert trace[1].startswith(
+            "aws|synthetic-target-key|synthetic-target-secret|synthetic-target-token|"
+        )
+        assert "--name /infra/image-registry/account_id" in trace[1]
+        assert "--region us-west-2" in trace[1]
+        assert "synthetic-central-key" not in trace[1]
+
+    @pytest.mark.parametrize(
+        "ssm_result,aws_status,error", [
+            ("", "254", "missing or unreadable"),
+            ("not-an-account-id", "0", "must contain a 12-digit AWS account ID"),
+        ],
+    )
+    def test_missing_or_invalid_target_parameter_fails_without_fallback(
+        self, tmp_path, ssm_result, aws_status, error
+    ):
+        result, trace = self._run_lookup(tmp_path, ssm_result, aws_status)
+
+        assert result.returncode == 0
+        assert "LOOKUP_FAILED:1" in result.stdout
+        assert error in result.stderr
+        assert "region us-west-2" in result.stderr
+        assert len(trace) == 2  # target switch followed by exactly one local lookup
+        assert trace[0] == "switch-to-target"
+        assert "synthetic-target-key" in trace[1]
+
+    def test_rc_and_mc_bootstrap_flows_resolve_after_switch_before_bootstrap(self):
+        rc = (PROJECT_ROOT / "scripts/buildspec/bootstrap-argocd-rc.sh").read_text()
+        mc = (PROJECT_ROOT / "scripts/buildspec/bootstrap-argocd-mc.sh").read_text()
+
+        for script in (rc, mc):
+            lookup = script.index("switch_to_target_account_and_resolve_image_registry_account_id")
+            assert lookup < script.index("terraform_init_backend")
+            assert lookup < script.index("\nbootstrap_argocd ")
+            assert "resolve_central_ssm_value" not in script
+            assert ".image_registry_account_id // empty" in script
+
+        assert (
+            rc.index("switch_to_target_account_and_resolve_image_registry_account_id")
+            > rc.index('if [ "${DELETE_FLAG}" == "true" ]')
+        )
+        assert (
+            mc.index("switch_to_target_account_and_resolve_image_registry_account_id")
+            > mc.index("export OIDC_KEY_READER_ROLE_ARN")
+        )
+        assert '"$RC_CONFIG_FILE"' in rc
+        assert '"$DEPLOY_CONFIG_FILE"' in mc
 
 
 if __name__ == "__main__":
