@@ -2909,7 +2909,7 @@ aws() {
   [[ "$AWS_STATUS" == "0" ]] || return "$AWS_STATUS"
   printf '%s' "$SSM_RESULT"
 }
-if switch_to_target_account_and_resolve_image_registry_account_id "$PARAMETER_REFERENCE"; then
+if use_mc_account && resolve_image_registry_account_id_from_target "$PARAMETER_REFERENCE"; then
   printf 'LOOKUP_OK:%s\n' "$IMAGE_REGISTRY_ACCOUNT_ID"
 else
   printf 'LOOKUP_FAILED:%s\n' "$?"
@@ -2974,18 +2974,20 @@ fi
         mc = (PROJECT_ROOT / "scripts/buildspec/bootstrap-argocd-mc.sh").read_text()
 
         for script in (rc, mc):
-            lookup = script.index("switch_to_target_account_and_resolve_image_registry_account_id")
-            assert lookup < script.index("terraform_init_backend")
+            account_switch = script.index("\nuse_mc_account\n")
+            lookup = script.index("resolve_image_registry_account_id_from_target", account_switch)
+            assert account_switch < lookup < script.index("terraform_init_backend")
             assert lookup < script.index("\nbootstrap_argocd ")
             assert "resolve_central_ssm_value" not in script
+            assert "switch_to_target_account_and_resolve_image_registry_account_id" not in script
             assert ".image_registry_account_id // empty" in script
 
         assert (
-            rc.index("switch_to_target_account_and_resolve_image_registry_account_id")
+            rc.index("\nuse_mc_account\n")
             > rc.index('if [ "${DELETE_FLAG}" == "true" ]')
         )
         assert (
-            mc.index("switch_to_target_account_and_resolve_image_registry_account_id")
+            mc.index("\nuse_mc_account\n")
             > mc.index("export OIDC_KEY_READER_ROLE_ARN")
         )
         assert '"$RC_CONFIG_FILE"' in rc
