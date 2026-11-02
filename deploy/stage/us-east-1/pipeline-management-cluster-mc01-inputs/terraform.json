@@ -19,7 +19,7 @@
   "zoa_lambda_api_concurrency": 50,
   "zoa_lambda_worker_concurrency": 10,
   "zoa_deployment_name": "us-east-1",
-  "worker_node_ami_id": "ami-056d5e72aa5cf51f1",
+  "worker_node_ami_id": "ami-00ad69a77c77c2a61",
   "worker_node_root_volume_size": 50,
   "enable_bastion": true
 }
