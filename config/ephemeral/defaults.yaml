@@ -47,9 +47,12 @@ regional_cluster:
   zoa_lambda_api_concurrency: -1
   zoa_lambda_worker_concurrency: -1
   zoa_lambda_access_concurrency: -1
-  zoa_lambda_image_tag: "f8fb152"
-  zoa_runner_image_tag: "f8fb152"
-  zoa_boundary_image_tag: "f8fb152"
+  # ZOA container image tags live only in config/defaults.yaml. Do not duplicate them here:
+  # render.py merges this file on top of global defaults (ephemeral wins on conflicts).
+  # Ephemeral ZOA e2e (rosa-seaplane-zoa on-demand / rosa-hyperfleet-ephemeral-e2e) injects
+  # PR-built Lambda, Runner, and Boundary images by deep-merging into config/defaults.yaml
+  # during provision (--provision-override-file). Tags in this file would pin Konflux builds
+  # and prevent testing rosa-seaplane-zoa PR images in CI.
 
 applications:
   regional-cluster:
