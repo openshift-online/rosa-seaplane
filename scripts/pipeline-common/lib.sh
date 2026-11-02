@@ -155,7 +155,6 @@ get_rc_account_id() {
 # Read SSM from the central CodeBuild account. /infra/* params live there, not in RC/MC.
 get_central_ssm_parameter() {
     local param_name="$1"
-    local region="${2:-${TARGET_REGION}}"
     AWS_ACCESS_KEY_ID="$_CENTRAL_AWS_ACCESS_KEY_ID" \
         AWS_SECRET_ACCESS_KEY="$_CENTRAL_AWS_SECRET_ACCESS_KEY" \
         AWS_SESSION_TOKEN="$_CENTRAL_AWS_SESSION_TOKEN" \
@@ -164,19 +163,45 @@ get_central_ssm_parameter() {
             --with-decryption \
             --query 'Parameter.Value' \
             --output text \
-            --region "${region}"
+            --region "${TARGET_REGION}"
 }
 
-# Resolve a whole-field SSM reference using central credentials. The registry
-# account parameter is in us-east-1; callers may pass a different SSM region.
-resolve_central_ssm_value() {
-    local value="$1"
-    local region="${2:-${TARGET_REGION}}"
-    if [[ "$value" == ssm://* ]]; then
-        get_central_ssm_parameter "${value#ssm://}" "$region"
-    else
-        echo "$value"
+# Resolve the private image registry account from the currently active target
+# account. Provision the parameter in each RC/MC account in TARGET_REGION.
+resolve_image_registry_account_id_from_target() {
+    local parameter_reference="$1"
+    local parameter_name="/infra/image-registry/account_id"
+    local account_id
+
+    if [[ "$parameter_reference" != "ssm://${parameter_name}" ]]; then
+        echo "ERROR: image_registry_account_id must reference ssm://${parameter_name}" >&2
+        return 1
     fi
+
+    if ! account_id=$(aws ssm get-parameter \
+        --name "$parameter_name" \
+        --with-decryption \
+        --query 'Parameter.Value' \
+        --output text \
+        --region "${TARGET_REGION}" 2>/dev/null); then
+        echo "ERROR: SSM parameter ${parameter_name} is missing or unreadable in the target account, region ${TARGET_REGION}" >&2
+        return 1
+    fi
+
+    if [[ ! "$account_id" =~ ^[0-9]{12}$ ]]; then
+        echo "ERROR: SSM parameter ${parameter_name} in the target account, region ${TARGET_REGION} must contain a 12-digit AWS account ID" >&2
+        return 1
+    fi
+
+    IMAGE_REGISTRY_ACCOUNT_ID="$account_id"
+    export IMAGE_REGISTRY_ACCOUNT_ID
+}
+
+# Switch to the cluster's target account, then resolve its local SSM parameter.
+switch_to_target_account_and_resolve_image_registry_account_id() {
+    local parameter_reference="$1"
+    use_mc_account
+    resolve_image_registry_account_id_from_target "$parameter_reference"
 }
 
 _resolve_rc_account() {

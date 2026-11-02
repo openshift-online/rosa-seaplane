@@ -22,16 +22,6 @@ if [ "${DELETE_FLAG}" == "true" ]; then
     exit 0
 fi
 
-# Resolve the shared registry account from central SSM before switching accounts.
-IMAGE_REGISTRY_ACCOUNT_ID=$(resolve_central_ssm_value \
-    "$(jq -r '.image_registry_account_id // empty' "$DEPLOY_CONFIG_FILE")" \
-    "us-east-1")
-if [[ ! "$IMAGE_REGISTRY_ACCOUNT_ID" =~ ^[0-9]{12}$ ]]; then
-    echo "ERROR: image_registry_account_id must resolve to a 12-digit AWS account ID" >&2
-    exit 1
-fi
-export IMAGE_REGISTRY_ACCOUNT_ID
-
 # Read RHOBS API URL from RC terraform state.
 # The RC pipeline runs in parallel — wait for the output to appear.
 _resolve_rc_account
@@ -98,6 +88,8 @@ print_provision_param_summary "MC ArgoCD bootstrap" \
     "DNS_ZONE_OPERATOR_ROLE_ARN" "RC derived" "${DNS_ZONE_OPERATOR_ROLE_ARN}" \
     "OIDC_KEY_READER_ROLE_ARN" "RC derived" "${OIDC_KEY_READER_ROLE_ARN}"
 
-use_mc_account
+# Switch to the MC account before reading its local registry-account parameter.
+switch_to_target_account_and_resolve_image_registry_account_id \
+    "$(jq -r '.image_registry_account_id // empty' "$DEPLOY_CONFIG_FILE")"
 terraform_init_backend management-cluster "${TARGET_REGION}" "${MANAGEMENT_ID}"
 bootstrap_argocd management-cluster "${TARGET_ACCOUNT_ID}"
