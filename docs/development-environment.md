@@ -23,11 +23,13 @@ Port forwarding additionally requires `aws` and `lsof`.
 By default, scripts look for account ID files in the `rosa-seaplane-internal` sibling repo:
 
 - **Ephemeral (dev)**: `../rosa-seaplane-internal/infra/accounts/dev/accounts.json`
-- **Integration**: `../rosa-seaplane-internal/infra/accounts/int/accounts.json`
+- **Integration**: `../rosa-seaplane-internal/infra/accounts/int/terragrunt-accounts.json`
 
 If you have the internal repo checked out alongside this one, no extra setup is needed.
 
-To override, set the env vars `RRP_ACCOUNTS_DEV` or `RRP_ACCOUNTS_INT` to point to a different file. The expected format is:
+To override, set the env vars `RRP_ACCOUNTS_DEV` or `RRP_ACCOUNTS_INT` to point to a different file.
+
+Ephemeral (dev) uses the flat format:
 
 ```json
 {
@@ -39,7 +41,18 @@ To override, set the env vars `RRP_ACCOUNTS_DEV` or `RRP_ACCOUNTS_INT` to point 
 }
 ```
 
-(Integration accounts omit `admin`.)
+Integration now uses the Terragrunt account snapshot (same nested structure as Stage). Account IDs live under the region, and the control account replaces `central`; the HCP account is used as the e2e customer account:
+
+```json
+{
+  "control_account_id": "<control-account-id>",
+  "us-east-1": {
+    "rc_account_id": "<rc-account-id>",
+    "mc_account_ids": { "mc01": "<mc-account-id>" },
+    "hcp_account_id": "<hcp-account-id>"
+  }
+}
+```
 
 Alternatively, set `RRP_AWS_PROFILES_PRESET=1` to skip the built-in credential setup entirely and manage your own AWS profiles (profiles must be named `rrp-ephemeral-{central,rc,mc,customer}` for ephemeral or `rrp-int-{rc,mc,customer}` for integration).
 

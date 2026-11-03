@@ -81,7 +81,7 @@ profile_for() {
 
 # Create temporary AWS config with stage profiles.
 setup_aws_config() {
-    local accounts_file="${RRP_ACCOUNTS_STAGE:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/stage/accounts.json}"
+    local accounts_file="${RRP_ACCOUNTS_STAGE:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/stage/terragrunt-accounts.json}"
     [[ -f "$accounts_file" ]] \
         || die "Account IDs file not found: $accounts_file
     Either clone rosa-seaplane-internal as a sibling directory,
@@ -103,8 +103,9 @@ setup_aws_config() {
         || die "Failed to parse ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} from $accounts_file"
     [[ "$MC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
 
-    # Customer account is optional for stage - may not be provisioned yet
-    CUSTOMER_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".customer_account_id // empty" "$accounts_file")
+    # The HCP account serves as the e2e customer account. It is optional so
+    # bastion/port-forward work even before it is minted.
+    CUSTOMER_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".hcp_account_id // empty" "$accounts_file")
 
     init_aws_config
 
