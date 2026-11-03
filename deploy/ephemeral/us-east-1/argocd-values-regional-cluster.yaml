@@ -20,6 +20,13 @@ platformApi:
   app:
     args:
       defaultClusterExpiration: ''
+  limits:
+    maxRequestBodyBytes: 10485760
+    maxRequestHeaderBytes: 16384
+    readHeaderTimeoutSeconds: 10
+    readTimeoutSeconds: 30
+    writeTimeoutSeconds: 30
+    idleTimeoutSeconds: 60
 seaplane:
   oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/account_id
 pagerduty:

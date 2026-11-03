@@ -67,6 +67,18 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.platformApi.seaplanedb.secretName | default "seaplane-db-dsn" }}
                   key: {{ .Values.platformApi.seaplanedb.secretKey | default "dsn" }}
+            - name: MAX_REQUEST_BODY_BYTES
+              value: {{ .Values.platformApi.limits.maxRequestBodyBytes | quote }}
+            - name: MAX_REQUEST_HEADER_BYTES
+              value: {{ .Values.platformApi.limits.maxRequestHeaderBytes | quote }}
+            - name: READ_HEADER_TIMEOUT_SECONDS
+              value: {{ .Values.platformApi.limits.readHeaderTimeoutSeconds | quote }}
+            - name: READ_TIMEOUT_SECONDS
+              value: {{ .Values.platformApi.limits.readTimeoutSeconds | quote }}
+            - name: WRITE_TIMEOUT_SECONDS
+              value: {{ .Values.platformApi.limits.writeTimeoutSeconds | quote }}
+            - name: IDLE_TIMEOUT_SECONDS
+              value: {{ .Values.platformApi.limits.idleTimeoutSeconds | quote }}
             {{- if .Values.platformApi.rateLimit.enabled }}
             - name: RATE_LIMIT_ENABLED
               value: "true"
