@@ -59,6 +59,34 @@ prometheus-yet-another-cloudwatch-exporter:
             nilToZero: true
             statistics: [Sum]
 
+      # Access Lambda has no Cluster tag (deployment-scoped). Name is always {regional_id}-zoa-access (= cluster_name).
+      - namespace: AWS/Lambda
+        name: {{ .Values.global.cluster_name }}-zoa-access
+        regions:
+          - {{ .Values.global.aws_region }}
+        dimensions:
+          - name: FunctionName
+            value: {{ .Values.global.cluster_name }}-zoa-access
+        period: 120
+        length: 120
+        delay: 120
+        metrics:
+          - name: Invocations
+            statistics: [Sum]
+            nilToZero: true
+          - name: Errors
+            statistics: [Sum]
+            nilToZero: true
+          - name: Throttles
+            statistics: [Sum]
+            nilToZero: true
+          - name: Duration
+            statistics: [Average, p99]
+            nilToZero: true
+          - name: ConcurrentExecutions
+            statistics: [Maximum]
+            nilToZero: true
+
     discovery:
       exportedTagsOnMetrics:
         AWS/Lambda:
@@ -66,6 +94,9 @@ prometheus-yet-another-cloudwatch-exporter:
           - HandlerMode
           - Cluster
         AWS/SQS:
+          - Component
+          - Cluster
+        ECS/ContainerInsights:
           - Component
           - Cluster
       jobs:
@@ -263,6 +294,24 @@ prometheus-yet-another-cloudwatch-exporter:
               statistics: [Maximum]
               nilToZero: true
 
+        - type: ECS/ContainerInsights
+          regions:
+            - {{ .Values.global.aws_region }}
+          searchTags:
+            - key: Component
+              value: ^zoa$
+            - key: Cluster
+              value: ^{{ .Values.global.cluster_name }}$
+          dimensionNameRequirements:
+            - ClusterName
+          period: 120
+          length: 120
+          delay: 120
+          metrics:
+            - name: TaskCount
+              statistics: [Maximum]
+              nilToZero: true
+
         - type: AWS/SQS
           regions:
             - {{ .Values.global.aws_region }}
@@ -331,6 +380,21 @@ prometheus-yet-another-cloudwatch-exporter:
             nilToZero: false
             period: 600
             length: 600
+          - name: ReaperDuration
+            statistics: [Average, p99]
+            period: 600
+            length: 600
+          - name: ReaperErrors
+            statistics: [Sum]
+            period: 600
+            length: 600
+          - name: ReaperLastRun
+            statistics: [Maximum]
+            nilToZero: false
+            period: 600
+            length: 600
+          - name: IdentityBridgeLookup
+            statistics: [Sum]
           - name: CircuitBreakerStateChange
             statistics: [Sum]
 

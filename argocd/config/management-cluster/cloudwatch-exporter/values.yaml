@@ -64,6 +64,9 @@ prometheus-yet-another-cloudwatch-exporter:
         AWS/SQS:
           - Component
           - Cluster
+        ECS/ContainerInsights:
+          - Component
+          - Cluster
       jobs:
         - type: AWS/Lambda
           regions:
@@ -110,8 +113,25 @@ prometheus-yet-another-cloudwatch-exporter:
               statistics: [Maximum]
               nilToZero: true
 
+        - type: ECS/ContainerInsights
+          regions:
+            - {{ .Values.global.aws_region }}
+          searchTags:
+            - key: Component
+              value: ^zoa$
+            - key: Cluster
+              value: ^{{ .Values.global.cluster_name }}$
+          dimensionNameRequirements:
+            - ClusterName
+          period: 120
+          length: 120
+          delay: 120
+          metrics:
+            - name: TaskCount
+              statistics: [Maximum]
+              nilToZero: true
+
     customNamespace:
-      # Job name becomes the Prometheus metric prefix (zoa_execution_count_sum, etc.).
       - name: zoa
         namespace: ZOA
         regions:
@@ -161,6 +181,21 @@ prometheus-yet-another-cloudwatch-exporter:
             nilToZero: false
             period: 600
             length: 600
+          - name: ReaperDuration
+            statistics: [Average, p99]
+            period: 600
+            length: 600
+          - name: ReaperErrors
+            statistics: [Sum]
+            period: 600
+            length: 600
+          - name: ReaperLastRun
+            statistics: [Maximum]
+            nilToZero: false
+            period: 600
+            length: 600
+          - name: IdentityBridgeLookup
+            statistics: [Sum]
           - name: CircuitBreakerStateChange
             statistics: [Sum]
 
