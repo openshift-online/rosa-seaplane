@@ -48,17 +48,19 @@ Detailed architecture and rationale for key technical decisions:
 | [Testing Strategy](design/testing-strategy.md)                                       | Ephemeral and long-lived test environments                                |
 | [Thanos Metrics Infrastructure](design/thanos-metrics-infrastructure.md)             | Thanos S3 storage, operator, and Pod Identity setup                       |
 | [ZOA Architecture](design/zoa-architecture.md)                                       | Zero Operator Access — Lambda architecture, Terraform modules, security   |
+| [C4 Architecture Model](design/c4/README.md)                                         | Interactive Structurizr C4 model of the regional architecture             |
 
 ### How-To Guides
 
-| Document                                                             | Topic                                        |
-| -------------------------------------------------------------------- | -------------------------------------------- |
-| [Provision a New Environment](environment-provisioning.md)           | Pipeline-based environment provisioning      |
-| [Provisioning a Development Environment](development-environment.md) | Ephemeral dev environments                   |
-| [Provision a Hosted Cluster](hostedcluster-provisioning.md)          | Create and access a ROSA HCP cluster         |
-| [Hosted Cluster Teardown](hostedcluster-teardown.md)                 | Admin-only manual teardown and force cleanup |
-| [Adding Alerting Rules](adding-alerting-rules.md)                    | Platform alerting and recording rules        |
-| [Konflux onboarding](konflux-onboarding.md)                          | Onboard Seaplane images to Konflux CI/CD     |
+| Document                                                             | Topic                                          |
+| -------------------------------------------------------------------- | ---------------------------------------------- |
+| [Provision a New Environment](environment-provisioning.md)           | Pipeline-based environment provisioning        |
+| [Provisioning a Development Environment](development-environment.md) | Ephemeral dev environments                     |
+| [Provision a Hosted Cluster](hostedcluster-provisioning.md)          | Create and access a ROSA HCP cluster           |
+| [Hosted Cluster Teardown](hostedcluster-teardown.md)                 | Admin-only manual teardown and force cleanup   |
+| [Adding Alerting Rules](adding-alerting-rules.md)                    | Platform alerting and recording rules          |
+| [Platform API Authorization](platform-api-authorization.md)          | Configure Cedar authorization for Platform API |
+| [Konflux onboarding](konflux-onboarding.md)                          | Onboard Seaplane images to Konflux CI/CD       |
 
 ### Reference
 
@@ -86,7 +88,7 @@ Each module has its own README with usage, inputs, outputs, and architecture:
 ### ArgoCD Helm Chart Documentation
 
 - [`seaplane`](../argocd/config/regional-cluster/seaplane/) - Seaplane Operator (postgres-based cluster lifecycle controller)
-- [`platform-api`](../argocd/config/regional-cluster/platform-api/README.md) - Platform API with Envoy sidecar
+- [`platform-api`](../argocd/config/regional-cluster/platform-api/README.md) - Platform API
 - [`thanos`](../argocd/config/regional-cluster/thanos/) - Thanos platform resources (CRs, S3 secret, Pod Identity SA, ALB TargetGroupBinding) plus app-of-apps Application that installs the upstream operator
 - [`thanos-operator`](../argocd/config/regional-cluster/thanos-operator/) - Thin wrapper chart that delivers the Thanos operator via OCI-packaged Helm subchart
 
