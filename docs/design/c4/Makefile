@@ -32,12 +32,20 @@ MERMAID_IMG     ?= docker.io/minlag/mermaid-cli
 # Machine's VM maps "container root" differently (not back to the host user
 # via virtiofs), so --user 0:0 there breaks writes instead of fixing them —
 # `uname` is checked (not just ENGINE) since both setups report `podman`.
+# Docker (rootful on Linux CI runners and Docker Desktop) has no such
+# wrinkle: it doesn't userns-remap by default, so container UID 0 really is
+# host root and can write into the host-owned bind mount regardless of its
+# ownership/permissions. --user 0:0 is therefore applied unconditionally for
+# Docker (this is what unblocks `make ENGINE=docker static` on GitHub
+# Actions runners, which run as a non-root, non-65532 `runner` user).
 ifeq ($(ENGINE),podman)
 ifeq ($(shell uname),Linux)
 STRUCTURIZR_USER_FLAGS := --user 0:0
 else
 STRUCTURIZR_USER_FLAGS :=
 endif
+else ifeq ($(ENGINE),docker)
+STRUCTURIZR_USER_FLAGS := --user 0:0
 else
 STRUCTURIZR_USER_FLAGS :=
 endif
