@@ -100,8 +100,8 @@ spec:
                   oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
               rateLimit:
                 redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
-            # HyperFleet Operator values (keys must match chart's values.yaml structure)
-            hyperfleet:
+            # Seaplane Operator values (keys must match chart's values.yaml structure)
+            seaplane:
               oidcS3Bucket: '{{ .metadata.annotations.oidc_bucket_name }}'
               oidcIssuerBaseUrl: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
             # Thanos Operator values (keys must match chart's values.yaml structure)
@@ -162,7 +162,6 @@ spec:
         ref: values
 
 ---
-
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -236,9 +235,7 @@ spec:
               aws_region: '{{ .metadata.labels.aws_region }}'
               cluster_name: '{{ .metadata.labels.cluster_name }}'
               aws_account_id: '{{ .metadata.annotations.aws_account_id }}'
-
               rc_aws_account_id: '{{ .metadata.annotations.rc_aws_account_id }}'
-
               management_clusters: '{{ .metadata.annotations.management_clusters }}'
               rhobs_api_url: '{{ .metadata.annotations.rhobs_api_url }}'
               dns_zone_operator_role_arn: '{{ .metadata.annotations.dns_zone_operator_role_arn }}'

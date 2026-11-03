@@ -6,22 +6,11 @@
 # Region: {{ aws_region }}
 {%- set pinned = git.revision if (git.revision and git.revision != "main") else "" %}
 # Config Revision: {{ pinned[:8] if pinned else "metadata.annotations.git_revision" }}
-{#- Go-template {{ if }} cannot sit in a YAML list; cert-manager gets its own ApplicationSet. -#}
-{%- set ns = namespace(appsets=[{'name': 'root-applicationset', 'include_cm': false, 'cm_only': false, 'exclude_cm': false}]) %}
-{%- if cluster_type == 'management-cluster' %}
-{%- set ns.appsets = [
-  {'name': 'root-applicationset', 'include_cm': false, 'cm_only': false, 'exclude_cm': true},
-  {'name': 'cert-manager-applicationset', 'include_cm': true, 'cm_only': true, 'exclude_cm': false},
-] %}
-{%- endif %}
-{% for app in ns.appsets -%}
-{% if not loop.first %}
----
-{% endif %}
+
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: {{ app.name }}
+  name: root-applicationset
   namespace: argocd
 spec:
   goTemplate: true
@@ -34,15 +23,11 @@ spec:
               argocd.argoproj.io/secret-type: cluster
       - git:
           directories:
-{%- if app.cm_only %}
-          - path: argocd/config/management-cluster/cert-manager
-{%- else %}
           - path: argocd/config/{{ '{{ .metadata.labels.cluster_type }}' }}/*
           - path: argocd/config/shared/*
-{%- if app.exclude_cm %}
+{%- if cluster_type == 'management-cluster' %}
           - path: argocd/config/management-cluster/cert-manager
             exclude: true
-{%- endif %}
 {%- endif %}
           repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
           revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
@@ -175,15 +160,164 @@ spec:
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-{%- if app.include_cm %}
+      - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
+        targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
+        ref: values
+{% if cluster_type == 'management-cluster' %}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cert-manager-applicationset
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+  - matrix:
+      generators:
+      - clusters:
+          selector:
+            matchLabels:
+              argocd.argoproj.io/secret-type: cluster
+      - git:
+          directories:
+          - path: argocd/config/management-cluster/cert-manager
+          repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
+          revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
+  template:
+    metadata:
+      name: '{{ '{{ .path.basename }}' }}'
+      labels:
+        cluster_type: '{{ '{{ .metadata.labels.cluster_type }}' }}'
+        environment: '{{ '{{ .metadata.labels.environment }}' }}'
+        region_deployment: '{{ '{{ .metadata.labels.region_deployment }}' }}'
+        aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
+    spec:
+      project: default
+      destination:
+        namespace: '{{ '{{ .path.basename }}' }}'
+        server: '{{ '{{ .server }}' }}'
+      # --- Workaround: LBC webhook TLS cert drift (argoproj/argo-cd#5202, aws-load-balancer-controller#1828) ---
+      ignoreDifferences:
+      - kind: Secret
+        name: aws-load-balancer-tls
+        jsonPointers:
+        - /data
+      - group: admissionregistration.k8s.io
+        kind: MutatingWebhookConfiguration
+        jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions:
+        - .webhooks[].clientConfig.caBundle
+      # --- End workaround ---
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        retry:
+          limit: -1
+          refresh: true
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 1m
+        syncOptions:
+        - ServerSideApply=true
+        - CreateNamespace=true
+      sources:
+      - helm:
+          valueFiles:
+          - values.yaml
+          - $values/deploy/{{ '{{ .metadata.labels.environment }}' }}/{{ '{{ .metadata.labels.region_deployment }}' }}/argocd-values-{{ '{{ .metadata.labels.cluster_type }}' }}.yaml
+          valuesObject:
+            global:
+              cluster_type: '{{ '{{ .metadata.labels.cluster_type }}' }}'
+              environment: '{{ '{{ .metadata.labels.environment }}' }}'
+              aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
+              cluster_name: '{{ '{{ .metadata.labels.cluster_name }}' }}'
+              aws_account_id: '{{ '{{ .metadata.annotations.aws_account_id }}' }}'
+              rc_aws_account_id: '{{ '{{ .metadata.annotations.rc_aws_account_id }}' }}'
+              management_clusters: '{{ '{{ .metadata.annotations.management_clusters }}' }}'
+              rhobs_api_url: '{{ '{{ .metadata.annotations.rhobs_api_url }}' }}'
+              dns_zone_operator_role_arn: '{{ '{{ .metadata.annotations.dns_zone_operator_role_arn }}' }}'
+              oidc_key_reader_role_arn: '{{ '{{ .metadata.annotations.oidc_key_reader_role_arn }}' }}'
+              git_revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
+            platformApi:
+              targetGroup:
+                arn: '{{ '{{ .metadata.annotations.api_target_group_arn }}' }}'
+              app:
+                args:
+                  dynamodbRegion: '{{ '{{ .metadata.annotations.dynamodb_region }}' }}'
+                  dynamodbPrefix: '{{ '{{ .metadata.annotations.dynamodb_prefix }}' }}'
+                  oidcIssuerBaseURL: 'https://{{ '{{ .metadata.annotations.oidc_cloudfront_domain }}' }}'
+              rateLimit:
+                redisEndpoint: '{{ '{{ .metadata.annotations.redis_endpoint }}' }}'
+            # Seaplane Operator values (keys must match chart's values.yaml structure)
+            seaplane:
+              oidcS3Bucket: '{{ '{{ .metadata.annotations.oidc_bucket_name }}' }}'
+              oidcIssuerBaseUrl: 'https://{{ '{{ .metadata.annotations.oidc_cloudfront_domain }}' }}'
+            # Thanos Operator values (keys must match chart's values.yaml structure)
+            thanos:
+              kmsKeyArn: '{{ '{{ .metadata.annotations.thanos_kms_key_arn }}' }}'
+              targetGroup:
+                arn: '{{ '{{ .metadata.annotations.thanos_target_group_arn }}' }}'
+              queryTargetGroup:
+                arn: '{{ '{{ .metadata.annotations.thanos_query_target_group_arn }}' }}'
+              # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
+              sre:
+                targetGroup:
+                  arn: '{{ '{{ .metadata.annotations.sre_thanos_target_group_arn }}' }}'
+            # Loki platform values (keys must match chart's values.yaml structure)
+            platform:
+              kmsKeyArn: '{{ '{{ .metadata.annotations.loki_kms_key_arn }}' }}'
+              distributorTargetGroup:
+                arn: '{{ '{{ .metadata.annotations.loki_distributor_target_group_arn }}' }}'
+              queryFrontendTargetGroup:
+                arn: '{{ '{{ .metadata.annotations.loki_query_frontend_target_group_arn }}' }}'
+            # Loki subchart runtime values (bucket names, region, SSE-KMS)
+            loki:
+              loki:
+                storage:
+                  s3:
+                    region: '{{ '{{ .metadata.labels.aws_region }}' }}'
+                    sse:
+                      type: SSE-KMS
+                      kms_key_id: '{{ '{{ .metadata.annotations.loki_kms_key_arn }}' }}'
+                  bucketNames:
+                    chunks: '{{ '{{ .metadata.labels.cluster_name }}' }}-loki-logs-{{ '{{ .metadata.annotations.aws_account_id }}' }}'
+                    ruler: '{{ '{{ .metadata.labels.cluster_name }}' }}-loki-logs-{{ '{{ .metadata.annotations.aws_account_id }}' }}'
+            # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
+            grafana:
+              sre:
+                targetGroup:
+                  arn: '{{ '{{ .metadata.annotations.sre_grafana_target_group_arn }}' }}'
+            argo-cd:
+              sre:
+                targetGroup:
+                  arn: '{{ '{{ .metadata.annotations.sre_argocd_target_group_arn }}' }}'
+            monitoring:
+              sre:
+                targetGroup:
+                  arn: '{{ '{{ .metadata.annotations.sre_prometheus_target_group_arn }}' }}'
+            aws-load-balancer-controller:
+              clusterName: '{{ '{{ .metadata.labels.cluster_name }}' }}'
+              vpcId: '{{ '{{ .metadata.annotations.vpc_id }}' }}'
+            karpenter:
+              settings:
+                clusterName: '{{ '{{ .metadata.labels.cluster_name }}' }}'
+                interruptionQueue: '{{ '{{ .metadata.labels.cluster_name }}' }}-karpenter'
+        path: '{{ '{{ .path.path }}' }}'
+        repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
+        targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
       # Jetstack operand from the cert-manager git submodule + command patches.
       # Wrapper Helm source above still supplies ClusterIssuer and the pull-secret.
       - path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
         kustomize: {}
-{%- endif %}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
-{% endfor %}
+{% endif %}
