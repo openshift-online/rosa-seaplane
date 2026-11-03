@@ -26,6 +26,7 @@ from yaml_utils import deep_merge, load_and_merge
 PROVISION_TIMEOUT = 3600  # seconds (1 hour); total time for provisioning
 TEARDOWN_TIMEOUT = 3600  # seconds (1 hour); total time for teardown
 PURGE_TIMEOUT = 600  # seconds (10 min); budget for cluster/bundle purge before infra teardown
+RC_DUMP_TIMEOUT = 900  # seconds (15 min); budget for the on-failure RC must-gather dump
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +130,7 @@ class EphemeralEnvOrchestrator:
             self._provision_impl(save_rc_state, save_mc_state)
         except Exception:
             self._operation_failed = True
+            self._dump_rc_on_failure()
             raise
         finally:
             self._log_provision_timing_summary()
@@ -489,6 +491,61 @@ class EphemeralEnvOrchestrator:
         self._codebuild_logs_collected = True
         log.info("CodeBuild artifact directory: %s", artifact_path)
         return artifact_path
+
+    def _dump_rc_on_failure(self):
+        """Best-effort on-cluster dump of the RC after a failed provision.
+
+        Pipeline (CodeBuild) logs only show what the provisioner saw from the
+        outside. When provisioning fails because an in-cluster component never
+        becomes ready (e.g. platform-api), the pipeline log cannot explain why.
+        This collects the RC must-gather (pod logs, ArgoCD apps, DB/DynamoDB
+        state) via the log-collector ECS task so there is something to inspect.
+
+        Mirrors the e2e failure hook in ci/e2e-tests.sh: the dump is left in S3
+        (S3_ONLY=true) rather than published to public Prow artifacts, because it
+        may contain sensitive data that cannot be reliably redacted. The S3
+        retrieval command is printed to the logs by dump-env.sh.
+
+        Never raises — collecting diagnostics must not mask the original failure.
+        """
+        # AWS setup is the first provisioning step; without it no profiles are
+        # configured and nothing has been provisioned yet, so there is nothing
+        # on-cluster to dump.
+        if self.aws is None:
+            log.warning("Skipping RC dump: AWS credentials were not set up")
+            return
+
+        dump_script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "dump-env.sh"
+        if not dump_script.exists():
+            log.warning("Skipping RC dump: script not found at %s", dump_script)
+            return
+
+        log.info("")
+        log.info("==========================================")
+        log.info("Provision failed: collecting RC must-gather")
+        log.info("==========================================")
+
+        env = os.environ.copy()
+        env["CLUSTER_PREFIX"] = f"{self.eph_prefix}-"
+        env["S3_ONLY"] = "true"
+        if self.region:
+            env["AWS_REGION"] = self.region
+            env["AWS_DEFAULT_REGION"] = self.region
+        self.aws._forward_config_env(env)
+
+        try:
+            subprocess.run(
+                ["/bin/bash", str(dump_script), "regional"],
+                env=env,
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                text=True,
+                timeout=RC_DUMP_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("RC dump timed out after %ds", RC_DUMP_TIMEOUT)
+        except Exception:
+            log.exception("RC dump failed")
 
     def _setup_aws(self):
         """Set up AWS credentials and trust policies."""

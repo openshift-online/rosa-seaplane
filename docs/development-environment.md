@@ -359,7 +359,10 @@ make ephemeral-dump-env CLUSTER=mc
 make ephemeral-dump-env ID=6bd2d3d7
 ```
 
-Output is written to `/tmp/<eph-prefix>-logs-<timestamp>/`. The RC output includes a `db-state/` subdirectory with the database dump. In CI, data is automatically collected on e2e test failure with `S3_ONLY=true` — results are left in S3 (to avoid publishing sensitive data) and the S3 URIs are printed for manual retrieval.
+Output is written to `/tmp/<eph-prefix>-logs-<timestamp>/`. The RC output includes a `db-state/` subdirectory with the database dump. In CI, data is automatically collected with `S3_ONLY=true` — results are left in S3 (to avoid publishing sensitive data) and the S3 URIs are printed for manual retrieval — in two cases:
+
+- **e2e test failure** (`ci/e2e-tests.sh`) — dumps the RC and all MCs.
+- **provision failure** (`ci/ephemeral-provider`) — dumps the RC only, so an in-cluster failure (e.g. platform-api never becoming ready) can be diagnosed when the pipeline logs alone are not enough.
 
 > ⚠️ _Bastion must be enabled in your environment config (`enable_bastion: true` in `defaults.yaml`). The default ephemeral preset already has it enabled._
 
