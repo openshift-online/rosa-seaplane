@@ -49,3 +49,14 @@ meta.helm.sh/release-name: {{ .Release.Name }}
 meta.helm.sh/release-namespace: {{ .Release.Namespace }}
 argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
 {{- end }}
+
+{{/*
+Red Hat Thanos operand (CMO ose-thanos-rhel9). Operator builds
+image as baseImage:version and sets args (query, receive, ...).
+*/}}
+{{- define "thanos.operandImage" -}}
+baseImage: {{ .Values.image.repository | quote }}
+version: {{ .Values.image.tag | quote }}
+imagePullSecrets:
+  - name: pull-secret
+{{- end }}
