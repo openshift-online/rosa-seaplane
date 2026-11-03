@@ -241,3 +241,67 @@ def test_cli_saves_region_without_zoa_enablement_metadata(tmp_path, monkeypatch,
     assert operation.call_args.kwargs["save_rc_state"] == str(output_path)
     assert (tmp_path / "region").read_text() == "us-east-1"
     assert not (tmp_path / "zoa-enabled").exists()
+
+
+def test_provision_failure_triggers_rc_dump():
+    env = make_env()
+    env.aws = Mock()
+    env._provision_impl = Mock(side_effect=RuntimeError("platform-api never became ready"))
+    env._log_provision_timing_summary = Mock()
+
+    captured = {}
+
+    def run(command, **kwargs):
+        captured["command"] = command
+        captured["env"] = kwargs.get("env", {})
+        return subprocess.CompletedProcess(command, 0)
+
+    with patch("orchestrator.subprocess.run", side_effect=run) as run_mock:
+        with pytest.raises(RuntimeError, match="platform-api never became ready"):
+            env.provision()
+
+    run_mock.assert_called_once()
+    assert captured["command"][0] == "/bin/bash"
+    assert captured["command"][1].endswith("scripts/dev/dump-env.sh")
+    assert captured["command"][2] == "regional"
+    assert captured["env"]["CLUSTER_PREFIX"] == "eph-test-"
+    assert captured["env"]["S3_ONLY"] == "true"
+    assert captured["env"]["AWS_REGION"] == "us-east-1"
+
+
+def test_resume_failure_does_not_trigger_rc_dump():
+    env = make_env()
+    env.aws = Mock()
+    env._resume_impl = Mock(side_effect=RuntimeError("boom"))
+    env._log_provision_timing_summary = Mock()
+
+    with patch("orchestrator.subprocess.run") as run_mock:
+        with pytest.raises(RuntimeError, match="boom"):
+            env.resume()
+
+    run_mock.assert_not_called()
+
+
+def test_rc_dump_failure_does_not_mask_provision_error():
+    env = make_env()
+    env.aws = Mock()
+    env._provision_impl = Mock(side_effect=RuntimeError("original failure"))
+    env._log_provision_timing_summary = Mock()
+
+    # The dump itself blows up; the original provisioning error must still surface.
+    with patch("orchestrator.subprocess.run", side_effect=OSError("ecs run-task failed")):
+        with pytest.raises(RuntimeError, match="original failure"):
+            env.provision()
+
+
+def test_rc_dump_skipped_without_aws_setup():
+    env = make_env()
+    env.aws = None
+    env._provision_impl = Mock(side_effect=RuntimeError("failed before aws setup"))
+    env._log_provision_timing_summary = Mock()
+
+    with patch("orchestrator.subprocess.run") as run_mock:
+        with pytest.raises(RuntimeError, match="failed before aws setup"):
+            env.provision()
+
+    run_mock.assert_not_called()
