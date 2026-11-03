@@ -133,7 +133,7 @@ HELM_LINT_SET := --set global.aws_region=us-east-1 --set global.environment=lint
 helm-lint: ## Lint all Helm charts
 	@echo "🔍 Linting Helm charts..."
 	@failed=false; \
-	for chart_dir in $$(find argocd/config -name "Chart.yaml" -exec dirname {} \; | sort); do \
+	for chart_dir in $$(find argocd/config -name "Chart.yaml" -not -path "*/jetstack-chart/*" -not -path "*/upstream/*" -exec dirname {} \; | sort); do \
 		echo "   Linting $$chart_dir"; \
 		if ! helm lint $$chart_dir $(HELM_LINT_SET); then \
 			failed=true; \

@@ -1,12 +1,16 @@
-# Inflate the upstream Jetstack chart and patch container command.
-# The RH operand image has no ENTRYPOINT; chart args would otherwise be exec'd
-# as the binary. Drop these patches if the Jetstack chart grows a command value.
+# Inflate the Jetstack chart from the cert-manager git submodule (upstream @
+# v1.19.2) and patch container command. The RH operand image has no ENTRYPOINT;
+# chart args would otherwise be exec'd as the binary. Drop these patches if the
+# Jetstack chart grows a command value.
+#
+# The git tree ships Chart.template.yaml, not a packaged Chart.yaml, so
+# helmCharts uses jetstack-chart/ (our Chart.yaml + symlinks into the submodule).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+helmGlobals:
+  chartHome: .
 helmCharts:
-  - name: cert-manager
-    repo: oci://quay.io/jetstack/charts
-    version: v1.19.2
+  - name: jetstack-chart
     releaseName: cert-manager
     namespace: cert-manager
     includeCRDs: true

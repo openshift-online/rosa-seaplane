@@ -1,4 +1,4 @@
-# Values for the upstream Jetstack chart (oci://quay.io/jetstack/charts).
+# Values for the Jetstack chart (git submodule upstream @ v1.19.2).
 # Container command is not a chart value; see patches/.
 
 crds:

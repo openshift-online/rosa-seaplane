@@ -168,6 +168,8 @@ argo-cd:
   configs:
     params:
       server.insecure: false
+      # cert-manager pulls the Jetstack chart via git submodule.
+      reposerver.enable.git.submodule: true
     cm:
       # cert-manager inflates the Jetstack chart via kustomize helmCharts so
       # command can be patched without vendoring. Harmless for other apps;
