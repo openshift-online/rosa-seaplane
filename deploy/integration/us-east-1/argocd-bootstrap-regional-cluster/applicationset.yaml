@@ -153,6 +153,14 @@ spec:
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
+      {{ if eq .path.basename "cert-manager" }}
+      # Jetstack operand + command patches (kustomization.yaml). Wrapper Helm
+      # source above still supplies ClusterIssuer and the pull-secret.
+      - path: '{{ .path.path }}'
+        repoURL: '{{ .metadata.annotations.git_repo }}'
+        targetRevision: '{{ .metadata.annotations.git_revision }}'
+        kustomize: {}
+      {{ end }}
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values

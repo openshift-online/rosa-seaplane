@@ -1,0 +1,17 @@
+# Inflate the upstream Jetstack chart and patch container command.
+# The RH operand image has no ENTRYPOINT; chart args would otherwise be exec'd
+# as the binary. Drop these patches if the Jetstack chart grows a command value.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+helmCharts:
+  - name: cert-manager
+    repo: oci://quay.io/jetstack/charts
+    version: v1.19.2
+    releaseName: cert-manager
+    namespace: cert-manager
+    includeCRDs: true
+    valuesFile: jetstack-values.yaml
+patches:
+  - path: patches/controller-command.yaml
+  - path: patches/webhook-command.yaml
+  - path: patches/cainjector-command.yaml

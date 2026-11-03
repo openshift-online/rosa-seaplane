@@ -168,6 +168,11 @@ argo-cd:
   configs:
     params:
       server.insecure: false
+    cm:
+      # cert-manager inflates the Jetstack chart via kustomize helmCharts so
+      # command can be patched without vendoring. Harmless for other apps;
+      # none of them are kustomize sources today.
+      kustomize.buildOptions: --enable-helm
 
   # SRE UI ALB — injected at runtime by ApplicationSet; empty when ALB is not deployed
   sre:
