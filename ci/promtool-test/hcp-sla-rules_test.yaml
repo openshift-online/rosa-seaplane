@@ -93,7 +93,8 @@ tests:
         alertname: HCPAvailabilityErrorBudgetSlowBurn
         exp_alerts: []
 
-  # Fast burn alert is SUPPRESSED during initial install (never been available, under grace period)
+  # Fast burn still evaluates during initial install. Notification
+  # suppression is an Alertmanager silence, not this expression.
   - interval: 1m
     input_series:
       - series: 'kube_customresource_hostedcluster_status_condition{type="KubeAPIServerAvailable", status="True", cluster_type="management-cluster", namespace="clusters-test", name="test-hcp", cluster="mc-1"}'
@@ -103,10 +104,20 @@ tests:
     alert_rule_test:
       - eval_time: 6m
         alertname: HCPAvailabilityErrorBudgetFastBurn
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              long_window: 5m
+              short_window: 2m
+              namespace: clusters-test
+              name: test-hcp
+              cluster: mc-1
+            exp_annotations:
+              summary: "HCP availability error budget burning fast"
+              description: "HostedCluster test-hcp in namespace clusters-test on cluster mc-1 is consuming its 30-day availability error budget at 14.4x the sustainable rate."
 
-  # Fast burn alert stays SUPPRESSED even when install exceeds grace period
-  # (cluster is still installing — HCPInstallTimeout15m handles this case)
+  # Fast burn still evaluates after the install grace period.
+  # HCPInstallTimeout15m is a separate alert and stays exempt from the install silence.
   - interval: 1m
     input_series:
       - series: 'kube_customresource_hostedcluster_status_condition{type="KubeAPIServerAvailable", status="True", cluster_type="management-cluster", namespace="clusters-test", name="test-hcp", cluster="mc-1"}'
@@ -116,7 +127,17 @@ tests:
     alert_rule_test:
       - eval_time: 6m
         alertname: HCPAvailabilityErrorBudgetFastBurn
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              long_window: 5m
+              short_window: 2m
+              namespace: clusters-test
+              name: test-hcp
+              cluster: mc-1
+            exp_annotations:
+              summary: "HCP availability error budget burning fast"
+              description: "HostedCluster test-hcp in namespace clusters-test on cluster mc-1 is consuming its 30-day availability error budget at 14.4x the sustainable rate."
 
   # HCPInstallTimeout15m fires when cluster has never been available for > 900s
   - interval: 1m
@@ -148,7 +169,8 @@ tests:
         alertname: HCPInstallTimeout15m
         exp_alerts: []
 
-  # Fast burn alert is SUPPRESSED during cluster deletion
+  # Fast burn still evaluates during cluster deletion. Notification
+  # suppression is an Alertmanager silence, not this expression.
   - interval: 1m
     input_series:
       - series: 'kube_customresource_hostedcluster_status_condition{type="KubeAPIServerAvailable", status="True", cluster_type="management-cluster", namespace="clusters-test", name="test-hcp", cluster="mc-1"}'
@@ -158,4 +180,39 @@ tests:
     alert_rule_test:
       - eval_time: 6m
         alertname: HCPAvailabilityErrorBudgetFastBurn
-        exp_alerts: []
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              long_window: 5m
+              short_window: 2m
+              namespace: clusters-test
+              name: test-hcp
+              cluster: mc-1
+            exp_annotations:
+              summary: "HCP availability error budget burning fast"
+              description: "HostedCluster test-hcp in namespace clusters-test on cluster mc-1 is consuming its 30-day availability error budget at 14.4x the sustainable rate."
+
+  # Slow burn still evaluates when install and delete series are present.
+  # Notification suppression is an Alertmanager silence, not this expression.
+  - interval: 1m
+    input_series:
+      - series: 'kube_customresource_hostedcluster_status_condition{type="KubeAPIServerAvailable", status="True", cluster_type="management-cluster", namespace="clusters-test", name="test-hcp", cluster="mc-1"}'
+        values: "0x35"
+      - series: 'hypershift_cluster_waiting_initial_availability_duration_seconds{exported_namespace="clusters-test", name="test-hcp", cluster="mc-1", cluster_type="management-cluster"}'
+        values: "60+60x34"
+      - series: 'hypershift_cluster_deleting_duration_seconds{exported_namespace="clusters-test", name="test-hcp", cluster="mc-1", cluster_type="management-cluster"}'
+        values: "30+30x34"
+    alert_rule_test:
+      - eval_time: 32m
+        alertname: HCPAvailabilityErrorBudgetSlowBurn
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              long_window: 30m
+              short_window: 5m
+              namespace: clusters-test
+              name: test-hcp
+              cluster: mc-1
+            exp_annotations:
+              summary: "HCP availability error budget burning steadily"
+              description: "HostedCluster test-hcp in namespace clusters-test on cluster mc-1 is consuming its 30-day availability error budget at 6x the sustainable rate."

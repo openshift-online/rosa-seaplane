@@ -29,7 +29,9 @@ spec:
 
         # Clusters that have never been available.
         # Stops being emitted once HasBeenAvailable annotation is set.
-        # label_replace maps exported_namespace → namespace for join.
+        # label_replace maps exported_namespace → namespace.
+        # Kept for HCPInstallTimeout15m and the MC/RC health dashboards.
+        # SLA burn alerts do not join this series.
         - record: hcp:lifecycle_installing
           expr: |
             label_replace(
@@ -38,6 +40,8 @@ spec:
             )
 
         # Clusters actively being deleted.
+        # label_replace maps exported_namespace → namespace.
+        # Kept for the MC/RC health dashboards. SLA burn alerts do not join this series.
         - record: hcp:lifecycle_deleting
           expr: |
             label_replace(

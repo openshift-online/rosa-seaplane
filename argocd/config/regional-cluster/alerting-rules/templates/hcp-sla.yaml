@@ -14,6 +14,11 @@ spec:
   groups:
     - name: hcp-availability-alerts
       rules:
+        # Burn-rate expressions are SLO logic only. Install and delete
+        # notification suppression is Alertmanager silences from the
+        # hyperfleet-operator silence reconciler, matched on namespace
+        # and name. HCPInstallTimeout15m stays exempt during install.
+        #
         # Fast burn: detects severe outages within ~6 minutes.
         # Long window (5m) detects the problem; short window (2m)
         # confirms the issue is still active.
@@ -24,7 +29,6 @@ spec:
               and
               (1 - avg_over_time(hcp:hostedcluster_available[2m])) > (14.4 * (1 - {{ .Values.sla.hcpAvailability.target }}))
             )
-            unless on(namespace, name, cluster) (hcp:lifecycle_installing or hcp:lifecycle_deleting)
           for: 1m
           labels:
             severity: warning
@@ -48,7 +52,6 @@ spec:
               and
               (1 - avg_over_time(hcp:hostedcluster_available[5m])) > (6 * (1 - {{ .Values.sla.hcpAvailability.target }}))
             )
-            unless on(namespace, name, cluster) (hcp:lifecycle_installing or hcp:lifecycle_deleting)
           for: 2m
           labels:
             severity: warning

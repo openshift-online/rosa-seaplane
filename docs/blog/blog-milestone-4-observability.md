@@ -166,14 +166,14 @@ Combined with YACE exposing AWS metrics, this means an SRE can investigate infra
 
 ### HCP Availability Monitoring
 
-HCP availability is derived from the `KubeAPIServerAvailable` status condition on HostedCluster CRs, exported by kube-state-metrics CustomResourceState on Management Clusters and remote-written to Thanos on the RC. A recording rule (`hcp:hostedcluster_available`) converts this into a 0/1 gauge, with lifecycle-aware exclusions for clusters that are installing or being deleted. This feeds the SLA burn-rate alerts and HCP Health dashboards. External synthetic monitoring (probing customer API endpoints from outside the cluster) is planned as future work.
+HCP availability is derived from the `KubeAPIServerAvailable` status condition on HostedCluster CRs, exported by kube-state-metrics CustomResourceState on Management Clusters and remote-written to Thanos on the RC. A recording rule (`hcp:hostedcluster_available`) converts this into a 0/1 gauge. That gauge feeds the SLA burn-rate alerts. Install and delete notification suppression is Alertmanager silences, not a PromQL exclusion. The HCP Health dashboards still use lifecycle recording rules to separate installing and deleting clusters from unavailable ones. External synthetic monitoring (probing customer API endpoints from outside the cluster) is planned as future work.
 
 ### End-to-End Testing
 
 Observability is validated at two levels:
 
 - **E2E tests** query Thanos and Loki through the RHOBS API Gateway (the same SigV4-authenticated path used by production consumers) to validate that metrics and logs from both RC and MC are flowing through the full pipeline. These tests verify CloudWatch exporter metrics, Vector sink metrics, Loki distributor metrics, and log presence by `cluster_type` — covering the entire cross-account path end-to-end.
-- **Alerting rule unit tests** run `promtool test rules` in CI against every `PrometheusRule` CR, validating recording rule logic, alert firing conditions, and lifecycle suppression behavior.
+- **Alerting rule unit tests** run `promtool test rules` in CI against every `PrometheusRule` CR, validating recording rule logic and alert firing conditions. Install and delete suppression is Alertmanager behavior, not part of the PromQL under test.
 
 We also plan to run these same end-to-end tests as pre-merge checks in upstream repos, like hypershift-operator, so upstream teams can catch observability regressions before they ship.
 
