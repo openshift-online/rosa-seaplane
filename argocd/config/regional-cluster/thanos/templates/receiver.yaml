@@ -9,7 +9,6 @@ metadata:
   annotations:
     {{- include "thanos-operator.annotations" . | nindent 4 }}
 spec:
-  {{- include "thanos.operandImage" . | nindent 2 }}
   ingesterSpec:
     defaultObjectStorageConfig:
       name: {{ .Values.objectStore.secretName }}
@@ -22,6 +21,7 @@ spec:
     {{- end }}
     hashrings:
       - name: default
+        {{- include "thanos.operandImage" . | nindent 8 }}
         replicas: {{ .Values.receive.replicas }}
         tsdbConfig:
           retention: {{ .Values.receive.retention }}
@@ -40,6 +40,7 @@ spec:
           storageClass: {{ .Values.receive.storage.storageClass }}
           {{- end }}
   routerSpec:
+    {{- include "thanos.operandImage" . | nindent 4 }}
     replicas: {{ .Values.receive.router.replicas | default 1 }}
     replicationFactor: {{ .Values.receive.replicationFactor }}
     resourceRequirements:

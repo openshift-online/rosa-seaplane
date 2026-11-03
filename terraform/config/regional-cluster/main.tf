@@ -139,9 +139,9 @@ locals {
 # deployed — individual feature modules should NOT create their own ESO
 # pod identity associations.
 #
-# parameter/infra/* is the Red Hat registry pull-secret (and other
-# account-wide infra params). MC ESO already has this path; without it
-# RC cannot pull registry.redhat.io.
+# /infra/pull-secret is the Red Hat registry credential. MC ESO can
+# already read parameter/infra/*; RC needs this exact parameter to pull
+# registry.redhat.io.
 # =============================================================================
 
 resource "aws_iam_role" "external_secrets_operator" {
@@ -185,7 +185,7 @@ resource "aws_iam_role_policy" "eso_ssm" {
       ]
       Resource = [
         "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.regional_id}/*",
-        "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/infra/*",
+        "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/infra/pull-secret",
       ]
     }]
   })
