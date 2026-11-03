@@ -88,7 +88,7 @@ setup_aws_config() {
     or set RRP_ACCOUNTS_STAGE to point to your accounts JSON file.
     See docs/development-environment.md for details."
 
-    # Stage accounts.json has a different structure than int:
+    # Stage and int share the Terragrunt account snapshot structure:
     # - control_account_id (not "central")
     # - Account IDs are nested under region: us-east-1.rc_account_id, us-east-1.mc_account_ids.mc01
     CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
