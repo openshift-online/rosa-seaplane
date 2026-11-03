@@ -88,9 +88,9 @@ setup_aws_config() {
     or set RRP_ACCOUNTS_STAGE to point to your accounts JSON file.
     See docs/development-environment.md for details."
 
-    # Stage and int share the Terragrunt account snapshot structure:
-    # - control_account_id (not "central")
-    # - Account IDs are nested under region: us-east-1.rc_account_id, us-east-1.mc_account_ids.mc01
+    # Account IDs are nested under region (us-east-1.rc_account_id,
+    # us-east-1.mc_account_ids.mc01, us-east-1.hcp_account_id); the control
+    # account is at the top level under control_account_id.
     CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
         || die "Failed to parse control_account_id from $accounts_file"
     [[ "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
@@ -109,8 +109,8 @@ setup_aws_config() {
 
     init_aws_config
 
-    # Stage uses rosa-seaplane-account-admin role (minted by internal repo)
-    # instead of OrganizationAccountAccessRole
+    # Child accounts are accessed via the rosa-seaplane-account-admin role
+    # (minted by the internal repo).
     cat > "$AWS_CONFIG_FILE" <<AWSCFG
 [profile rrp-stage-admin]
 credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rosa-hyperfleet-stage-admin

@@ -9,9 +9,6 @@
 #
 # The script constructs a temporary AWS config with the int profiles.
 # Account IDs default to rosa-seaplane-internal; override with RRP_ACCOUNTS_INT.
-#
-# Integration now uses the Terragrunt account snapshot (terragrunt-accounts.json)
-# with the rosa-seaplane-account-admin role, matching the Stage environment.
 
 set -euo pipefail
 
@@ -91,11 +88,9 @@ setup_aws_config() {
     or set RRP_ACCOUNTS_INT to point to your accounts JSON file.
     See docs/development-environment.md for details."
 
-    # Integration now uses the Terragrunt account snapshot, which has the same
-    # nested structure as Stage:
-    # - control_account_id (not "central")
-    # - Account IDs are nested under region: us-east-1.rc_account_id,
-    #   us-east-1.mc_account_ids.mc01, us-east-1.hcp_account_id
+    # Account IDs are nested under region (us-east-1.rc_account_id,
+    # us-east-1.mc_account_ids.mc01, us-east-1.hcp_account_id); the control
+    # account is at the top level under control_account_id.
     CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
         || die "Failed to parse control_account_id from $accounts_file"
     [[ "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
@@ -108,14 +103,12 @@ setup_aws_config() {
         || die "Failed to parse ${INT_REGION}.mc_account_ids.${MC_CLUSTER} from $accounts_file"
     [[ "$MC_ACCOUNT" != "null" ]] || die "Missing ${INT_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
 
-    # The HCP account serves as the e2e customer account in Integration. It is
-    # optional so bastion/port-forward work even before it is minted.
+    # The HCP account serves as the e2e customer account. It is optional so
+    # bastion/port-forward work even before it is minted.
     CUSTOMER_ACCOUNT=$(jq -r ".\"${INT_REGION}\".hcp_account_id // empty" "$accounts_file")
 
     init_aws_config
 
-    # Integration now uses the rosa-seaplane-account-admin role (minted by the
-    # internal repo) instead of OrganizationAccountAccessRole.
     cat > "$AWS_CONFIG_FILE" <<AWSCFG
 [profile rrp-int-admin]
 credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rosa-hyperfleet-int-admin
