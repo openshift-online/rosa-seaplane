@@ -153,16 +153,16 @@ regional_cluster:
   sre_oidc_issuer_url: "https://auth.redhat.com/auth/realms/EmployeeIDP"
   # @doc regional_cluster.sre_grafana_oidc_client_id OIDC client ID for Grafana. Required when enable_sre_oidc_auth is true.
   # @used-by regional_cluster.sre_grafana_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
-  sre_grafana_oidc_client_id: "rosa-seaplane-grafana-sre-stage-us-east-1"
+  sre_grafana_oidc_client_id: "rosa-seaplane-grafana-sre-stg0-us-east-1"
   # @doc regional_cluster.sre_argocd_oidc_client_id OIDC client ID for ArgoCD. Required when enable_sre_oidc_auth is true.
   # @used-by regional_cluster.sre_argocd_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
-  sre_argocd_oidc_client_id: "rosa-seaplane-argocd-sre-stage-us-east-1"
+  sre_argocd_oidc_client_id: "rosa-seaplane-argocd-sre-stg0-us-east-1"
   # @doc regional_cluster.sre_prometheus_oidc_client_id OIDC client ID for Prometheus. Required when enable_sre_oidc_auth is true.
   # @used-by regional_cluster.sre_prometheus_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
-  sre_prometheus_oidc_client_id: "rosa-seaplane-prometheus-sre-stage-us-east-1"
+  sre_prometheus_oidc_client_id: "rosa-seaplane-prometheus-sre-stg0-us-east-1"
   # @doc regional_cluster.sre_thanos_oidc_client_id OIDC client ID for Thanos. Required when enable_sre_oidc_auth is true.
   # @used-by regional_cluster.sre_thanos_oidc_client_id pipeline-regional-cluster-inputs/terraform.json.j2
-  sre_thanos_oidc_client_id: "rosa-seaplane-thanos-sre-stage-us-east-1"
+  sre_thanos_oidc_client_id: "rosa-seaplane-thanos-sre-stg0-us-east-1"
   # @doc regional_cluster.zoa_lambda_image_tag Immutable tag for the ZOA Lambda image. Defaults to a known-good Konflux on-push build. Override via --provision-override-file for ephemeral e2e with a CI-built tag (e.g. ci-<PR>-<BUILD_ID>).
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
