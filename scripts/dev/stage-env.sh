@@ -93,15 +93,15 @@ setup_aws_config() {
     # account is at the top level under control_account_id.
     CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
         || die "Failed to parse control_account_id from $accounts_file"
-    [[ "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
+    [[ -n "$CENTRAL_ACCOUNT" && "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
 
     RC_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".rc_account_id" "$accounts_file") \
         || die "Failed to parse ${STAGE_REGION}.rc_account_id from $accounts_file"
-    [[ "$RC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.rc_account_id in $accounts_file"
+    [[ -n "$RC_ACCOUNT" && "$RC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.rc_account_id in $accounts_file"
 
     MC_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".mc_account_ids.${MC_CLUSTER}" "$accounts_file") \
         || die "Failed to parse ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} from $accounts_file"
-    [[ "$MC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
+    [[ -n "$MC_ACCOUNT" && "$MC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
 
     # The HCP account serves as the e2e customer account. It is optional so
     # bastion/port-forward work even before it is minted.
