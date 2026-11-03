@@ -6,11 +6,22 @@
 # Region: {{ aws_region }}
 {%- set pinned = git.revision if (git.revision and git.revision != "main") else "" %}
 # Config Revision: {{ pinned[:8] if pinned else "metadata.annotations.git_revision" }}
-
+{#- Go-template {{ if }} cannot sit in a YAML list; cert-manager gets its own ApplicationSet. -#}
+{%- set ns = namespace(appsets=[{'name': 'root-applicationset', 'include_cm': false, 'cm_only': false, 'exclude_cm': false}]) %}
+{%- if cluster_type == 'management-cluster' %}
+{%- set ns.appsets = [
+  {'name': 'root-applicationset', 'include_cm': false, 'cm_only': false, 'exclude_cm': true},
+  {'name': 'cert-manager-applicationset', 'include_cm': true, 'cm_only': true, 'exclude_cm': false},
+] %}
+{%- endif %}
+{% for app in ns.appsets -%}
+{% if not loop.first %}
+---
+{% endif %}
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: root-applicationset
+  name: {{ app.name }}
   namespace: argocd
 spec:
   goTemplate: true
@@ -23,8 +34,16 @@ spec:
               argocd.argoproj.io/secret-type: cluster
       - git:
           directories:
+{%- if app.cm_only %}
+          - path: argocd/config/management-cluster/cert-manager
+{%- else %}
           - path: argocd/config/{{ '{{ .metadata.labels.cluster_type }}' }}/*
           - path: argocd/config/shared/*
+{%- if app.exclude_cm %}
+          - path: argocd/config/management-cluster/cert-manager
+            exclude: true
+{%- endif %}
+{%- endif %}
           repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
           revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
   template:
@@ -156,14 +175,15 @@ spec:
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-      {{ '{{ if eq .path.basename "cert-manager" }}' }}
+{%- if app.include_cm %}
       # Jetstack operand from the cert-manager git submodule + command patches.
       # Wrapper Helm source above still supplies ClusterIssuer and the pull-secret.
       - path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
         kustomize: {}
-      {{ '{{ end }}' }}
+{%- endif %}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
+{% endfor %}

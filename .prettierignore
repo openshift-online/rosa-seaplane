@@ -1,0 +1,3 @@
+# Jetstack cert-manager git submodule. Not ours to format; check-docs
+# would otherwise fail on upstream READMEs.
+/argocd/config/management-cluster/cert-manager/upstream/

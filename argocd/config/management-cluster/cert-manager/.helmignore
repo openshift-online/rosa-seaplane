@@ -1,0 +1,8 @@
+# Wrapper chart is ClusterIssuer + pull-secret only. The Jetstack operand
+# lives next door and is inflated by kustomize helmCharts, not Helm deps.
+jetstack-chart/
+upstream/
+patches/
+kustomization.yaml
+jetstack-values.yaml
+.git/
