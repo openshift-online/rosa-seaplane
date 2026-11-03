@@ -45,8 +45,8 @@ The **ROSA Seaplane** is a strategic redesign of Red Hat OpenShift Service on AW
 
 Work for the ROSA Seaplane is tracked in Jira under two parent Outcomes:
 
-- **[HPSTRAT-62](https://redhat.atlassian.net/browse/HPSTRAT-62)** ("Red Hat Cloud Data Sovereignty"): Feature-driven work covering the regional platform build-out (architecture, infrastructure, services, tooling).
-- **[HPSTRAT-11](https://redhat.atlassian.net/browse/HPSTRAT-11)** ("FedRAMP Moderate Technical Delivery"): Compliance work covering FedRAMP security controls, audit requirements, and certification readiness.
+- **[HPSTRAT-62](https://redhat.atlassian.net/browse/HPSTRAT-62)** ("ROSA V2 (Seaplane) - FedRAMP Class C Assessment"): The FedRAMP Class C minimum viable product (Class C baseline + HCP on EKS) — platform readiness, security/compliance controls, evidence collection, and operational readiness required for Class C certification. Completion requires certification, not GA of the broader V2 offering.
+- **[HPSTRAT-758](https://redhat.atlassian.net/browse/HPSTRAT-758)** ("ROSA V2 (Seaplane) - Greenfield General Availability"): Feature-driven work to bring the regional platform to GA for new (greenfield) cluster deployments.
 
 Day-to-day engineering tasks (epics, stories, bugs) live in the **ROSAENG** project under the **[ROSA] Seaplane** team (`customfield_10001`, id `0c538cd9-152b-49f6-ad7c-e2fa2f865809`).
 
