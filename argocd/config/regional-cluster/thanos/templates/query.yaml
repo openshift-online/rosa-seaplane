@@ -9,6 +9,7 @@ metadata:
   annotations:
     {{- include "thanos-operator.annotations" . | nindent 4 }}
 spec:
+  {{- include "thanos.operandImage" . | nindent 2 }}
   replicas: {{ .Values.query.replicas | default 2 }}
   replicaLabels:
     - prometheus_replica
@@ -22,6 +23,7 @@ spec:
       memory: {{ .Values.query.resources.limits.memory }}
   # Query will auto-discover stores via operator labels
   queryFrontend:
+    {{- include "thanos.operandImage" . | nindent 4 }}
     replicas: {{ .Values.query.frontend.replicas | default 1 }}
     resourceRequirements:
       requests:

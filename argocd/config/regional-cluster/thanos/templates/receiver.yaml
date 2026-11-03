@@ -9,6 +9,7 @@ metadata:
   annotations:
     {{- include "thanos-operator.annotations" . | nindent 4 }}
 spec:
+  {{- include "thanos.operandImage" . | nindent 2 }}
   ingesterSpec:
     defaultObjectStorageConfig:
       name: {{ .Values.objectStore.secretName }}
