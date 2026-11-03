@@ -81,49 +81,79 @@ profile_for() {
 
 # Create temporary AWS config with int profiles.
 setup_aws_config() {
-    local accounts_file="${RRP_ACCOUNTS_INT:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/int/accounts.json}"
+    local accounts_file="${RRP_ACCOUNTS_INT:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/int/terragrunt-accounts.json}"
     [[ -f "$accounts_file" ]] \
         || die "Account IDs file not found: $accounts_file
     Either clone rosa-seaplane-internal as a sibling directory,
     or set RRP_ACCOUNTS_INT to point to your accounts JSON file.
     See docs/development-environment.md for details."
-    load_accounts "$accounts_file" central rc mc customer
+
+    # Account IDs are nested under region (us-east-1.rc_account_id,
+    # us-east-1.mc_account_ids.mc01, us-east-1.hcp_account_id); the control
+    # account is at the top level under control_account_id.
+    CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
+        || die "Failed to parse control_account_id from $accounts_file"
+    [[ -n "$CENTRAL_ACCOUNT" && "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
+
+    RC_ACCOUNT=$(jq -r ".\"${INT_REGION}\".rc_account_id" "$accounts_file") \
+        || die "Failed to parse ${INT_REGION}.rc_account_id from $accounts_file"
+    [[ -n "$RC_ACCOUNT" && "$RC_ACCOUNT" != "null" ]] || die "Missing ${INT_REGION}.rc_account_id in $accounts_file"
+
+    MC_ACCOUNT=$(jq -r ".\"${INT_REGION}\".mc_account_ids.${MC_CLUSTER}" "$accounts_file") \
+        || die "Failed to parse ${INT_REGION}.mc_account_ids.${MC_CLUSTER} from $accounts_file"
+    [[ -n "$MC_ACCOUNT" && "$MC_ACCOUNT" != "null" ]] || die "Missing ${INT_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
+
+    # The HCP account serves as the e2e customer account. It is optional so
+    # bastion/port-forward work even before it is minted.
+    CUSTOMER_ACCOUNT=$(jq -r ".\"${INT_REGION}\".hcp_account_id // empty" "$accounts_file")
+
     init_aws_config
 
     cat > "$AWS_CONFIG_FILE" <<AWSCFG
 [profile rrp-int-admin]
-credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rrp-int-admin
+credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rosa-hyperfleet-int-admin
 region = ${INT_REGION}
 duration_seconds = 3600
 
 [profile rrp-int-rc]
-role_arn = arn:aws:iam::${RC_ACCOUNT}:role/OrganizationAccountAccessRole
+role_arn = arn:aws:iam::${RC_ACCOUNT}:role/rosa-seaplane-account-admin
 source_profile = rrp-int-admin
 region = ${INT_REGION}
 duration_seconds = 3600
 
 [profile rrp-int-mc]
-role_arn = arn:aws:iam::${MC_ACCOUNT}:role/OrganizationAccountAccessRole
-source_profile = rrp-int-admin
-region = ${INT_REGION}
-duration_seconds = 3600
-
-[profile rrp-int-customer]
-role_arn = arn:aws:iam::${CUSTOMER_ACCOUNT}:role/OrganizationAccountAccessRole
+role_arn = arn:aws:iam::${MC_ACCOUNT}:role/rosa-seaplane-account-admin
 source_profile = rrp-int-admin
 region = ${INT_REGION}
 duration_seconds = 3600
 AWSCFG
+
+    # Add customer profile only if the HCP (customer) account exists.
+    if [[ -n "$CUSTOMER_ACCOUNT" ]]; then
+        cat >> "$AWS_CONFIG_FILE" <<AWSCFG
+
+[profile rrp-int-customer]
+role_arn = arn:aws:iam::${CUSTOMER_ACCOUNT}:role/rosa-seaplane-account-admin
+source_profile = rrp-int-admin
+region = ${INT_REGION}
+duration_seconds = 3600
+AWSCFG
+    fi
 
     echo "AWS config written to: $AWS_CONFIG_FILE"
 }
 
 # Resolve int profiles to static container credentials.
 write_int_container_config() {
-    write_container_config \
-        "rrp-int-rc rrp-rc ${INT_REGION}" \
-        "rrp-int-mc rrp-mc ${INT_REGION}" \
-        "rrp-int-customer rrp-customer ${INT_REGION}"
+    local profiles=(
+        "rrp-int-rc rrp-rc ${INT_REGION}"
+        "rrp-int-mc rrp-mc ${INT_REGION}"
+    )
+    # Add customer profile only if the HCP (customer) account exists.
+    if [[ -n "${CUSTOMER_ACCOUNT:-}" ]]; then
+        profiles+=("rrp-int-customer rrp-customer ${INT_REGION}")
+    fi
+    write_container_config "${profiles[@]}"
 }
 
 # =============================================================================

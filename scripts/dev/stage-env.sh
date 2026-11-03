@@ -81,35 +81,36 @@ profile_for() {
 
 # Create temporary AWS config with stage profiles.
 setup_aws_config() {
-    local accounts_file="${RRP_ACCOUNTS_STAGE:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/stage/accounts.json}"
+    local accounts_file="${RRP_ACCOUNTS_STAGE:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/stage/terragrunt-accounts.json}"
     [[ -f "$accounts_file" ]] \
         || die "Account IDs file not found: $accounts_file
     Either clone rosa-seaplane-internal as a sibling directory,
     or set RRP_ACCOUNTS_STAGE to point to your accounts JSON file.
     See docs/development-environment.md for details."
 
-    # Stage accounts.json has a different structure than int:
-    # - control_account_id (not "central")
-    # - Account IDs are nested under region: us-east-1.rc_account_id, us-east-1.mc_account_ids.mc01
+    # Account IDs are nested under region (us-east-1.rc_account_id,
+    # us-east-1.mc_account_ids.mc01, us-east-1.hcp_account_id); the control
+    # account is at the top level under control_account_id.
     CENTRAL_ACCOUNT=$(jq -r '.control_account_id' "$accounts_file") \
         || die "Failed to parse control_account_id from $accounts_file"
-    [[ "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
+    [[ -n "$CENTRAL_ACCOUNT" && "$CENTRAL_ACCOUNT" != "null" ]] || die "Missing control_account_id in $accounts_file"
 
     RC_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".rc_account_id" "$accounts_file") \
         || die "Failed to parse ${STAGE_REGION}.rc_account_id from $accounts_file"
-    [[ "$RC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.rc_account_id in $accounts_file"
+    [[ -n "$RC_ACCOUNT" && "$RC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.rc_account_id in $accounts_file"
 
     MC_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".mc_account_ids.${MC_CLUSTER}" "$accounts_file") \
         || die "Failed to parse ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} from $accounts_file"
-    [[ "$MC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
+    [[ -n "$MC_ACCOUNT" && "$MC_ACCOUNT" != "null" ]] || die "Missing ${STAGE_REGION}.mc_account_ids.${MC_CLUSTER} in $accounts_file"
 
-    # Customer account is optional for stage - may not be provisioned yet
-    CUSTOMER_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".customer_account_id // empty" "$accounts_file")
+    # The HCP account serves as the e2e customer account. It is optional so
+    # bastion/port-forward work even before it is minted.
+    CUSTOMER_ACCOUNT=$(jq -r ".\"${STAGE_REGION}\".hcp_account_id // empty" "$accounts_file")
 
     init_aws_config
 
-    # Stage uses rosa-seaplane-account-admin role (minted by internal repo)
-    # instead of OrganizationAccountAccessRole
+    # Child accounts are accessed via the rosa-seaplane-account-admin role
+    # (minted by the internal repo).
     cat > "$AWS_CONFIG_FILE" <<AWSCFG
 [profile rrp-stage-admin]
 credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rosa-hyperfleet-stage-admin
