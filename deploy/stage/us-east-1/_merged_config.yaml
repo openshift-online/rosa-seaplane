@@ -265,6 +265,9 @@ applications:
       enabled: "{{ management_cluster_defaults.enable_ecr_creds_sync }}"
       ecrRepository: ""
       awsRegion: "{{ aws_region }}"
+      # @doc applications.management-cluster.ecrCredsSync.sourceSecrets Comma-separated Secret names in each HCP namespace that ecr-creds-sync merges before writing ECR credentials to pull-secret. Must match applications.regional-cluster.seaplane.ecrMirror.baseSecretName so that ESO (which writes base-pull-secret) and ecr-creds-sync (which reads it and writes pull-secret) do not conflict. Required when ecrMirror is enabled; leave empty otherwise.
+      # @used-by applications.management-cluster.ecrCredsSync.sourceSecrets _context
+      sourceSecrets: ""
     eksNodePool:
       # @doc applications.management-cluster.eksNodePool.instanceFamilies Instance families for the MC Karpenter NodePool.
       # @used-by applications.management-cluster.eksNodePool.instanceFamilies _context
@@ -344,6 +347,15 @@ applications:
         writeTimeoutSeconds: 30          # starts after headers are read; includes handler time
         idleTimeoutSeconds: 60
     seaplane:
+      ecrMirror:
+        # @doc applications.regional-cluster.seaplane.ecrMirror Seaplane Operator ECR mirror configuration. When enabled, injects ECR_MIRROR_* env vars into the operator so it populates imageContentSources on every HostedCluster and redirects the ESO pull-secret target to baseSecretName. All fields including baseSecretName are required when enabled: without baseSecretName, ESO writes directly to pull-secret and ecr-creds-sync overwrites it, losing the SSM credentials. Set applications.management-cluster.ecrCredsSync.sourceSecrets to the same value as baseSecretName. Must be set explicitly per environment; intentionally decoupled from management_cluster_defaults.enable_ecr_creds_sync so that enabling credential sync alone does not activate the mirror with incomplete configuration.
+        # @used-by applications.regional-cluster.seaplane.ecrMirror _context
+        enabled: false
+        registryAccount: ""
+        registryRegion: "{{ aws_region }}"
+        repository: ""
+        sources: ""
+        baseSecretName: ""
       # @doc applications.regional-cluster.seaplane.oidcS3Bucket S3 bucket name the Seaplane Operator writes OIDC discovery documents to.
       # @used-by applications.regional-cluster.seaplane.oidcS3Bucket _context
       # NOTE: This value is overridden in the ApplicationSet valuesObject (config/templates/argocd-bootstrap/applicationset.yaml.j2)

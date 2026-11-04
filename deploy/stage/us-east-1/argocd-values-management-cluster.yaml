@@ -9,6 +9,7 @@ ecrCredsSync:
   enabled: false
   ecrRepository: ''
   awsRegion: us-east-1
+  sourceSecrets: ''
 eksNodePool:
   instanceFamilies:
   - m8i

@@ -70,7 +70,6 @@ spec:
     [[registry]]
     prefix = "{{ .sourcePrefix }}"
     location = "{{ .sourcePrefix }}"
-    mirror-by-digest-only = true
 
     [[registry.mirror]]
     location = "{{ .registryUri }}"

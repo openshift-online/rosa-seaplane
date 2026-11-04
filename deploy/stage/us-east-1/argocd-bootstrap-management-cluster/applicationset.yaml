@@ -91,6 +91,14 @@ spec:
             seaplane:
               oidcS3Bucket: '{{ .metadata.annotations.oidc_bucket_name }}'
               oidcIssuerBaseUrl: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
+              helmValues:
+                ecrMirror:
+                  enabled: False
+                  registryAccount: ""
+                  registryRegion: ""
+                  repository: ""
+                  sources: ""
+                  baseSecretName: ""
             # Thanos Operator values (keys must match chart's values.yaml structure)
             thanos:
               kmsKeyArn: '{{ .metadata.annotations.thanos_kms_key_arn }}'
