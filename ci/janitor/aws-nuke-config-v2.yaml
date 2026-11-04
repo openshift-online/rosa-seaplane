@@ -45,13 +45,21 @@ presets:
         - property: tag:app
           value: "app-sre-infra"
 
-      # Non-taggable IAM sub-resources of the admin and janitor roles.
+      # Non-taggable IAM sub-resources of roles we must keep (minted admin + janitor
+      # roles, the control-account minter, and external SSO/admin identities).
       IAMRolePolicy:
         - property: RoleName
           value: "rosa-seaplane-account-admin"
         - property: RoleName
           type: glob
           value: "rosa-seaplane-aws-nuke-*"
+        - property: RoleName
+          value: "rosa-seaplane-control-account-minter"
+        - property: RoleName
+          value: "rh-aws-saml-login"
+        - property: RoleName
+          type: glob
+          value: "*-rosa-hyperfleet-*-admin"
       IAMRolePolicyAttachment:
         - property: RoleName
           value: "rosa-seaplane-account-admin"
@@ -63,6 +71,14 @@ presets:
         - property: RoleName
           type: glob
           value: "AWSServiceRoleFor*"
+        - property: RoleName
+          value: "rh-aws-saml-login"
+        - property: RoleName
+          type: glob
+          value: "*-rosa-hyperfleet-*-admin"
+        - property: RoleName
+          type: glob
+          value: "rosa-hyperfleet-*-control"
 
       # Non-taggable janitor schedule target and its CodeBuild log group.
       CloudWatchEventsTarget:
@@ -72,12 +88,31 @@ presets:
         - type: contains
           value: "/aws/codebuild/rosa-seaplane-aws-nuke-"
 
-      # Untagged AWS-managed identities.
+      # Untagged AWS-managed and external access identities (SSO login, org access,
+      # service-linked roles, and the control-account admin/control roles).
       IAMRole:
         - "OrganizationAccountAccessRole"
+        - "rh-aws-saml-login"
         - property: Path
           type: glob
           value: "/aws-service-role/*"
+        - property: Name
+          type: glob
+          value: "*-rosa-hyperfleet-*-admin"
+        - property: Name
+          type: glob
+          value: "rosa-hyperfleet-*-control"
+      # External identity federation providers (SSO/SAML), never tagged by us.
+      IAMSAMLProvider:
+        - property: Name
+          type: glob
+          value: "*"
+      # Platform DNS zones. Ours are tagged aws-nuke=skip, this is belt-and-braces
+      # for the control-account hosted zone since losing it breaks delegation.
+      Route53HostedZone:
+        - property: Name
+          type: glob
+          value: "*.rosa.devshift.*"
 
       # Service-managed / undeletable resources that would stall a pass.
       CloudWatchEventsRule:
