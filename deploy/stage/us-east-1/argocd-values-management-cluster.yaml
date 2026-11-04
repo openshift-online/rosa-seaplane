@@ -5,6 +5,10 @@
 # Environment: stage
 # Region: us-east-1
 
+ecrCredsSync:
+  enabled: false
+  ecrRepository: ''
+  awsRegion: us-east-1
 eksNodePool:
   instanceFamilies:
   - m8i

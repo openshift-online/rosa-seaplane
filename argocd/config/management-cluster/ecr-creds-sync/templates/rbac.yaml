@@ -1,0 +1,26 @@
+{{- if .Values.ecrCredsSync.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ecr-creds-sync
+rules:
+- apiGroups: [hypershift.openshift.io]
+  resources: [hostedclusters]
+  verbs: [get, list, watch]
+- apiGroups: [""]
+  resources: [secrets]
+  verbs: [get, list, watch, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ecr-creds-sync
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ecr-creds-sync
+subjects:
+- kind: ServiceAccount
+  name: ecr-creds-sync
+  namespace: hypershift
+{{- end }}
