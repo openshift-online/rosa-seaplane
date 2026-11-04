@@ -89,6 +89,8 @@ presets:
       # are not taggable, so keep those by user name.
       IAMUser:
         - "terraform"
+        - "e2e"
+        - "chai-bot-s3-reader"
       IAMUserAccessKey:
         - property: UserName
           value: "e2e"
