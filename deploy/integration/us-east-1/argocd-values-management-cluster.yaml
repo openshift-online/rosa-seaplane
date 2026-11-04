@@ -17,6 +17,9 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
+  ecrMirror:
+    enabled: false
+    mirrors: []
 hypershift:
   oidcStorageS3Bucket:
     name: hypershift-mc-us-east-1

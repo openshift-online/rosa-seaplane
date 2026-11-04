@@ -7,6 +7,16 @@
 # as pull-secrets into each HCP namespace.
 # =============================================================================
 
+locals {
+  common_tags = merge(
+    var.tags,
+    {
+      function = "ecr-creds-sync"
+      module   = "ecr-creds-sync"
+    }
+  )
+}
+
 resource "aws_iam_role" "ecr_creds_sync" {
   name        = "${var.management_id}-ecr-creds-sync"
   description = "Pod Identity role for ecr-creds-sync to call ecr:GetAuthorizationToken"
@@ -25,9 +35,9 @@ resource "aws_iam_role" "ecr_creds_sync" {
     }]
   })
 
-  tags = {
+  tags = merge(local.common_tags, {
     Name = "${var.management_id}-ecr-creds-sync"
-  }
+  })
 }
 
 resource "aws_iam_role_policy" "ecr_get_auth_token" {

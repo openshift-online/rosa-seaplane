@@ -17,6 +17,25 @@ eksNodePool:
   # Root volume size, applied to the EC2NodeClass when `ami` is set. The default
   # Bottlerocket path uses Karpenter's own device defaults.
   rootVolumeSize: 50Gi
+  # ecrMirror configures CRI-O to redirect image pulls to ECR. Only effective
+  # when a custom AMI (rhel-bootc/AL2023 with CRI-O) is in use; ignored on the
+  # default Bottlerocket path.
+  #
+  # Each entry in mirrors must have:
+  #   sourcePrefix — the exact source repository URI to redirect
+  #                  (e.g. quay.io/openshift-release-dev/ocp-v5.0-art-dev)
+  #   registryUri  — the ECR repository URI to redirect to
+  #                  (e.g. account.dkr.ecr.region.amazonaws.com/openshift-release-dev/ocp-v5.0-art-dev)
+  #
+  # sourcePrefix and registryUri must be at the same path depth so that CRI-O
+  # constructs the correct mirror URI with no path duplication.
+  ecrMirror:
+    enabled: false
+    mirrors: []
+    # Example:
+    # mirrors:
+    #   - sourcePrefix: quay.io/openshift-release-dev/ocp-v5.0-art-dev
+    #     registryUri: account.dkr.ecr.us-east-1.amazonaws.com/openshift-release-dev/ocp-v5.0-art-dev
 
 global:
   cluster_name: ""

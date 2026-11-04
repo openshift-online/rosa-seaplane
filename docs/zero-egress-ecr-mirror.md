@@ -7,18 +7,22 @@ pulls to a private ECR registry and keeps the registry credentials fresh.
 
 ## Architecture
 
-Two components work together:
+Three components work together:
 
 ```
 seaplane-operator (RC)
   └── sets HostedCluster.spec.imageContentSources
         └── HyperShift generates /etc/containers/registries.conf on nodes
-              └── CRI-O redirects pulls to ECR mirror
+              └── CRI-O redirects dataplane pulls to ECR mirror
 
 ecr-creds-sync (MC)
   └── calls ecr:GetAuthorizationToken via Pod Identity
         └── writes pull-secret in each HCP namespace
               └── ignition server embeds credentials in node boot config
+
+Karpenter EC2NodeClass userData (MC)
+  └── writes /etc/containers/registries.conf.d/ecr-mirror.conf at node boot
+        └── CRI-O on MC nodes redirects HCP control plane pulls to ECR mirror
 ```
 
 **imageContentSources** tells CRI-O on each dataplane node which source
@@ -29,6 +33,13 @@ and stored in the HostedCluster object on the MC.
 tokens are valid for 12 hours). It writes the token as the `pull-secret` in
 each HostedCluster namespace on the MC. HyperShift's ignition server uses this
 secret when generating the boot configuration for new nodes.
+
+**EC2NodeClass userData** injects a CRI-O drop-in configuration on each MC
+worker node at boot time, redirecting pulls for HCP control plane component
+images from `quay.io` to the ECR mirror. This covers images pulled by the MC
+nodes themselves (HCP pods), as opposed to dataplane nodes which are covered
+by imageContentSources. MC nodes authenticate to ECR via their IAM instance
+profile — no token refresh is needed.
 
 ## Coordination with External Secrets Operator
 
@@ -109,6 +120,50 @@ controller only needs `ecr:GetAuthorizationToken`, which is an IAM action
 evaluated in the caller's own account and does not require an ECR resource
 policy.
 
+### Step 3 — EC2NodeClass userData: MC control plane image redirect
+
+The Karpenter EC2NodeClass for MC worker nodes can be configured to redirect
+HCP control plane image pulls from `quay.io` to ECR at node boot. This applies
+only to nodes booted with a custom AMI (rhel-bootc/CRI-O); the default
+Bottlerocket path is not affected.
+
+**Enable via config** (`config/<env>/defaults.yaml`) alongside Step 2:
+
+```yaml
+applications:
+  management-cluster:
+    eksNodePool:
+      ecrMirror:
+        mirrors:
+          - sourcePrefix: source-registry.example.com/org/component-images
+            registryUri: <account>.dkr.ecr.<region>.amazonaws.com/org/component-images
+          - sourcePrefix: source-registry.example.com/org/release-image
+            registryUri: <account>.dkr.ecr.<region>.amazonaws.com/org/component-images
+```
+
+The `enabled` flag is derived automatically from
+`management_cluster_defaults.enable_ecr_creds_sync` — no separate flag needed.
+
+Each `mirrors` entry pairs a `sourcePrefix` (the exact source repository URI)
+with a `registryUri` (the ECR repository URI). Both must be at the same path
+depth: CRI-O appends the remainder of the image reference after the matched
+prefix to the mirror URI, so a mismatch in depth produces an incorrect path.
+
+**What this does:**
+
+At node boot, a shellscript in the MIME multipart userData writes
+`/etc/containers/registries.conf.d/ecr-mirror.conf` with a CRI-O mirror entry,
+then restarts CRI-O. New MC nodes that Karpenter provisions after this change
+pick up the config automatically. Existing nodes require replacement (Karpenter
+rolling replacement via node disruption).
+
+**IAM for MC nodes:**
+
+MC Karpenter nodes already have `AmazonEC2ContainerRegistryPullOnly` for
+same-account ECR. Cross-account access to the zero-egress ECR is covered by the
+ECR resource policy in `rosa-srep-zero-egress` (the MC account OU is listed in
+`hyperfleet_pull_org_paths`). No additional IAM policy changes are needed.
+
 ## Enabling per environment
 
 ### Integration (int0)
@@ -123,6 +178,13 @@ applications:
     ecrCredsSync:
       ecrRepository: "<ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/<repository>"
       awsRegion: "<ecr-region>"
+    eksNodePool:
+      ecrMirror:
+        mirrors:
+          - sourcePrefix: source-registry.example.com/org/component-images
+            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
+          - sourcePrefix: source-registry.example.com/org/release-image
+            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
 ```
 
 ### Stage
@@ -137,6 +199,13 @@ applications:
     ecrCredsSync:
       ecrRepository: "<ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/<repository>"
       awsRegion: "<ecr-region>"
+    eksNodePool:
+      ecrMirror:
+        mirrors:
+          - sourcePrefix: source-registry.example.com/org/component-images
+            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
+          - sourcePrefix: source-registry.example.com/org/release-image
+            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
 ```
 
 After editing, regenerate rendered files and commit both together:

@@ -54,6 +54,30 @@ spec:
     json.dump(d, open(p, "w"), indent=2)
     PY
     systemctl restart crio 2>/dev/null || true
+    {{- if and .Values.eksNodePool.ecrMirror.enabled .Values.eksNodePool.ecrMirror.mirrors }}
+    --//
+    Content-Type: text/x-shellscript
+
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # ECR mirror config: one [[registry]] block per sourcePrefix/registryUri pair.
+    # CRI-O reads drop-in files from /etc/containers/registries.conf.d/ at startup.
+    # sourcePrefix and registryUri must be at the same path depth so that CRI-O
+    # constructs the correct mirror URI with no path duplication.
+    mkdir -p /etc/containers/registries.conf.d
+    cat > /etc/containers/registries.conf.d/ecr-mirror.conf << 'CONF'
+    {{- range .Values.eksNodePool.ecrMirror.mirrors }}
+    [[registry]]
+    prefix = "{{ .sourcePrefix }}"
+    location = "{{ .sourcePrefix }}"
+    mirror-by-digest-only = true
+
+    [[registry.mirror]]
+    location = "{{ .registryUri }}"
+    {{ end }}
+    CONF
+    systemctl restart crio 2>/dev/null || true
+    {{- end }}
     --//--
   # A pinned custom AMI roots at /dev/sda1, not the AL2023 default /dev/xvda, so
   # set the root mapping explicitly (mirrors the Terraform bootstrap launch
