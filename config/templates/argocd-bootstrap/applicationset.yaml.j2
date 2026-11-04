@@ -139,6 +139,13 @@ spec:
                 targetGroup:
                   arn: '{{ '{{ .metadata.annotations.sre_grafana_target_group_arn }}' }}'
             argo-cd:
+{%- if cluster_type == 'management-cluster' %}
+              configs:
+                params:
+                  reposerver.enable.git.submodule: true
+                cm:
+                  kustomize.buildOptions: --enable-helm
+{%- endif %}
               sre:
                 targetGroup:
                   arn: '{{ '{{ .metadata.annotations.sre_argocd_target_group_arn }}' }}'
@@ -159,11 +166,13 @@ spec:
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
+{%- if cluster_type == 'management-cluster' %}
   # The cert-manager wrapper is a Helm source; the Jetstack chart is rendered
   # by kustomize so command patches apply. templatePatch is a string, so the
   # Go-template if is valid YAML. sources has no merge key, so this list
   # replaces the common sources for cert-manager only.
   # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
+  # MC-only: RC has no cert-manager directory and must not carry this patch.
   templatePatch: |
     {{ '{{- if eq .path.basename "cert-manager" }}' }}
     spec:
@@ -189,4 +198,5 @@ spec:
     {{ '{{- else }}' }}
     {}
     {{ '{{- end }}' }}
+{%- endif %}
 

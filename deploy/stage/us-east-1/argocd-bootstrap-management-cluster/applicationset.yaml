@@ -138,6 +138,11 @@ spec:
                 targetGroup:
                   arn: '{{ .metadata.annotations.sre_grafana_target_group_arn }}'
             argo-cd:
+              configs:
+                params:
+                  reposerver.enable.git.submodule: true
+                cm:
+                  kustomize.buildOptions: --enable-helm
               sre:
                 targetGroup:
                   arn: '{{ .metadata.annotations.sre_argocd_target_group_arn }}'
@@ -163,6 +168,7 @@ spec:
   # Go-template if is valid YAML. sources has no merge key, so this list
   # replaces the common sources for cert-manager only.
   # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
+  # MC-only: RC has no cert-manager directory and must not carry this patch.
   templatePatch: |
     {{- if eq .path.basename "cert-manager" }}
     spec:
