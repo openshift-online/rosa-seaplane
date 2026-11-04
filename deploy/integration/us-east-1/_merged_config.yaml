@@ -278,6 +278,11 @@ applications:
       # @doc applications.management-cluster.eksNodePool.rootVolumeSize Root volume size for the MC Karpenter EC2NodeClass when a custom AMI is pinned. Only applied on the custom-AMI path.
       # @used-by applications.management-cluster.eksNodePool.rootVolumeSize _context
       rootVolumeSize: "{{ worker_node_root_volume_size }}Gi"
+      ecrMirror:
+        # @doc applications.management-cluster.eksNodePool.ecrMirror ECR mirror config for MC Karpenter nodes. When enabled, injects CRI-O registries.conf.d configuration with one block per mirrors entry on custom-AMI (rhel-bootc/CRI-O) nodes. Each entry pairs a sourcePrefix (exact source repository URI) with a registryUri (ECR repository URI) at the same path depth.
+        # @used-by applications.management-cluster.eksNodePool.ecrMirror _context
+        enabled: "{{ management_cluster_defaults.enable_ecr_creds_sync }}"
+        mirrors: []
     hypershift:
       oidcStorageS3Bucket:
         # @doc applications.management-cluster.hypershift.oidcStorageS3Bucket.name OIDC S3 bucket name for HyperShift.
