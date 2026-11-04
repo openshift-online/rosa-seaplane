@@ -21,6 +21,13 @@ platformApi:
     args:
       defaultClusterExpiration: ''
 seaplane:
+  ecrMirror:
+    enabled: false
+    registryAccount: ''
+    registryRegion: us-east-1
+    repository: ''
+    sources: ''
+    baseSecretName: ''
   oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/account_id
 pagerduty:
   enabled: false
