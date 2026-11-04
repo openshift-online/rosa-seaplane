@@ -1,0 +1,213 @@
+# aws-nuke config for ROSA Seaplane minted accounts.
+# Account-agnostic: the janitor injects the running account at runtime as
+#   accounts:
+#     "<ACCOUNT_ID>":
+#       presets: [default]
+# Everything not matched below is deleted.
+
+regions:
+  - us-east-1
+  - global
+
+# Services whose APIs hang on scan and that we never use.
+resource-types:
+  excludes:
+    - ElasticTranscoderPipeline
+    - ElasticTranscoderPreset
+    - OpsWorksUserProfile
+    - OpsWorksCMServer
+    - OpsWorksCMBackup
+    - CodeStarProject
+    - CodeStarNotificationRule
+    - RoboMakerSimulationApplication
+    - RoboMakerRobotApplication
+    - Cloud9Environment
+    - MachineLearningMLModel
+    - MachineLearningDataSource
+    - MachineLearningEvaluation
+    - MachineLearningBranchPrediction
+    - MachineLearningBatchPrediction
+    # Centrally-managed, not taggable, safe to leave untouched.
+    - SSMAssociation
+
+# Required by aws-nuke; add real prod account IDs before use near prod.
+blocklist:
+  - prod
+
+presets:
+  default:
+    filters:
+      # Keep anything tagged as managed/protected. Covers all minting-provisioned
+      # resources and the janitor itself.
+      __global__:
+        - property: tag:aws-nuke
+          value: "skip"
+        - property: tag:platform-janitor/lifecycle
+          value: "ignore"
+        - property: tag:app
+          value: "app-sre-infra"
+
+      # Inline role policies and managed-policy attachments. aws-nuke exposes the
+      # parent role's tags here with a "role:" prefix, so platform roles are kept
+      # by those; AWS/SSO/org-managed roles are kept by name.
+      IAMRolePolicy:
+        - property: tag:role:aws-nuke
+          value: "skip"
+        - property: tag:role:platform-janitor/lifecycle
+          value: "ignore"
+        - property: tag:role:app
+          value: "app-sre-infra"
+        - property: role:RoleName
+          type: glob
+          value: "*OrgIntegration"
+      IAMRolePolicyAttachment:
+        - property: tag:role:aws-nuke
+          value: "skip"
+        - property: tag:role:platform-janitor/lifecycle
+          value: "ignore"
+        - property: tag:role:app
+          value: "app-sre-infra"
+        - property: RoleName
+          value: "OrganizationAccountAccessRole"
+        - property: RoleName
+          type: glob
+          value: "AWSServiceRoleFor*"
+        - property: RoleName
+          type: glob
+          value: "AWS-QuickSetup-*"
+        - property: RoleName
+          type: glob
+          value: "stacksets-exec-*"
+        - property: RoleName
+          value: "rh-aws-saml-login"
+        - property: RoleName
+          type: glob
+          value: "*OrgIntegration"
+
+      # CI and Terraform service users. The users are kept via the __global__ tag
+      # filter where tagged; their access keys, inline policies and attachments
+      # are not taggable, so keep those by user name.
+      IAMUser:
+        - "terraform"
+        - "e2e"
+        - "chai-bot-s3-reader"
+      IAMUserAccessKey:
+        - property: UserName
+          value: "e2e"
+        - property: UserName
+          value: "chai-bot-s3-reader"
+        - property: UserName
+          value: "terraform"
+      IAMUserPolicy:
+        - type: glob
+          value: "e2e -> *"
+        - type: glob
+          value: "chai-bot-s3-reader -> *"
+      IAMUserPolicyAttachment:
+        - property: UserName
+          value: "e2e"
+        - property: UserName
+          value: "chai-bot-s3-reader"
+        - property: UserName
+          value: "terraform"
+
+      # Terraform state: the bucket is tag-kept, but its objects carry no tags.
+      S3Bucket:
+        - property: Name
+          type: glob
+          value: "terraform-*"
+      S3Object:
+        - property: Bucket
+          type: glob
+          value: "terraform-*"
+
+      # Janitor's own schedule, target, log group and build history. The rule is
+      # matched by name because aws-nuke does not expose tags for this type.
+      # SIR* rules are service-managed and would otherwise stall a pass.
+      CloudWatchEventsRule:
+        - property: Name
+          type: glob
+          value: "rosa-seaplane-aws-nuke*"
+        - property: Name
+          type: glob
+          value: "SIR*"
+      CloudWatchEventsTarget:
+        - type: glob
+          value: "Rule: rosa-seaplane-aws-nuke*"
+      CloudWatchLogsLogGroup:
+        - type: contains
+          value: "/aws/codebuild/rosa-seaplane-aws-nuke"
+      CodeBuildBuild:
+        - type: glob
+          value: "rosa-seaplane-aws-nuke:*"
+
+      # AWS-managed, SSO, service-linked and org StackSet-deployed roles.
+      IAMRole:
+        - "OrganizationAccountAccessRole"
+        - "rh-aws-saml-login"
+        - property: Path
+          type: glob
+          value: "/aws-service-role/*"
+        - property: Name
+          type: glob
+          value: "*-rosa-hyperfleet-*-admin"
+        - property: Name
+          type: glob
+          value: "rosa-hyperfleet-*-control"
+        - property: Name
+          type: glob
+          value: "AWS-QuickSetup-*"
+        - property: Name
+          type: glob
+          value: "stacksets-exec-*"
+        - property: Name
+          type: glob
+          value: "*OrgIntegration"
+      # Identity federation providers.
+      IAMSAMLProvider:
+        - property: Name
+          type: glob
+          value: "*"
+      # Org-deployed CloudFormation StackSet instances (managed centrally).
+      CloudFormationStack:
+        - property: Name
+          type: glob
+          value: "StackSet-*"
+      # Default Athena workgroup cannot be deleted.
+      AthenaWorkGroup:
+        - "primary"
+
+      # Service-managed / undeletable resources that would stall a pass.
+      EC2VPC:
+        - property: IsDefault
+          value: "true"
+      EC2Subnet: &default-vpc-filter
+        - property: DefaultVPC
+          value: "true"
+      EC2InternetGateway: *default-vpc-filter
+      EC2InternetGatewayAttachment: *default-vpc-filter
+      EC2RouteTable: *default-vpc-filter
+      EC2DHCPOption: *default-vpc-filter
+      EC2SecurityGroup: *default-vpc-filter
+      EC2DefaultSecurityGroupRule: *default-vpc-filter
+      EC2NetworkACL: *default-vpc-filter
+      CloudTrailTrail:
+        - type: glob
+          value: "*"
+      ResourceExplorer2View:
+        - property: Name
+          type: glob
+          value: "*"
+      ResourceExplorer2Index:
+        - property: Name
+          type: glob
+          value: "*"
+
+# Clear deletion protection left by failed Terraform runs.
+settings:
+  RDSInstance:
+    DisableDeletionProtection: true
+  RDSDBCluster:
+    DisableDeletionProtection: true
+  DynamoDBTable:
+    DisableDeletionProtection: true
