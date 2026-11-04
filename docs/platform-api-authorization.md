@@ -4,6 +4,11 @@ This repository delivers the Platform API's authorization bundle. Bundle format,
 evaluation rules, actions, and metrics are defined in
 `rosa-seaplane-api/docs/authz.md`.
 
+The API repo owns the canonical
+[DynamoDB authorization storage design](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz-storage-contract.md).
+This repository retains ownership of storage provisioning, Terraform state, IAM,
+and configuration delivery. AWS provisioning has not started.
+
 Authorization is mandatory and denies by default. Enrollment grants nothing.
 
 ## Prerequisite: gateway-only access
