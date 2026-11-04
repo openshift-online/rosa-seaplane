@@ -44,19 +44,24 @@ profile — no token refresh is needed.
 ## Coordination with External Secrets Operator
 
 The seaplane-operator renders an ExternalSecret that syncs `/infra/pull-secret`
-from SSM into the `pull-secret` Secret in each HCP namespace. ESO re-syncs this
-every hour.
+from SSM into a Secret in each HCP namespace. ESO re-syncs this every hour.
 
-When ecr-creds-sync is active, it overwrites that Secret with ECR credentials.
-ESO's next sync would overwrite ecr-creds-sync's token with the SSM content.
-To avoid this, the SSM pull secret at `/infra/pull-secret` must be updated to
-include ECR credentials alongside the existing `quay.io` and
-`registry.redhat.io` entries, so that ESO and ecr-creds-sync converge on
-compatible content.
+When `ECR_MIRROR_BASE_SECRET_NAME` is set (e.g. `base-pull-secret`), the
+ExternalSecret targets that name instead of `pull-secret`. This separates the
+two writers:
 
-Alternatively, the ExternalSecret refresh interval can be extended beyond the
-ECR token lifetime (12 hours) in environments where the SSM pull secret does
-not carry ECR credentials.
+- **ESO** writes `base-pull-secret` (SSM content: `quay.io`,
+  `registry.redhat.io` credentials)
+- **ecr-creds-sync** reads `base-pull-secret`, merges the ECR authorization
+  token into it, and writes the combined result to `pull-secret`
+
+HyperShift reads `pull-secret` for ignition config — it always gets both the
+SSM credentials and a fresh ECR token, with no overwrite conflict between ESO
+and ecr-creds-sync.
+
+Configure this via `ecrCredsSync.sourceSecrets` in the ecr-creds-sync chart
+(set to the same name as `ECR_MIRROR_BASE_SECRET_NAME`) and ensure the
+seaplane-operator has `ECR_MIRROR_BASE_SECRET_NAME` set to match.
 
 ## Configuration
 
@@ -76,8 +81,8 @@ Wire these via the seaplane-operator Helm values in
 `argocd/config/regional-cluster/platform-api/values.yaml` or via the
 environment-specific ArgoCD values overlay.
 
-See [docs/operator/configuration.md](../seaplane-api/docs/operator/configuration.md)
-in `rosa-seaplane-api` for the full operator configuration reference.
+See `docs/operator/configuration.md` in `rosa-seaplane-api` for the full
+operator configuration reference.
 
 ### Step 2 — ecr-creds-sync: credential refresh on the MC
 
@@ -102,7 +107,7 @@ applications:
 - The ArgoCD application deploys the `ecr-creds-sync` Helm chart into the
   `hypershift` namespace on the MC.
 
-**IAM permissions required on the MC node role (Terraform-managed):**
+**IAM permissions required on the ecr-creds-sync Pod Identity role (Terraform-managed):**
 
 ```json
 {

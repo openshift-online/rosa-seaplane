@@ -327,6 +327,15 @@ applications:
           # @used-by applications.regional-cluster.platformApi.app.args.defaultClusterExpiration _context
           defaultClusterExpiration: "{{ cluster_lifecycle.default_expiration }}"
     seaplane:
+      ecrMirror:
+        # @doc applications.regional-cluster.seaplane.ecrMirror Seaplane Operator ECR mirror configuration. When enabled (tied to management_cluster_defaults.enable_ecr_creds_sync), injects ECR_MIRROR_* env vars into the operator so it populates imageContentSources on every HostedCluster and redirects the ESO pull-secret target to baseSecretName. All fields except baseSecretName are required when enabled.
+        # @used-by applications.regional-cluster.seaplane.ecrMirror _context
+        enabled: "{{ management_cluster_defaults.enable_ecr_creds_sync }}"
+        registryAccount: ""
+        registryRegion: "{{ aws_region }}"
+        repository: ""
+        sources: ""
+        baseSecretName: ""
       # @doc applications.regional-cluster.seaplane.oidcS3Bucket S3 bucket name the Seaplane Operator writes OIDC discovery documents to.
       # @used-by applications.regional-cluster.seaplane.oidcS3Bucket _context
       # NOTE: This value is overridden in the ApplicationSet valuesObject (config/templates/argocd-bootstrap/applicationset.yaml.j2)
