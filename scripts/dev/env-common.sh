@@ -60,8 +60,16 @@ resolve_creds() {
     echo "Resolving credentials for profile $profile..."
 
     local role_arn base_profile
-    role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null) \
-        || die "No role_arn found for profile $profile"
+    # A profile without role_arn is a direct/credential_process profile (e.g. the
+    # SAML central profile). Resolve its credentials in place rather than assuming
+    # a role.
+    if ! role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null); then
+        resolve_base_creds "$profile"
+        _CRED_AK="$_BASE_AK"
+        _CRED_SK="$_BASE_SK"
+        _CRED_ST="$_BASE_ST"
+        return 0
+    fi
     base_profile=$(aws configure get source_profile --profile "$profile" 2>/dev/null) \
         || die "No source_profile found for profile $profile"
 

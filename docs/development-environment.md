@@ -30,26 +30,19 @@ both are set; token values are never printed.
 
 By default, scripts look for account ID files in the `rosa-seaplane-internal` sibling repo:
 
-- **Ephemeral (dev)**: `../rosa-seaplane-internal/infra/accounts/dev/accounts.json`
+- **Ephemeral (dev)**: `../rosa-seaplane-internal/infra/accounts/eph-dev/terragrunt-accounts.json`
 - **Integration**: `../rosa-seaplane-internal/infra/accounts/int/terragrunt-accounts.json`
 
 If you have the internal repo checked out alongside this one, no extra setup is needed.
 
-To override, set the env vars `RRP_ACCOUNTS_DEV` or `RRP_ACCOUNTS_INT` to point to a different file.
+> **Note:** ephemeral now runs against the minted **eph-dev** accounts and reads the Terragrunt
+> account snapshot, not the legacy `dev/accounts.json`. Environments created before this switch
+> cannot be resynced or torn down by the new script — pull the latest internal repo and provision a
+> fresh ephemeral environment.
 
-Ephemeral (dev) uses the flat format:
-
-```json
-{
-  "admin": "<admin-account-id>",
-  "central": "<central-account-id>",
-  "rc": "<rc-account-id>",
-  "mc": "<mc-account-id>",
-  "customer": "<customer-account-id>"
-}
-```
-
-Integration now uses the Terragrunt account snapshot (same nested structure as Stage). Account IDs live under the region, and the control account replaces `central`; the HCP account is used as the e2e customer account:
+To override, set `RRP_ACCOUNTS_DEV` (ephemeral) or `RRP_ACCOUNTS_INT` (integration) to point to a
+different file. Both use the Terragrunt account snapshot shape — account IDs live under the region,
+the control account replaces `central`, and the HCP account is used as the e2e customer account:
 
 ```json
 {

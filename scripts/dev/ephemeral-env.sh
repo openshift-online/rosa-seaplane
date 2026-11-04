@@ -242,43 +242,51 @@ setup_aws_config() {
         return 0
     fi
 
-    local accounts_file="${RRP_ACCOUNTS_DEV:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/dev/accounts.json}"
+    # Account IDs live only in the (private) rosa-seaplane-internal repo; this
+    # public script reads them at runtime and never hardcodes them. Reuse the
+    # Terragrunt account snapshot rather than a second hand-maintained file.
+    local accounts_file="${RRP_ACCOUNTS_DEV:-${REPO_ROOT}/../rosa-seaplane-internal/infra/accounts/eph-dev/terragrunt-accounts.json}"
     [[ -f "$accounts_file" ]] \
         || die "Account IDs file not found: $accounts_file
     Either clone rosa-seaplane-internal as a sibling directory,
     or set RRP_ACCOUNTS_DEV to point to your accounts JSON file.
     See docs/development-environment.md for details."
-    load_accounts "$accounts_file" admin central rc mc customer
+
+    local region="us-east-1"
+    CENTRAL_ACCOUNT=$(jq -r '.control_account_id // empty' "$accounts_file")
+    RC_ACCOUNT=$(jq -r --arg r "$region" '.[$r].rc_account_id // empty' "$accounts_file")
+    MC_ACCOUNT=$(jq -r --arg r "$region" '.[$r].mc_account_ids.mc01 // empty' "$accounts_file")
+    CUSTOMER_ACCOUNT=$(jq -r --arg r "$region" '.[$r].hcp_account_id // empty' "$accounts_file")
+    for _pair in "central:$CENTRAL_ACCOUNT" "rc:$RC_ACCOUNT" "mc:$MC_ACCOUNT" "customer:$CUSTOMER_ACCOUNT"; do
+        [[ -n "${_pair#*:}" ]] || die "Missing ${_pair%%:*} account ID (region $region) in $accounts_file"
+    done
 
     init_aws_config
 
+    # eph-dev auth model (matches the generated seaplane-*-eph-dev profiles):
+    # SAML into the control account, then assume rosa-seaplane-account-admin in
+    # each child account.
     cat > "$AWS_CONFIG_FILE" <<AWSCFG
-[profile rrp-ephemeral-admin]
-credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${ADMIN_ACCOUNT} ${ADMIN_ACCOUNT}-rrp-admin
-region = us-east-1
-duration_seconds = 3600
-
 [profile rrp-ephemeral-central]
-role_arn = arn:aws:iam::${CENTRAL_ACCOUNT}:role/OrganizationAccountAccessRole
-source_profile = rrp-ephemeral-admin
+credential_process = uv run ${SCRIPT_DIR}/cached_saml_credentials_process.py ${CENTRAL_ACCOUNT} ${CENTRAL_ACCOUNT}-rosa-hyperfleet-eph-dev-admin
 region = us-east-1
 duration_seconds = 3600
 
 [profile rrp-ephemeral-rc]
-role_arn = arn:aws:iam::${RC_ACCOUNT}:role/OrganizationAccountAccessRole
-source_profile = rrp-ephemeral-admin
+role_arn = arn:aws:iam::${RC_ACCOUNT}:role/rosa-seaplane-account-admin
+source_profile = rrp-ephemeral-central
 region = us-east-1
 duration_seconds = 3600
 
 [profile rrp-ephemeral-mc]
-role_arn = arn:aws:iam::${MC_ACCOUNT}:role/OrganizationAccountAccessRole
-source_profile = rrp-ephemeral-admin
+role_arn = arn:aws:iam::${MC_ACCOUNT}:role/rosa-seaplane-account-admin
+source_profile = rrp-ephemeral-central
 region = us-east-1
 duration_seconds = 3600
 
 [profile rrp-ephemeral-customer]
-role_arn = arn:aws:iam::${CUSTOMER_ACCOUNT}:role/OrganizationAccountAccessRole
-source_profile = rrp-ephemeral-admin
+role_arn = arn:aws:iam::${CUSTOMER_ACCOUNT}:role/rosa-seaplane-account-admin
+source_profile = rrp-ephemeral-central
 region = us-east-1
 duration_seconds = 3600
 AWSCFG

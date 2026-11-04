@@ -39,29 +39,28 @@ platform_image: "669421954122.dkr.ecr.us-east-1.amazonaws.com/rosa-seaplane-ci:7
 aws:
   # @doc aws.account_id Regional AWS account ID.
   # @used-by aws.account_id _context
-  account_id: "ssm:///infra/{{ aws_region }}/account_id"
+  account_id: "ssm:///infra/{{ aws_region }}/rc/account_id"
   # @doc aws.management_cluster_account_id Default account for MCs when entry has no account_id.
   # @used-by aws.management_cluster_account_id _context
   management_cluster_account_id: "ssm:///infra/{{ aws_region }}/{{ cluster_prefix }}/account_id"
   # @doc aws.child_admin_role_name Name of the IAM role the pipelines assume in RC/MC child accounts for state-bucket bootstrap (hop 1) and infra apply (hop 2). Defaults to the scoped day-2 role; override per environment to use the AWS Organizations role.
   # @used-by aws.child_admin_role_name _context
-  child_admin_role_name: "OrganizationAccountAccessRole"
+  child_admin_role_name: "rosa-seaplane-account-admin"
   # @doc aws.zoa_access_trusted_assumer_role_names Full IAM role names in the Central Account allowed to assume ZOA Access invoker roles in RC (exact string as in IAM, e.g. OrganizationAccountAccessRole). Optional in defaults; environments with ZOA Access set at least one name or suffix. IAM requires each principal to exist in central at RC apply.
   # @used-by aws.zoa_access_trusted_assumer_role_names _context
-  zoa_access_trusted_assumer_role_names:
-  - OrganizationAccountAccessRole
-  - ci
+  zoa_access_trusted_assumer_role_names: []
   # @doc aws.zoa_access_trusted_assumer_role_name_suffixes Suffix only (app-interface access role name field), not the full IAM role name. App-interface SAML roles in central are created as "<central_account_id>-<suffix>" so the account ID must not be hardcoded in git; RC Terraform prefixes each suffix with the central account ID from the aws.central provider at apply time. Optional in defaults; at least one name or suffix required per environment at apply. Only list suffixes for roles that exist in that environment's central account.
   # @used-by aws.zoa_access_trusted_assumer_role_name_suffixes _context
   zoa_access_trusted_assumer_role_name_suffixes:
-  - rosa-seaplane-zoa-operator-dev   # future: rosa-seaplane-zoa-operator-eph
+  - rosa-seaplane-zoa-operator-eph-dev   # human SRE break-glass (ZOA operator)
+  - rosa-hyperfleet-eph-dev-admin   # local/e2e caller (control-admin via SAML)
 
 
 dns:
   # @doc dns.domain Base domain for the environment. Must be set per environment. See config/ephemeral/defaults.yaml for how the ephemeral template selects between CI and dev account pools.
   # @used-by dns.domain pipeline-provisioner-inputs/terraform.json.j2
   # @used-by dns.domain pipeline-regional-cluster-inputs/terraform.json.j2
-  domain: "{% if ci %}ci00{% else %}dev0{% endif %}.rosa.devshift.net"
+  domain: "{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org"
 
 cluster_naming:
   # @doc cluster_naming.rc_pattern Pattern used to derive the Regional Cluster ID, which also determines CodeBuild/CodePipeline names and the RC Terraform state key. Placeholders: {prefix} (name_prefix or eph_prefix). Changing this for an existing environment changes resource identities and state lookup; migrate those names and state deliberately.
