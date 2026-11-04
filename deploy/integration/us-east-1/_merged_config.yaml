@@ -169,11 +169,11 @@ regional_cluster:
   # @doc regional_cluster.zoa_lambda_image_tag Immutable tag for the ZOA Lambda image. Defaults to a known-good Konflux on-push build. Override via --provision-override-file for ephemeral e2e with a CI-built tag (e.g. ci-<PR>-<BUILD_ID>).
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_lambda_image_tag: "9453ce6"
+  zoa_lambda_image_tag: "43aeef8"
   # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image. Defaults to same Konflux build as Lambda. Override independently when testing a new runner with the current Lambda (or vice versa).
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_runner_image_tag: "9453ce6"
+  zoa_runner_image_tag: "43aeef8"
   # @doc regional_cluster.zoa_lambda_source_image Source registry image for the ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag when pointing at a fork or CI registry (e.g. quay.io/rrp-dev-ci/zoa-lambda).
   # @used-by regional_cluster.zoa_lambda_source_image pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_lambda_source_image: "quay.io/rrp-dev-ci/zoa-lambda"
@@ -184,7 +184,7 @@ regional_cluster:
   # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image. Required; same commit tag as Lambda/Runner when bumped together.
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_boundary_image_tag: "9453ce6"
+  zoa_boundary_image_tag: "43aeef8"
   # @doc regional_cluster.zoa_boundary_source_image Source registry image for ZOA Boundary (pulled directly by ECS). Override together with zoa_boundary_image_tag when pointing at a fork or CI registry.
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-regional-cluster-inputs/terraform.json.j2
