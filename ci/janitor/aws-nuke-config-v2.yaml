@@ -1,0 +1,119 @@
+# aws-nuke config for ROSA Seaplane minted accounts.
+# Account-agnostic: the janitor injects the running account at runtime as
+#   accounts:
+#     "<ACCOUNT_ID>":
+#       presets: [default]
+# Everything not matched below is deleted.
+
+regions:
+  - us-east-1
+  - global
+
+# Services whose APIs hang on scan and that we never use.
+resource-types:
+  excludes:
+    - ElasticTranscoderPipeline
+    - ElasticTranscoderPreset
+    - OpsWorksUserProfile
+    - OpsWorksCMServer
+    - OpsWorksCMBackup
+    - CodeStarProject
+    - CodeStarNotificationRule
+    - RoboMakerSimulationApplication
+    - RoboMakerRobotApplication
+    - Cloud9Environment
+    - MachineLearningMLModel
+    - MachineLearningDataSource
+    - MachineLearningEvaluation
+    - MachineLearningBranchPrediction
+    - MachineLearningBatchPrediction
+
+# Required by aws-nuke; add real prod account IDs before use near prod.
+blocklist:
+  - prod
+
+presets:
+  default:
+    filters:
+      # Keep anything tagged as managed/protected. Covers all minting-provisioned
+      # resources and the janitor itself.
+      __global__:
+        - property: tag:aws-nuke
+          value: "skip"
+        - property: tag:platform-janitor/lifecycle
+          value: "ignore"
+        - property: tag:app
+          value: "app-sre-infra"
+
+      # Non-taggable IAM sub-resources of the admin and janitor roles.
+      IAMRolePolicy:
+        - property: RoleName
+          value: "rosa-seaplane-account-admin"
+        - property: RoleName
+          type: glob
+          value: "rosa-seaplane-aws-nuke-*"
+      IAMRolePolicyAttachment:
+        - property: RoleName
+          value: "rosa-seaplane-account-admin"
+        - property: RoleName
+          type: glob
+          value: "rosa-seaplane-aws-nuke-*"
+        - property: RoleName
+          value: "OrganizationAccountAccessRole"
+        - property: RoleName
+          type: glob
+          value: "AWSServiceRoleFor*"
+
+      # Non-taggable janitor schedule target and its CodeBuild log group.
+      CloudWatchEventsTarget:
+        - type: glob
+          value: "Rule: rosa-seaplane-aws-nuke-*"
+      CloudWatchLogsLogGroup:
+        - type: contains
+          value: "/aws/codebuild/rosa-seaplane-aws-nuke-"
+
+      # Untagged AWS-managed identities.
+      IAMRole:
+        - "OrganizationAccountAccessRole"
+        - property: Path
+          type: glob
+          value: "/aws-service-role/*"
+
+      # Service-managed / undeletable resources that would stall a pass.
+      CloudWatchEventsRule:
+        - property: Name
+          type: glob
+          value: "SIR*"
+      EC2VPC:
+        - property: IsDefault
+          value: "true"
+      EC2Subnet: &default-vpc-filter
+        - property: DefaultVPC
+          value: "true"
+      EC2InternetGateway: *default-vpc-filter
+      EC2InternetGatewayAttachment: *default-vpc-filter
+      EC2RouteTable: *default-vpc-filter
+      EC2DHCPOption: *default-vpc-filter
+      EC2SecurityGroup: *default-vpc-filter
+      EC2DefaultSecurityGroupRule: *default-vpc-filter
+      EC2NetworkACL: *default-vpc-filter
+      CloudTrailTrail:
+        - type: glob
+          value: "*"
+      ResourceExplorer2View:
+        - property: Name
+          type: glob
+          value: "*"
+      ResourceExplorer2Index:
+        - property: Name
+          type: glob
+          value: "*"
+
+# Clear deletion protection left by failed Terraform runs.
+settings:
+  RDSInstance:
+    DisableDeletionProtection: true
+  RDSDBCluster:
+    DisableDeletionProtection: true
+  DynamoDBTable:
+    DisableDeletionProtection: true
