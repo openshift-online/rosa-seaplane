@@ -1,11 +1,9 @@
 aws-load-balancer-controller:
   # clusterName and vpcId injected via ApplicationSet valuesObject
   vpcId: ""
-  # Known OutOfSync: the chart regenerates webhook TLS certs on every render
-  # because ArgoCD doesn't support Helm's lookup function (argoproj/argo-cd#5202).
-  # keepTLSSecret has no effect for the same reason (aws-load-balancer-controller#2312).
-  # The webhook Secret and caBundle will always show OutOfSync — this is cosmetic,
-  # the controller works correctly.
+  # Delegate webhook certificate and CA-bundle management to cert-manager.
+  # Helm-generated webhook certificates are not stable across ArgoCD renders.
+  enableCertManager: true
   serviceAccount:
     create: true
     name: aws-load-balancer-controller

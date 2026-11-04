@@ -40,12 +40,9 @@ spec:
       destination:
         namespace: '{{ '{{ .path.basename }}' }}'
         server: '{{ '{{ .server }}' }}'
-      # --- Workaround: LBC webhook TLS cert drift (argoproj/argo-cd#5202, aws-load-balancer-controller#1828) ---
+      # cert-manager's CA injector owns this field; don't let Helm-rendered
+      # manifests overwrite it during a sync.
       ignoreDifferences:
-      - kind: Secret
-        name: aws-load-balancer-tls
-        jsonPointers:
-        - /data
       - group: admissionregistration.k8s.io
         kind: MutatingWebhookConfiguration
         jqPathExpressions:
@@ -54,7 +51,6 @@ spec:
         kind: ValidatingWebhookConfiguration
         jqPathExpressions:
         - .webhooks[].clientConfig.caBundle
-      # --- End workaround ---
       syncPolicy:
         automated:
           prune: true
@@ -69,6 +65,7 @@ spec:
         syncOptions:
         - ServerSideApply=true
         - CreateNamespace=true
+        - RespectIgnoreDifferences=true
       sources:
       - helm:
           valueFiles:
@@ -139,12 +136,12 @@ spec:
                 targetGroup:
                   arn: '{{ '{{ .metadata.annotations.sre_grafana_target_group_arn }}' }}'
             argo-cd:
-{%- if cluster_type == 'management-cluster' %}
               configs:
-                params:
-                  reposerver.enable.git.submodule: true
                 cm:
                   kustomize.buildOptions: --enable-helm
+{%- if cluster_type == 'management-cluster' %}
+                params:
+                  reposerver.enable.git.submodule: true
 {%- endif %}
               sre:
                 targetGroup:
@@ -166,13 +163,11 @@ spec:
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
-{%- if cluster_type == 'management-cluster' %}
-  # The cert-manager wrapper is a Helm source; the Jetstack chart is rendered
-  # by kustomize so command patches apply. templatePatch is a string, so the
-  # Go-template if is valid YAML. sources has no merge key, so this list
-  # replaces the common sources for cert-manager only.
+  # Cert-manager has a Helm wrapper plus a Kustomize source for the Jetstack
+  # operand so the Red Hat image command patches apply. The MC Kustomize source
+  # uses a Git submodule; RC uses the published chart to avoid submodule fetches.
+  # templatePatch replaces the common sources for cert-manager only.
   # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
-  # MC-only: RC has no cert-manager directory and must not carry this patch.
   templatePatch: |
     {{ '{{- if eq .path.basename "cert-manager" }}' }}
     spec:
@@ -184,6 +179,7 @@ spec:
           valuesObject:
             global:
               aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
+              cluster_type: '{{ '{{ .metadata.labels.cluster_type }}' }}'
               dns_zone_operator_role_arn: '{{ '{{ .metadata.annotations.dns_zone_operator_role_arn }}' }}'
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
@@ -198,5 +194,3 @@ spec:
     {{ '{{- else }}' }}
     {}
     {{ '{{- end }}' }}
-{%- endif %}
-

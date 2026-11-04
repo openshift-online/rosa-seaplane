@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cert-manager
+description: Pull-secret wrapper for the RC Jetstack cert-manager installation
+type: application
+version: 0.1.0

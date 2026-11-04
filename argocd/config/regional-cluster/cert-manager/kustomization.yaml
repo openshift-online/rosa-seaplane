@@ -1,0 +1,16 @@
+# Use the published Jetstack chart rather than the cert-manager Git submodule.
+# RC repo-server submodule fetches have caused bootstrap/API readiness failures.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+helmCharts:
+  - name: cert-manager
+    repo: https://charts.jetstack.io
+    version: v1.19.2
+    releaseName: cert-manager
+    namespace: cert-manager
+    includeCRDs: true
+    valuesFile: jetstack-values.yaml
+patches:
+  - path: patches/controller-command.yaml
+  - path: patches/webhook-command.yaml
+  - path: patches/cainjector-command.yaml
