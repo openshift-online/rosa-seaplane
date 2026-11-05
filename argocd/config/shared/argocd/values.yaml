@@ -168,9 +168,61 @@ argo-cd:
   configs:
     params:
       server.insecure: false
+      # Regional ApplicationSet stages cert-manager, LBC, then workloads.
+      # Set in the bootstrap chart so the feature is enabled on first reconcile.
+      applicationsetcontroller.enable.progressive.syncs: "true"
       # Off by default. The MC and RC ApplicationSets enable submodules because
       # both render the Jetstack cert-manager chart from the cert-manager repo.
       reposerver.enable.git.submodule: false
+    cm:
+      # Keep the regional RollingSync on LBC until cert-manager has injected
+      # the CA into both webhook configurations.
+      "resource.customizations.health.admissionregistration.k8s.io_MutatingWebhookConfiguration": |
+        local hs = { status = "Healthy", message = "" }
+        if obj.metadata.name ~= "aws-load-balancer-webhook" then
+          return hs
+        end
+        local matched = false
+        for _, webhook in ipairs(obj.webhooks or {}) do
+          local service = webhook.clientConfig and webhook.clientConfig.service
+          if service and service.name == "aws-load-balancer-webhook-service" then
+            matched = true
+            local caBundle = webhook.clientConfig.caBundle
+            if caBundle == nil or caBundle == "" then
+              hs.status = "Progressing"
+              hs.message = "Waiting for cert-manager to inject the LBC mutating webhook CA bundle"
+              return hs
+            end
+          end
+        end
+        if not matched then
+          hs.status = "Progressing"
+          hs.message = "Waiting for LBC mutating webhook entries"
+        end
+        return hs
+      "resource.customizations.health.admissionregistration.k8s.io_ValidatingWebhookConfiguration": |
+        local hs = { status = "Healthy", message = "" }
+        if obj.metadata.name ~= "aws-load-balancer-webhook" then
+          return hs
+        end
+        local matched = false
+        for _, webhook in ipairs(obj.webhooks or {}) do
+          local service = webhook.clientConfig and webhook.clientConfig.service
+          if service and service.name == "aws-load-balancer-webhook-service" then
+            matched = true
+            local caBundle = webhook.clientConfig.caBundle
+            if caBundle == nil or caBundle == "" then
+              hs.status = "Progressing"
+              hs.message = "Waiting for cert-manager to inject the LBC validating webhook CA bundle"
+              return hs
+            end
+          end
+        end
+        if not matched then
+          hs.status = "Progressing"
+          hs.message = "Waiting for LBC validating webhook entries"
+        end
+        return hs
 
   # SRE UI ALB — injected at runtime by ApplicationSet; empty when ALB is not deployed
   sre:

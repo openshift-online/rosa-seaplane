@@ -26,6 +26,7 @@ spec:
           - path: argocd/config/shared/*
           repoURL: '{{ .metadata.annotations.git_repo }}'
           revision: '{{ .metadata.annotations.git_revision }}'
+
   template:
     metadata:
       name: '{{ .path.basename }}'
@@ -34,6 +35,7 @@ spec:
         environment: '{{ .metadata.labels.environment }}'
         region_deployment: '{{ .metadata.labels.region_deployment }}'
         aws_region: '{{ .metadata.labels.aws_region }}'
+        appset_application: '{{ .path.basename }}'
     spec:
       project: default
       destination:

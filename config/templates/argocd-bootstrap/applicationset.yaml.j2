@@ -27,6 +27,24 @@ spec:
           - path: argocd/config/shared/*
           repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
           revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
+{% if cluster_type == 'regional-cluster' %}
+  strategy:
+    type: RollingSync
+    rollingSync:
+      steps:
+      - matchExpressions:
+        - key: appset_application
+          operator: In
+          values: [cert-manager]
+      - matchExpressions:
+        - key: appset_application
+          operator: In
+          values: [aws-load-balancer-controller]
+      - matchExpressions:
+        - key: appset_application
+          operator: NotIn
+          values: [cert-manager, aws-load-balancer-controller]
+{% endif %}
   template:
     metadata:
       name: '{{ '{{ .path.basename }}' }}'
@@ -35,6 +53,7 @@ spec:
         environment: '{{ '{{ .metadata.labels.environment }}' }}'
         region_deployment: '{{ '{{ .metadata.labels.region_deployment }}' }}'
         aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
+        appset_application: '{{ '{{ .path.basename }}' }}'
     spec:
       project: default
       destination:
