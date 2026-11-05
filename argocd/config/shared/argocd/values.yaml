@@ -168,8 +168,8 @@ argo-cd:
   configs:
     params:
       server.insecure: false
-      # Off by default so RC does not clone .gitmodules (cert-manager/cert-manager)
-      # on every repo-server fetch. MC ApplicationSet turns this on.
+      # Off by default. The MC and RC ApplicationSets enable submodules because
+      # both render the Jetstack cert-manager chart from the cert-manager repo.
       reposerver.enable.git.submodule: false
 
   # SRE UI ALB — injected at runtime by ApplicationSet; empty when ALB is not deployed

@@ -151,6 +151,8 @@ spec:
               configs:
                 cm:
                   kustomize.buildOptions: --enable-helm
+                params:
+                  reposerver.enable.git.submodule: true
               sre:
                 targetGroup:
                   arn: '{{ .metadata.annotations.sre_argocd_target_group_arn }}'
@@ -171,9 +173,9 @@ spec:
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
-  # Cert-manager has a Helm wrapper plus a Kustomize source for the Jetstack
-  # operand so the Red Hat image command patches apply. The MC Kustomize source
-  # uses a Git submodule; RC uses the published chart to avoid submodule fetches.
+  # Cert-manager has a cluster-specific Helm wrapper plus a Kustomize source for
+  # the same Jetstack submodule chart so the Red Hat image patches apply. RC uses
+  # the MC Kustomize path but its own Helm wrapper (without the ClusterIssuer).
   # templatePatch replaces the common sources for cert-manager only.
   # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
   templatePatch: |
@@ -192,7 +194,7 @@ spec:
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
-      - path: '{{ .path.path }}'
+      - path: '{{ if eq .metadata.labels.cluster_type "regional-cluster" }}argocd/config/management-cluster/cert-manager{{ else }}{{ .path.path }}{{ end }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         kustomize: {}

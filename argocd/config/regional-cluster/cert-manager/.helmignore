@@ -1,7 +1,0 @@
-# The wrapper chart only manages the pull-secret ExternalSecret. The
-# cert-manager operand is rendered from Jetstack's published Helm chart by
-# Kustomize, without cloning the cert-manager Git submodule on the RC.
-patches/
-kustomization.yaml
-jetstack-values.yaml
-.git/
