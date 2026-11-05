@@ -10,6 +10,10 @@ echo "=== Running render.py unit tests ==="
 uv run scripts/test_render.py
 
 echo ""
+echo "=== Running API Gateway account ownership tests ==="
+uv run scripts/test_api_gateway_account_ownership.py
+
+echo ""
 echo "=== Running promtool rule tests ==="
 ./ci/promtool-test.sh
 
