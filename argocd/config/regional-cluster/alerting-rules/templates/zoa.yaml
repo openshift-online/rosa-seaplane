@@ -41,19 +41,78 @@ spec:
           expr: |
             1 - (
               (
-                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass="5xx"})
+                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api", dimension_StatusClass="5xx"})
                 or
-                (0 * group by (cluster) (aws_zoa_http_request_count_sum))
+                (0 * group by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"}))
               )
-              / sum by (cluster) (aws_zoa_http_request_count_sum)
+              / sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"})
             )
 
-        # Combined API + Worker Lambda error rate.
-        # Catches pre-handler crashes that EMF misses.
+        # Access Lambda HTTP (laptop session plane). dimension_Cluster is target id or DEPLOYMENT_NAME.
+        - record: zoa:access_availability
+          expr: |
+            1 - (
+              (
+                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access", dimension_StatusClass="5xx"})
+                or
+                (0 * group by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"}))
+              )
+              / sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"})
+            )
+
+        # Combined ZOA Lambda invocations/errors/throttles per cluster label (api/worker
+        # tag_Cluster plus Access on RC — same aggregation as Grafana ZOA Lambda SLO).
+        - record: zoa:lambda_invocations_combined
+          expr: |
+            label_replace(
+              (
+                sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                + (
+                  sum(aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-access"})
+                  or
+                  (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                )
+              ),
+              "cluster", "$1", "tag_Cluster", "(.+)"
+            )
+
+        - record: zoa:lambda_errors_combined
+          expr: |
+            label_replace(
+              (
+                sum by (tag_Cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                + (
+                  sum(aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-access"})
+                  or
+                  (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                )
+              ),
+              "cluster", "$1", "tag_Cluster", "(.+)"
+            )
+
+        - record: zoa:lambda_throttles_combined
+          expr: |
+            label_replace(
+              (
+                sum by (tag_Cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                + (
+                  sum(aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-access"})
+                  or
+                  (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                )
+              ),
+              "cluster", "$1", "tag_Cluster", "(.+)"
+            )
+
         - record: zoa:lambda_error_rate
           expr: |
-            sum by (cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)"})
-            / sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)"})
+            zoa:lambda_errors_combined
+            / clamp_min(zoa:lambda_invocations_combined, 1)
+
+        - record: zoa:lambda_throttle_rate
+          expr: |
+            zoa:lambda_throttles_combined
+            / clamp_min(zoa:lambda_invocations_combined, 1)
 
         # ──────────────────────────────────────────────────────────────
         # Tick health recording rules
@@ -85,6 +144,22 @@ spec:
           expr: |
             changes(zoa:gc_last_run[30m])
 
+        - record: zoa:reaper_last_run
+          expr: |
+            max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[10m]))
+
+        - record: zoa:reaper_tick_count
+          expr: |
+            changes(zoa:reaper_last_run[30m])
+
+        # Boundary attribution SLI: share of bridge lookups that resolved operator+session.
+        # Denominator excludes Outcome=skipped (laptop/CI callers). Miss/error breakdown: use
+        # aws_zoa_identity_bridge_lookup_sum by dimension_Outcome on the dashboard.
+        - record: zoa:identity_bridge_hit_rate
+          expr: |
+            sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="hit"})
+            / sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"})
+
     - name: zoa-alerts
       rules:
         # ──────────────────────────────────────────────────────────────
@@ -113,9 +188,9 @@ spec:
               Likely a dependency failure (EKS, S3, STS). Check dashboard
               for per-action breakdown.
             runbook: >-
-              1. Open ZOA dashboard, check Activity Overview for which statuses dominate.
-              2. Check Executions by Action and Status panel to identify if all or specific actions are failing.
-              3. If all kube-api scope TAs fail: EKS is likely unreachable. Check circuit breaker panel and EKS cluster health.
+              1. Open ZOA dashboard → ZOA Activity Overview and ZOA Trusted Action Executions.
+              2. Check Executions by Action & Status for which actions are failing.
+              3. If all kube-api scope TAs fail: EKS is likely unreachable. Check circuit breaker (ZOA Workers) and EKS health.
               4. If all aws-api scope TAs fail: STS AssumeRole is likely failing. Check IAM roles and STS regional endpoint health.
               5. If only async TAs fail: check K8s Job creation and runner image availability.
               6. If only a specific action fails: check that action RBAC and dependencies.
@@ -159,7 +234,7 @@ spec:
             runbook: >-
               1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled.
               2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling.
-              3. Check if Lambda can reach EKS: look for circuit breaker state changes in ZOA dashboard Worker Pipeline section.
+              3. Check if Lambda can reach EKS: ZOA Workers → Circuit Breaker State Changes.
               4. If EventBridge schedule is missing, re-run the ZOA Terraform module.
               5. Alert auto-recovers when reconciler resumes ticking.
 
@@ -202,8 +277,8 @@ spec:
         # action needed: check capacity and increase if required.
         - alert: ZOADynamoDBThrottled
           expr: |
-            sum by (cluster, dimension_TableName) (aws_dynamodb_throttled_requests_sum{dimension_TableName=~".*-zoa-.*"}) > 0
-          for: 15m
+            sum by (cluster, dimension_TableName) (aws_dynamodb_throttled_requests_sum{dimension_TableName=~".*-zoa-.*"}) >= 10
+          for: 30m
           labels:
             severity: warning
           annotations:
@@ -213,7 +288,7 @@ spec:
             description: >-
               DynamoDB throttles detected on table
               {{ "{{" }} $labels.dimension_TableName {{ "}}" }}
-              (cluster {{ "{{" }} $labels.cluster {{ "}}" }}) for >15m.
+              (cluster {{ "{{" }} $labels.cluster {{ "}}" }}) for >30m.
               Execution state and audit writes may be degraded.
             runbook: >-
               1. Check the throttled table in AWS Console: DynamoDB, Tables, select the table from the alert.
@@ -222,15 +297,14 @@ spec:
               4. Common cause: burst of TA executions exceeding provisioned capacity.
               5. Alert auto-recovers when throttling stops.
 
-        # Combined API + Worker Lambda error rate. Catches pre-handler
-        # crashes (OOM, init panic) that EMF metrics miss.
-        # Traffic guard: >10 invocations prevents single-failure noise.
+        # Combined ZOA Lambda error rate (api + worker + Access per cluster).
+        # Traffic guard: >20 invocations avoids paging on e.g. 1 error / 5 inv = 20%.
+        # for: 15m matches other ZOA SLO warnings (API, TA, Access HTTP).
         - alert: ZOALambdaErrorRateHigh
           expr: |
             (zoa:lambda_error_rate > 0.05)
-            and
-            (sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)"}) > 10)
-          for: 10m
+            and (zoa:lambda_invocations_combined > 20)
+          for: 15m
           labels:
             severity: warning
           annotations:
@@ -238,7 +312,7 @@ spec:
             description: >-
               ZOA Lambda functions on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
               error rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }} (>5%)
-              for 10m. Covers both API and worker Lambdas.
+              for 15m. Combined API, worker, and Access invocations per cluster.
             runbook: >-
               1. Check Lambda error details in CloudWatch Logs, filter by cluster and function name (api or worker).
               2. Look for OOM kills (Runtime.ExitError), init failures, or handler panics.
@@ -254,7 +328,7 @@ spec:
           expr: |
             (zoa:api_availability < {{ .Values.sla.zoa.apiAvailability.target }})
             and
-            (sum by (cluster) (aws_zoa_http_request_count_sum) > 10)
+            (sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"}) > 10)
           for: 15m
           labels:
             severity: warning
@@ -265,12 +339,37 @@ spec:
               {{ "{{" }} $value | humanizePercentage {{ "}}" }}
               (target {{ .Values.sla.zoa.apiAvailability.target }}) for 15m.
             runbook: >-
-              1. Check ZOA dashboard HTTP API section, 5xx vs 4xx by Cluster panel.
-              2. Check Request Count by Route panel for which routes are returning 5xx.
-              3. Common causes: DynamoDB issues (check throttling), Lambda memory pressure, code bugs in request handling.
-              4. If correlated with ZOADynamoDBThrottled: fix DynamoDB first.
-              5. If correlated with ZOALambdaErrorRateHigh: fix Lambda first.
-              6. Alert auto-recovers when availability rises above {{ .Values.sla.zoa.apiAvailability.target }}.
+              1. Check ZOA dashboard → ZOA HTTP API (API 5xx vs 4xx by Cluster, API Request Count by Route & Status).
+              2. Common causes: DynamoDB issues (check throttling), Lambda memory pressure, code bugs in request handling.
+              3. If correlated with ZOADynamoDBThrottled: fix DynamoDB first.
+              4. If correlated with ZOALambdaErrorRateHigh: fix Lambda first.
+              5. Alert auto-recovers when availability rises above {{ .Values.sla.zoa.apiAvailability.target }}.
+
+        # Access Lambda HTTP availability (session start/join on RC).
+        # EMF dimension_Cluster is deployment name, not MC id — alert is per
+        # Prometheus cluster label (RC Thanos series).
+        - alert: ZOAAccessAvailabilityBelowSLO
+          expr: |
+            (zoa:access_availability < {{ .Values.sla.zoa.accessAvailability.target }})
+            and
+            (sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"}) > 10)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA Access availability below SLO
+            description: >-
+              ZOA Access on cluster {{ "{{" }} $labels.cluster {{ "}}" }} availability is
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }}
+              (target {{ .Values.sla.zoa.accessAvailability.target }}) for 15m.
+              Session plane HTTP (Function URL) is returning elevated 5xx.
+            runbook: >-
+              1. Open ZOA dashboard → ZOA Access & Boundary sessions HTTP API (Access HTTP panels).
+              2. Check Boundary running tasks (ECS TaskCount) if session start succeeds but boundary never becomes ready.
+              3. Check CloudWatch Logs for *-zoa-access Lambda (session start, RunTask, DynamoDB).
+              4. Common causes: DynamoDB sessions table throttling, ECS RunTask failures, boundary task definition drift.
+              5. If correlated with ZOADynamoDBThrottled: fix DynamoDB first.
+              6. Alert auto-recovers when availability rises above {{ .Values.sla.zoa.accessAvailability.target }}.
 
         # Global TA success rate below SLO. Per-action detail is in the
         # dashboard — alerts are global to avoid noise at fleet scale
@@ -292,24 +391,27 @@ spec:
               (target {{ .Values.sla.zoa.taSuccessRate.target }}) for 15m.
               Check dashboard for per-action breakdown.
             runbook: >-
-              1. Open ZOA dashboard Executions by Action and Status panel to identify which actions are failing.
-              2. Check Activity Overview By Scope to see if kube-api or aws-api is affected.
+              1. Open ZOA dashboard → ZOA Trusted Action Executions (Executions by Action & Status).
+              2. Check ZOA Activity Overview by Scope (kube-api vs aws-api).
               3. If a single action is failing: check that action RBAC, timeout, and target resource availability.
               4. If many actions fail: likely a shared dependency issue, see ZOAExecutionsTotalFailure runbook.
               5. Alert auto-recovers when success rate rises above {{ .Values.sla.zoa.taSuccessRate.target }}.
 
-        # Lambda concurrency limits hit — scaling or configuration issue.
+        # Combined ZOA Lambda throttle rate (api + worker + Access per cluster).
+        # Same traffic guard as error rate; for: 20m requires sustained throttle pressure.
         - alert: ZOALambdaThrottled
           expr: |
-            sum by (cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)"}) > 0
-          for: 10m
+            (zoa:lambda_throttle_rate > 0.05)
+            and (zoa:lambda_invocations_combined > 20)
+          for: 20m
           labels:
             severity: warning
           annotations:
             summary: ZOA Lambda functions throttled
             description: >-
               ZOA Lambda functions on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
-              are being throttled. Check reserved concurrency limits.
+              throttle rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }} (>5%)
+              for 20m. Combined API, worker, and Access invocations per cluster.
             runbook: >-
               1. Check Lambda concurrent executions in ZOA dashboard, Infrastructure: Lambda.
               2. Check AWS Console, Lambda, Configuration, Concurrency for the affected functions. ZOA uses reserved concurrency per VPC.
@@ -353,25 +455,117 @@ spec:
               4. Impact: stale ServiceAccounts and RBAC bindings accumulate in the MC. Not immediately dangerous but creates clutter.
               5. Alert auto-recovers when GC resumes ticking.
 
-        # GC is encountering errors cleaning up resources.
+        # Boundary identity bridge SLI: hit_rate over hit|miss|error only.
+        # Outcome=skipped (Ginkgo/laptop→API) is graphed but not part of this alert.
+        - alert: ZOAIdentityBridgeHitRateBelowSLO
+          expr: |
+            (zoa:identity_bridge_hit_rate < {{ .Values.sla.zoa.identityBridgeHitRate.target }})
+            and
+            (sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"}) > 10)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA identity bridge hit rate below SLO
+            description: >-
+              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} hit rate is
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }}
+              (target {{ .Values.sla.zoa.identityBridgeHitRate.target }}) for 15m over
+              boundary lookups only (skipped/e2e excluded).
+              TAs still run but audit operator may be ECS task id instead of human.
+            runbook: >-
+              1. Grafana → ZOA HTTP API → API Identity Bridge lookups (all outcomes).
+              2. If miss/error dominate: session taskId wiring, race at start, or DynamoDB (error outcome).
+              3. Alert clears when hit rate rises above {{ .Values.sla.zoa.identityBridgeHitRate.target }}.
+
+        # Session reaper tick health (Worker route reaper, ~5m).
+        - alert: ZOAReaperStalled
+          expr: |
+            (
+              zoa:reaper_tick_count == 0
+              and on(cluster) (count_over_time(aws_zoa_reaper_last_run_maximum[1h]) > 3)
+            )
+            or
+            (
+              (time() - zoa:reaper_last_run > 1800)
+              and (zoa:reaper_last_run > 0)
+            )
+            or
+            (
+              max by (cluster) (count_over_time(aws_zoa_reaper_last_run_maximum[1h])) > 3
+              unless on(cluster) max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[30m]))
+            )
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA session reaper has stopped ticking
+            description: >-
+              ZOA reaper on cluster {{ "{{" }} $labels.cluster {{ "}}" }} has not ticked
+              in >30m (expected every 5min). Boundary sessions may exceed deadline/idle policy.
+            runbook: >-
+              1. Check EventBridge worker schedule includes route reaper (~5m).
+              2. ZOA Workers → Reaper Tick Health and Worker tick errors; check worker Lambda logs.
+              3. ZOA Access & Boundary → Boundary running tasks if sessions pile up without reaper stops.
+              4. Alert auto-recovers when reaper resumes ticking.
+
+        - alert: ZOAReaperErrors
+          expr: |
+            sum by (cluster) (aws_zoa_reaper_errors_sum) >= 2
+          for: 20m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA session reaper errors detected
+            description: >-
+              ZOA session reaper on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
+              reported reaper phase error count >=2 in scrape window for >20m
+              (5m schedule). EMF emits at most 1 phase error per tick — sustained
+              high values imply repeated failed ticks in CloudWatch windows.
+            runbook: >-
+              1. ZOA Workers → Worker tick errors (reaper series) and worker Lambda logs.
+              2. Check ECS boundary cluster health and IAM for StopTask/ListTasks on {cluster}-zoa-boundary.
+              3. Alert auto-recovers when reaper errors stop.
+
+        # GC tick errors (5m schedule) — same for window as reaper errors.
         - alert: ZOAGCErrors
           expr: |
-            sum by (cluster) (aws_zoa_gcerrors_sum) > 0
-          for: 10m
+            sum by (cluster) (aws_zoa_gcerrors_sum) >= 2
+          for: 20m
           labels:
             severity: warning
           annotations:
             summary: ZOA garbage collector errors detected
             description: >-
               ZOA garbage collector on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
-              reported errors for >10m. Stale ServiceAccounts and RBAC
-              may be accumulating.
+              reported GC phase errors (>=2 in scrape window) for >20m.
+              Stale ServiceAccounts and RBAC may be accumulating.
             runbook: >-
               1. Check worker Lambda logs for GC error details, filter by HandlerMode=gc.
               2. Common causes: RBAC permissions insufficient to delete resources, K8s API server temporarily unreachable, namespace stuck in terminating.
               3. Check if circuit breaker is also opening (ZOACircuitBreakerFlapping).
               4. Impact: stale resources accumulate but do not affect TA execution.
               5. Alert auto-recovers when GC errors stop.
+
+        # Reconciler tick phase errors (1m schedule). Up to 6 phases per tick;
+        # >=3 filters a single mild phase failure.
+        - alert: ZOAReconcilerErrors
+          expr: |
+            sum by (cluster) (aws_zoa_reconciler_errors_sum) >= 3
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA reconciler phase errors detected
+            description: >-
+              ZOA reconciler on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
+              reported reconciler phase error count >=3 for >15m. Distinct from
+              ZOAReconcilerStalled (tick stopped). Async state may not advance cleanly.
+            runbook: >-
+              1. Check worker Lambda logs for reconciler phase_errors (dispatch, poll, timeout, GC phases).
+              2. If ZOAReconcilerStalled also fires: prioritize stalled (heartbeat lost).
+              3. Correlate with ZOADynamoDBThrottled and ZOACircuitBreakerFlapping.
+              4. Alert auto-recovers when reconciler ticks complete without phase errors.
 
         # Circuit breaker flapping — multiple opens in 30min means
         # sustained EKS connectivity issues on at least one Lambda container.

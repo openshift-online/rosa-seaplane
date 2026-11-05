@@ -4,11 +4,13 @@
   not tpl, so .Values.global.cluster_name is inaccessible there).
 
   In ephemeral environments (shared AWS accounts), drops aws_zoa_* metrics
-  whose dimension_Cluster doesn't match the current cluster. This prevents
-  cross-cluster ZOA EMF pollution. In isolated accounts (int/stage/prod),
-  no filtering is applied because every cluster has its own AWS account.
+  from other ephemeral instances in the shared AWS account. Keeps series
+  whose dimension_Cluster contains this RC's eph instance id (cluster_name
+  with "-regional" trimmed), including Access DEPLOYMENT_NAME values.
+  Isolated accounts (int/stage/prod) skip this block.
 */}}
 {{- if .Values.serviceMonitor.enabled }}
+{{- $zoaEphInstance := trimSuffix "-regional" .Values.global.cluster_name }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -25,17 +27,15 @@ spec:
       metricRelabelings:
         {{- toYaml .Values.serviceMonitor.metricRelabelings | nindent 8 }}
         {{- if eq .Values.global.environment "ephemeral" }}
-        # Drop aws_zoa_* metrics from other clusters.
-        # YACE's customNamespace job scrapes all ZOA EMF metrics account-wide
-        # because customNamespace has no tag-based filtering. In shared AWS
-        # accounts (ephemeral), multiple clusters share one account, so we
-        # filter at scrape time.
+        # Drop aws_zoa_* from other eph instances. Mark when dimension_Cluster
+        # contains this instance id (e.g. eph-1fcc5750-regional,
+        # us-east-1-eph-1fcc5750, and MC target ids for the same eph).
         #
         # 2-step mark-then-drop works around RE2's lack of negative lookahead.
         # Temporary __tmp_* labels are stripped automatically before storage.
         - action: replace
           sourceLabels: [__name__, dimension_Cluster]
-          regex: aws_zoa_.+;{{ .Values.global.cluster_name }}
+          regex: aws_zoa_.+;.*{{ $zoaEphInstance }}.*
           targetLabel: __tmp_zoa_mine
           replacement: "y"
         - sourceLabels: [__name__, __tmp_zoa_mine]
