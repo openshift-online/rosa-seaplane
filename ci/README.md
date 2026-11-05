@@ -10,6 +10,7 @@ CI is managed through the [OpenShift CI](https://docs.ci.openshift.org/) system 
 | [`terraform-validate`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-openshift-online-rosa-seaplane-main-terraform-validate)       | Pre-submit               | Runs `terraform validate` on all root modules                                                                                                  |
 | [`helm-lint`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-openshift-online-rosa-seaplane-main-helm-lint)                         | Pre-submit               | Lints Helm charts                                                                                                                              |
 | [`check-rendered-files`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-openshift-online-rosa-seaplane-main-check-rendered-files)   | Pre-submit               | Verifies rendered deploy files are up to date                                                                                                  |
+| [`unit-tests`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-openshift-online-rosa-seaplane-main-unit-tests)                       | Pre-submit               | Runs [`ci/run-unit-tests.sh`](run-unit-tests.sh) — render script tests, promtool rule tests, and the submodule fetch-recursion check           |
 | [`on-demand-e2e`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/pr-logs/directory/pull-ci-openshift-online-rosa-seaplane-main-on-demand-e2e)                 | Pre-submit (manual)      | End-to-end: provisions ephemeral environment using PR rosa-seaplane branch, runs tests, tears down. Trigger with `/test on-demand-e2e` on a PR |
 | [`nightly-ephemeral`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/logs/periodic-ci-openshift-online-rosa-seaplane-main-nightly-ephemeral)                  | Daily at 04:00 UTC       | End-to-end: provisions ephemeral environment using `main` rosa-seaplane branch, runs tests, tears down                                         |
 | [`nightly-integration`](https://prow.ci.openshift.org/job-history/gs/test-platform-results/logs/periodic-ci-openshift-online-rosa-seaplane-main-nightly-integration)              | Daily at 04:00 UTC       | Runs e2e tests against a standing integration environment                                                                                      |
@@ -20,6 +21,24 @@ CI is managed through the [OpenShift CI](https://docs.ci.openshift.org/) system 
 | `nightly-c6i` (planned)                                                                                                                                                           | Tue/Thu/Sat at 05:00 UTC | Nightly ephemeral with `c6i.xlarge` instance types — validates compute-optimized Intel machines                                                |
 
 > **Note:** `nightly-m6i` and `nightly-c6i` are pending periodic job definitions in [openshift/release](https://github.com/openshift/release). Scripts and override files are ready in this repo.
+
+## Checkout and Submodules
+
+Prowgen derives `decoration_config.sparse_checkout_files` for every presubmit from the build root's `dockerfile_path`, so clonerefs checks this repo out with a sparse checkout containing only `ci/Containerfile`. The cert-manager submodule directory therefore does not exist in the working tree when clonerefs fetches a PR head.
+
+git's default `fetch.recurseSubmodules=on-demand` makes `git fetch <pr head>` recurse into any submodule whose pinned commit the fetched commits change. With the directory absent, that recursion aborts the fetch:
+
+```text
+Could not access submodule 'argocd/config/management-cluster/cert-manager/upstream'
+```
+
+Every job on the PR then fails at checkout, before the merge and before clonerefs runs `git submodule update --init --recursive`. `.gitmodules` sets `fetchRecurseSubmodules = false` to suppress the fetch-time recursion.
+
+Only fetch-time recursion is suppressed; an explicit `git submodule update --init --recursive` is unaffected. Replaying the whole clonerefs sequence against a pin bump confirms it — the PR-head fetch and the merge both succeed, and the submodule is then checked out at the bumped commit.
+
+This change does not touch `reposerver.enable.git.submodule`, which stays as configured: `true` for management clusters (set by the MC ApplicationSet) and `false` for the regional cluster.
+
+[`ci/check-submodule-fetch-config.sh`](check-submodule-fetch-config.sh) guards the setting. It is offline and hermetic — it builds throwaway fixture repositories in a temp directory and replays the clonerefs command sequence against them. It runs as part of the `unit-tests` job and of `make pre-push`, and can be run directly with `make check-submodule-fetch-config`.
 
 ## Load Testing (Planned)
 
