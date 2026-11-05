@@ -172,15 +172,26 @@ resource "aws_iam_role_policy" "eso_ssm" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = [
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath"
-      ]
-      Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.regional_id}/*"
-    }]
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/${var.regional_id}/*"
+      },
+      # The shared pull secret is seeded out of band and lives outside the
+      # ${var.regional_id}/ prefix, so it needs its own statement. Scoped to a
+      # single parameter and a single read action on purpose — do not widen to
+      # /infra/* or add GetParametersByPath.
+      {
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/infra/pull-secret"
+      }
+    ]
   })
 }
 
