@@ -18,10 +18,10 @@ regional_cluster:
   enable_sre_public_access: true
   enable_sre_oidc_auth: true
   sre_oidc_issuer_url: "https://auth.stage.redhat.com/auth/realms/EmployeeIDP"
-  sre_grafana_oidc_client_id: "rrp-grafana-sre-int-us-east-1"
-  sre_argocd_oidc_client_id: "rrp-argocd-sre-int-us-east-1"
-  sre_prometheus_oidc_client_id: "rrp-prometheus-sre-int-us-east-1"
-  sre_thanos_oidc_client_id: "rrp-thanos-sre-int-us-east-1"
+  sre_grafana_oidc_client_id: "rrp-grafana-sre-int0-us-east-1"
+  sre_argocd_oidc_client_id: "rrp-argocd-sre-int0-us-east-1"
+  sre_prometheus_oidc_client_id: "rrp-prometheus-sre-int0-us-east-1"
+  sre_thanos_oidc_client_id: "rrp-thanos-sre-int0-us-east-1"
 
 cluster_lifecycle:
   default_expiration: "24h"
