@@ -123,7 +123,7 @@ Clusters may differ from x.y.default-z if:
 ### Monitoring & Rollback
 
 - **Fleet visibility:** see Monitoring & Observability Requirements.
-- **Rollback:** HyperShift supports rollback to previous z-stream (not y-stream), never automated. An SRE rolls a cluster back by pinning it to an older Z, through a dedicated ZOA TA that requires additional approval (see SRE Controls).
+- **Rollback:** HyperShift supports rollback to a previous z-stream (not y-stream), never automated. The platform doesn't restrict `pin-version` to that boundary — it isn't validated against anything, regardless of minor (see Per-cluster pin) — so a rollback pin that crosses minors is on the SRE to understand and accept against HyperShift's own supported behavior; ZOA TA review is the safety mechanism, not software validation. An SRE rolls a cluster back by pinning it to an older Z, through a dedicated ZOA TA that requires additional approval (see SRE Controls).
 
 ## Y+1 Upgrade
 
@@ -188,8 +188,6 @@ Platform must maintain automated test coverage for:
    1. ROSA V2 e2e tests
    2. Upgrade tests: every z-release currently active in the fleet for the same minor (across all regions, including pinned clusters) to the candidate release.
    3. Y+1 upgrade tests: every z-release currently active in the fleet for the prior minor Y (across all regions, including pinned clusters) to the candidate release, when the candidate is a Y+1 target. This is what proves Y+1 coverage before the release is ever promoted, so no cluster is ever asked to cross an untested edge.
-
-TODO: why do we need to test on a candidate if it has been tested on nightly?
 
 CI testing will not run on fast, stable or eus channels, as the release will have been vetted through nightly and candidate testing by that point. However, the platform will monitor the installs and upgrades on new releases, and in the case of failures or regressions, it will trigger alerts that will result in adding exclusion intervals for the affected z-releases.
 
@@ -259,10 +257,10 @@ Scope: drive every cluster to its channel's `.status.default` (automatic Z-upgra
 Reconcile loop (every ~10 min):
 
 - A cluster's target is its `pin-version` label when present (see Per-cluster pin), otherwise `.status.default`. Pin is the only path allowed to move a cluster backward; targeting via `.status.default` is never a downgrade.
-- A cluster is eligible for a new target when it is not currently in-flight and its version differs from this target. An in-flight cluster is skipped here even if `.status.default` has since advanced past it: that alone does not retarget it, only re-evaluated for a new target once its current one finishes. The one exception is a target that gets excluded mid-upgrade, which does retarget a stuck cluster before it finishes (see Per-cluster lifecycle, Remediation).
+- A cluster is eligible for a new target when it is not currently in-flight and its version differs from this target. An in-flight cluster is skipped here even if `.status.default` has since advanced past it, or a Cincinnati exclusion has invalidated its target: the automatic Default-Z path never retargets a cluster mid-upgrade, only re-evaluates it once its current attempt finishes. An SRE pin is the only thing that can move a cluster off its target before then (see Per-cluster pin, Remediation).
 - Staggering: `MAX_CONCURRENT_UPGRADES` caps in-flight upgrades, pin-driven or automatic alike. A cluster counts as in-flight from the moment its `TargetedForUpgrade` condition is set until its `UpgradeSuccessfulSoak` condition matches that same recorded release, so the count survives controller restarts. Pick up a new cluster only while in-flight is under the cap. When more clusters are eligible than free slots: clusters still mid-walk through an EUS intermediate hop (see User-driven Y-upgrade) are picked up first, ahead of everything else, since they've already been admitted into a channel they're not meant to stay on; among the rest, the ones furthest behind their target go next, so a cluster that's fallen several Z's behind doesn't keep losing slot contention to ones that just became eligible.
 
-Per-cluster lifecycle (the slot is held against the recorded target release from target until full soak, even if `.status.default` advances to a newer Z while the upgrade is in flight: a cluster finishes the upgrade it was targeted for before it can be retargeted, unless that target itself gets excluded in Cincinnati — see Remediation):
+Per-cluster lifecycle (the slot is held against the recorded target release from target until full soak, even if `.status.default` advances to a newer Z — or that target gets excluded in Cincinnati — while the upgrade is in flight: the automatic path always lets a cluster finish the upgrade it was targeted for; only an explicit SRE pin can move it off that target sooner, see Remediation):
 
 - Target: set the `TargetedForUpgrade` condition (release and timestamp), set `.spec.release.image` from the cluster's target. `seaplane_channel_upgrades_started{channel,version}` is emitted from the presence of this condition and is never removed.
 - `UpgradeSuccessful` status condition: the cluster reports healthy on the new version.
@@ -291,7 +289,7 @@ stateDiagram-v2
 
 Remediation (no automatic rollback):
 
-- Stuck and soak-stuck clusters hold their slots and roll forward: SRE fixes them in place until they soak, or they skip the bad Z once it's excluded in Cincinnati and the Channel controller promotes the next Z into `.status.default` (the excluded Z is no longer a target, and the next loop retargets them).
+- Stuck and soak-stuck clusters hold their slots: excluding the bad Z in Cincinnati stops new clusters from being targeted at it, but it does not by itself move an already-stuck cluster off it — the automatic path never retargets a cluster mid-upgrade. SRE either fixes the cluster in place until it soaks on the original target, or pins it to a different `<z>` through the rollback/forward ZOA TA (see Per-cluster pin) to move it off the bad Z explicitly.
 - HyperShift supports rollback, but the controller never downgrades automatically. An SRE performs a rollback by pinning the cluster to an older `<z>` (see Per-cluster pin), through the dedicated rollback ZOA TA.
 
 Per-cluster pin: SRE pins a cluster via a label on the Cluster, set through a ZOA TA:
