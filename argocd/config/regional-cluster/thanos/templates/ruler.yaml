@@ -9,6 +9,7 @@ metadata:
   annotations:
     {{- include "thanos-operator.annotations" . | nindent 4 }}
 spec:
+  {{- include "thanos.operandImage" . | nindent 2 }}
   replicas: {{ .Values.ruler.replicas | default 2 }}
   queryLabelSelector:
     matchLabels:

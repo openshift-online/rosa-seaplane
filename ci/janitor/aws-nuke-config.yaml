@@ -158,6 +158,9 @@ presets:
         - property: RepositoryName
           type: glob
           value: "e2e-platform-*"
+      # RC and MC both pull registry.redhat.io once midstream images are pinned.
+      SSMParameter:
+        - "/infra/pull-secret"
       Route53HostedZone: *glob-name-all
       CodeBuildSourceCredential: *glob-name-all
 
