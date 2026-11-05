@@ -4,6 +4,12 @@ aws-load-balancer-controller:
   # Delegate webhook certificate and CA-bundle management to cert-manager.
   # Helm-generated webhook certificates are not stable across ArgoCD renders.
   enableCertManager: true
+  # Fail open only for the Service mutator while the cert-manager-owned webhook
+  # certificate is being issued. This webhook only sets the LBC class on
+  # LoadBalancer Services; no regional chart currently creates those Services.
+  # TargetGroupBinding webhooks remain fail-closed and Argo retries their syncs.
+  serviceMutatorWebhookConfig:
+    failurePolicy: Ignore
   serviceAccount:
     create: true
     name: aws-load-balancer-controller

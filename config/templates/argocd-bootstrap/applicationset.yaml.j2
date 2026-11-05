@@ -40,17 +40,32 @@ spec:
       destination:
         namespace: '{{ '{{ .path.basename }}' }}'
         server: '{{ '{{ .server }}' }}'
-      # cert-manager's CA injector owns this field; don't let Helm-rendered
-      # manifests overwrite it during a sync.
+      # cert-manager owns the LBC Secret data and webhook CA bundles. Name-keyed
+      # LBC paths prevent a removed webhook entry from being merged back.
       ignoreDifferences:
+      - kind: Secret
+        name: aws-load-balancer-tls
+        namespace: aws-load-balancer-controller
+        jsonPointers:
+        - /data
       - group: admissionregistration.k8s.io
         kind: MutatingWebhookConfiguration
         jqPathExpressions:
-        - .webhooks[].clientConfig.caBundle
+        - .webhooks[] | select(.name == "mpod.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "quicid.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "mservice.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "alb-target-control.namespace.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "alb-target-control.object.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "mtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
       - group: admissionregistration.k8s.io
         kind: ValidatingWebhookConfiguration
         jqPathExpressions:
-        - .webhooks[].clientConfig.caBundle
+        - .webhooks[] | select(.name == "vingressclassparams.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "vtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "vingress.elbv2.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.name == "vglobalaccelerator.aga.k8s.aws") | .clientConfig.caBundle
+        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
       syncPolicy:
         automated:
           prune: true
