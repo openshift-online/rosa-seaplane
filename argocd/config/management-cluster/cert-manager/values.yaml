@@ -1,36 +1,3 @@
-cert-manager:
-  crds:
-    enabled: true
-    keep: true # Prevents Helm from deleting CRDs if the chart is uninstalled
-  prometheus:
-    servicemonitor:
-      enabled: true
-
-  # --- DNS01 solver tuning for Route 53 rate limits ---
-  # Route 53 has a hard 5 req/s per-account limit shared across cert-manager,
-  # external-dns, and terraform. The Route 53 provider's Present() phase calls
-  # GetChange to poll for DNS record propagation at the API level; throttling
-  # there causes "Rate exceeded" errors (~30% CI failure rate).
-  extraArgs:
-    # Offload the DNS self-check (propagation verification that runs AFTER
-    # Present()) to public recursive resolvers instead of querying Route 53.
-    # This does not affect the GetChange polling in Present() directly, but
-    # reduces overall Route 53 API pressure, freeing quota for GetChange.
-    - --dns01-recursive-nameservers-only=true
-    - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53
-
-    # Control the self-check polling interval (propagation verification),
-    # not the GetChange poll in Present(). Increasing from the default 10s
-    # to 30s reduces DNS query volume during the self-check phase, which
-    # indirectly frees Route 53 quota for the GetChange calls in Present().
-    # Trade-off: certificate issuance may take up to 20s longer per order.
-    - --dns01-check-retry-period=30s
-
-  # This DIRECTLY addresses GetChange throttling during the Present() phase.
-  # The default SDK retry ceiling of 3 attempts is too low under contention —
-  # transient 429 Throttling responses cause immediate failure. 10 attempts
-  # with exponential backoff lets the SDK ride out short quota bursts without
-  # surfacing errors to the ACME solver.
-  extraEnv:
-    - name: AWS_MAX_ATTEMPTS
-      value: "10"
+# Wrapper chart values. Jetstack operand values live in jetstack-values.yaml
+# (rendered via kustomize helmCharts, not as a Helm subchart).
+{}

@@ -1,0 +1,4 @@
+[submodule "argocd/config/management-cluster/cert-manager/upstream"]
+	path = argocd/config/management-cluster/cert-manager/upstream
+	url = https://github.com/cert-manager/cert-manager.git
+	shallow = true
