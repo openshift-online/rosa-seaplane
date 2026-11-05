@@ -33,8 +33,23 @@ trap 'rm -rf "$TMPDIR_CHECK"' EXIT
 # from any repository the caller may have pinned through the environment -- a
 # git hook or `git rebase --exec` exports GIT_DIR, which would otherwise send
 # `git init` and every later command at the wrong repository.
+#
+# The config-injecting variables matter just as much. GIT_CONFIG_COUNT (with
+# GIT_CONFIG_KEY_<n>/GIT_CONFIG_VALUE_<n>), GIT_CONFIG_PARAMETERS and the legacy
+# GIT_CONFIG all outrank the GIT_CONFIG_GLOBAL set below, so a caller carrying
+# one reaches straight into the fixtures: `protocol.file.allow=never` breaks the
+# replay outright, `fetch.recurseSubmodules=no` silently neutralises the negative
+# control while the check still reports success, and GIT_CONFIG makes every
+# `git config --global` here fail with "only one config file at a time".
+# Clearing GIT_CONFIG_COUNT is enough for the indexed form; git reads
+# GIT_CONFIG_KEY_<n>/GIT_CONFIG_VALUE_<n> only up to it.
+#
+# GIT_ALLOW_PROTOCOL and GIT_PROTOCOL_FROM_USER would likewise refuse the
+# fixtures' file:// transport ("fatal: transport 'file' not allowed").
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+    GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE \
+    GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS GIT_CONFIG \
+    GIT_ALLOW_PROTOCOL GIT_PROTOCOL_FROM_USER
 export GIT_CONFIG_GLOBAL="$TMPDIR_CHECK/gitconfig"
 export GIT_CONFIG_SYSTEM=/dev/null
 export GIT_CONFIG_NOSYSTEM=1
