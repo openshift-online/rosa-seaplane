@@ -11,7 +11,7 @@ kubeApplier:
     pullPolicy: IfNotPresent
   # Deployment configuration
   deployment:
-    replicas: 1
+    replicas: 2
     resources:
       requests:
         cpu: "100m"
