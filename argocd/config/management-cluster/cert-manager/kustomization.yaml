@@ -15,6 +15,8 @@ helmCharts:
     namespace: cert-manager
     includeCRDs: true
     valuesFile: jetstack-values.yaml
+# helmCharts.namespace stamps metadata.namespace on the Deployments. Patches
+# without that field are looked up as Deployment/...[noNs] and fail to match.
 patches:
   - path: patches/controller-command.yaml
   - path: patches/webhook-command.yaml
