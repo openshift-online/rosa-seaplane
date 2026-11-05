@@ -17,6 +17,7 @@ set -euo pipefail
 # Configuration
 # =============================================================================
 
+CONTAINER_ENGINE_FROM_ENV="${CONTAINER_ENGINE:-}"
 CONTAINER_ENGINE="${CONTAINER_ENGINE:-$(command -v podman 2>/dev/null || command -v docker 2>/dev/null || true)}"
 CI_IMAGE="rosa-regional-ci"
 ENVS_FILE=".ephemeral-envs"
@@ -358,6 +359,23 @@ bastion_setup() {
     bastion_run_task "$cluster_id"
 }
 
+
+warn_container_engine_override() {
+    if [[ -n "$CONTAINER_ENGINE_FROM_ENV" ]]; then
+        printf 'Warning: CONTAINER_ENGINE is set in your environment (%s); automatic Podman/Docker selection is disabled.\n' "$CONTAINER_ENGINE" >&2
+    fi
+}
+
+warn_github_token_override() {
+    if [[ -n "${SEAPLANE_CI_GITHUB_TOKEN:-}" ]]; then
+        echo "Warning: SEAPLANE_CI_GITHUB_TOKEN is set in your environment; using it instead of the SSM GitHub token." >&2
+        if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+            echo "Warning: GITHUB_TOKEN is also set but ignored; SEAPLANE_CI_GITHUB_TOKEN takes precedence." >&2
+        fi
+    elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        echo "Warning: GITHUB_TOKEN is set in your environment; using it instead of the SSM GitHub token." >&2
+    fi
+}
 
 # Check that required CLI tools are available.
 preflight() {
@@ -1467,12 +1485,19 @@ case "${1:-help}" in
             command -v "$tool" >/dev/null 2>&1 || die "Missing required tool: $tool"
         done
         ;;
+    provision|provision-resume|teardown|resync|swap-branch)
+        warn_container_engine_override
+        warn_github_token_override
+        preflight
+        ensure_image
+        ;;
     shell|e2e|zoa-e2e|post-account|delete-account)
+        warn_container_engine_override
         preflight
         ensure_image
         ;;
     *)
-        # provision, provision-resume, teardown, resync
+        # Help and unknown commands retain the existing preflight behavior.
         preflight
         ensure_image
         ;;

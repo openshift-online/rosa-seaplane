@@ -18,6 +18,14 @@ The following tools must be in `PATH` for all ephemeral environment commands:
 
 Port forwarding additionally requires `aws` and `lsof`.
 
+The ephemeral environment scripts prefer Podman when both container engines are
+installed. A non-empty `CONTAINER_ENGINE` environment variable overrides that
+selection (for example, `CONTAINER_ENGINE=podman make ephemeral-provision`).
+Provisioning, resync, teardown, and branch swaps print a warning if this override is set.
+They also warn when `SEAPLANE_CI_GITHUB_TOKEN` or `GITHUB_TOKEN` supplies the
+GitHub token instead of SSM Parameter Store. The former takes precedence when
+both are set; token values are never printed.
+
 ### AWS Account Setup
 
 By default, scripts look for account ID files in the `rosa-seaplane-internal` sibling repo:
