@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags pre-push render
+.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-submodule-fetch-config pre-push render
 
 # =============================================================================
 # Local tool management
@@ -175,6 +175,9 @@ check-docs: ## Check documentation formatting
 	@npx --no-install prettier --check '**/*.md'
 	@echo "✅ Documentation formatting check complete"
 
+check-submodule-fetch-config: ## Verify .gitmodules keeps Prow's sparse checkout working
+	@./ci/check-submodule-fetch-config.sh
+
 # central-account-bootstrap (shared connection/state) is excluded from tag
 # enforcement; the CodePipeline modules are tagged and linted normally.
 TFLINT_EXCLUDE_DIRS := \
@@ -197,7 +200,7 @@ pre-push: ## Run all CI validation checks (parallel)
 	@echo "Formatting Terraform files..."
 	@$(MAKE) terraform-fmt
 	@echo ""
-	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags
+	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags check-submodule-fetch-config
 	@echo ""
 	@echo "✅ All pre-push checks passed!"
 
