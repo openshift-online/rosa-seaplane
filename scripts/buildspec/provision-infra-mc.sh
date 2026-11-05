@@ -38,7 +38,7 @@ fi
 
 # Terraform configuration values come from the rendered deployment JSON.
 tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
-    app_code service_phase cost_center management_id enable_bastion \
+    app_code service_phase cost_center management_id enable_bastion enable_ecr_creds_sync \
     zoa_lambda_image_tag zoa_runner_image_tag zoa_runner_source_image \
     zoa_boundary_session_idle_timeout_seconds zoa_boundary_session_stale_creating_seconds \
     zoa_lambda_api_concurrency zoa_lambda_worker_concurrency zoa_deployment_name \

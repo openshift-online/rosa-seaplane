@@ -1,3 +1,6 @@
+global:
+  image_registry_account_id: ""
+
 ecrCredsSync:
   applicationName: ecr-creds-sync
   namespace: argocd
@@ -26,6 +29,7 @@ ecrCredsSync:
     sourceSecrets: ""
 
   image:
-    repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-ecr-creds-sync
+    registry: ""
+    repository: rosa-seaplane-ecr-creds-sync
     tag: "f34824f"
     pullPolicy: IfNotPresent

@@ -1,3 +1,13 @@
+{{- $image := index .Values "ecrCredsSync" "image" -}}
+{{- $registry := index $image "registry" -}}
+{{- if not $registry -}}
+{{- $registry = printf "%s.dkr.ecr.us-east-1.amazonaws.com" .Values.global.image_registry_account_id -}}
+{{- end -}}
+{{- $childValues := deepCopy (index .Values "ecrCredsSync" "helmValues") -}}
+{{- $_ := set $childValues "image" (dict
+  "repository" (printf "%s/%s" $registry (index $image "repository"))
+  "tag" (index $image "tag")
+  "pullPolicy" (index $image "pullPolicy")) -}}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,9 +24,8 @@ spec:
     path: {{ index .Values "ecrCredsSync" "source" "path" }}
     helm:
       values: |
-        {{- if index .Values "ecrCredsSync" "helmValues" }}
-        {{- toYaml (index .Values "ecrCredsSync" "helmValues") | nindent 8 }}
-        {{- end }}
+        ecrCredsSync:
+          {{- toYaml $childValues | nindent 10 }}
 
   destination:
     server: https://kubernetes.default.svc

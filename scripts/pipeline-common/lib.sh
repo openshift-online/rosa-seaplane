@@ -24,6 +24,8 @@
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/image-registry.sh"
+
 # ── Internal state ───────────────────────────────────────────────────────────
 
 _CENTRAL_AWS_ACCESS_KEY_ID=""

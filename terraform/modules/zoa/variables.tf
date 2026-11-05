@@ -36,23 +36,22 @@ variable "output_retention_days" {
   default     = 365
 }
 
-# --- Lambda image (mirrored from source registry → ECR in this module) ---
-# Runner and boundary images are referenced by tag from the source registry in zoa-lambda / deploy config.
+# --- Lambda image is mirrored from Quay into this regional ECR repository. ---
 
 variable "zoa_lambda_source_image" {
-  description = "Source registry image for ZOA Lambda (mirrored to ECR at deploy time)"
+  description = "Quay source image for ZOA Lambda (mirrored into regional ECR at apply time)."
   type        = string
   default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
 }
 
 variable "zoa_runner_source_image" {
-  description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror)"
+  description = "Source image for ZOA Runner; K8s pulls directly from the source registry."
   type        = string
   default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }
 
 variable "zoa_lambda_image_tag" {
-  description = "Immutable image tag for the ZOA Lambda. Used for source→ECR mirroring."
+  description = "Immutable Lambda image tag used for Quay-to-ECR mirroring."
   type        = string
   default     = "67ef089"
 
@@ -63,7 +62,7 @@ variable "zoa_lambda_image_tag" {
 }
 
 variable "zoa_runner_image_tag" {
-  description = "Immutable image tag for the ZOA Runner (K8s Job)."
+  description = "Immutable ZOA Runner image tag."
   type        = string
   default     = "67ef089"
 }

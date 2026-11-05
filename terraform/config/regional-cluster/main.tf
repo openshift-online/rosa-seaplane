@@ -587,8 +587,8 @@ module "zoa" {
 module "zoa_lambda" {
   source = "../../modules/zoa-lambda"
 
-  cluster_id  = var.regional_id
-  target_type = "rc"
+  cluster_id                = var.regional_id
+  target_type               = "rc"
 
   lambda_image_uri = module.zoa.lambda_image_uri
   job_image_uri    = module.zoa.runner_image_uri

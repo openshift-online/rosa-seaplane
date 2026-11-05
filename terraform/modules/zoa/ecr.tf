@@ -1,9 +1,8 @@
-# =============================================================================
-# ECR Repositories for ZOA Container Images
-# =============================================================================
-# Private ECR repos with OU-scoped cross-account pull access.
-# MC Lambdas (different account, same region) pull using the same image URI.
-# Images are mirrored from the source registry via skopeo (registry-to-registry, no daemon).
+# Transitional legacy ECR repository for already-running RC/MC Lambda versions.
+# New Lambda, Runner, and Boundary deployments pull directly from the shared
+# registry; do not add image mirroring here. Keep this repository and its pull
+# policy through the parallel RC/MC rollout, then remove it once all Lambdas
+# have moved to the shared image URI.
 
 resource "aws_ecr_repository" "lambda" {
   name                 = "${var.regional_id}-zoa-lambda"
@@ -22,9 +21,6 @@ resource "aws_ecr_repository" "lambda" {
   tags = merge(local.common_tags, { Name = "${var.regional_id}-zoa-lambda" })
 }
 
-
-# --- Lifecycle policies: keep last 20 images ---
-
 resource "aws_ecr_lifecycle_policy" "lambda" {
   repository = aws_ecr_repository.lambda.name
 
@@ -41,10 +37,6 @@ resource "aws_ecr_lifecycle_policy" "lambda" {
     }]
   })
 }
-
-
-# --- Cross-account pull policies ---
-# Allows MC accounts (via OU path) and Lambda service (for image optimization)
 
 resource "aws_ecr_repository_policy" "lambda" {
   repository = aws_ecr_repository.lambda.name
@@ -80,9 +72,8 @@ resource "aws_ecr_repository_policy" "lambda" {
   })
 }
 
-
-# --- Mirror images from source registry → ECR (skip if tag already exists) ---
-
+# Mirror from the public Quay source into the regional ECR repository. The
+# source ref and tag remain overrideable by rosa-seaplane-ephemeral-e2e.
 resource "null_resource" "mirror_lambda" {
   triggers = {
     image_tag   = var.zoa_lambda_image_tag
@@ -123,6 +114,5 @@ resource "null_resource" "mirror_lambda" {
 
   depends_on = [aws_ecr_repository.lambda]
 }
-
 
 data "aws_region" "current" {}

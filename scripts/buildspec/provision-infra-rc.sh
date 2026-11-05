@@ -238,8 +238,8 @@ if [[ "${TERRAFORM_ACTION}" == "apply" ]]; then
         "zoa_sessions_table_name"
         "zoa_uploader_role_arn|^arn:"
         "zoa_data_access_role_arn|^arn:"
-        "zoa_access_lambda_role_arn|^arn:"
         "zoa_lambda_ecr_url"
+        "zoa_access_lambda_role_arn|^arn:"
         "zoa_api_function_url|^https://"
     )
     tf_validate_outputs terraform/config/regional-cluster "RC" "${_RC_REQUIRED_OUTPUTS[@]}" || exit 1

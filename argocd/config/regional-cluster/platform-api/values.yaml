@@ -4,6 +4,7 @@ global:
   git_revision: "unknown"
   aws_region: ""
   aws_account_id: ""
+  image_registry_account_id: ""
   management_clusters: ""
 
 platformApi:
@@ -20,7 +21,8 @@ platformApi:
   app:
     name: platform-api
     image:
-      repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-api
+      registry: ""
+      repository: rosa-seaplane-api
       tag: "aa468081b3e0148fccfb173dbf94a973da572ecf@sha256:d91bb7ebe19f6a7eaf23a65106704670e771bb074d8ec46f719dcea789f7ede9"
       pullPolicy: Always
 

@@ -77,6 +77,11 @@ ROSA_REGIONAL_HELM_OVERRIDE_YAML: |
 ```
 
 `IMAGE_REPO` and `IMAGE_TAG` are replaced at runtime with the actual image pushed by the image-push step.
+For image charts using separate registry and repository values, a legacy full
+`IMAGE_REPO` (such as `quay.io/rrp-dev-ci/platform-api`) is split into those
+fields by the chart helper. A short repository name with an empty registry uses
+the SSM-selected ECR registry. This keeps current pre-merge Quay overrides
+working while allowing CI jobs to migrate to explicit fields independently.
 
 ### Chart version override example
 

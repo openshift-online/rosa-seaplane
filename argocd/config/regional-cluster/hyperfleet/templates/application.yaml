@@ -17,6 +17,8 @@ spec:
         {{- if index .Values "seaplane" "helmValues" }}
         {{- toYaml (index .Values "seaplane" "helmValues") | nindent 8 }}
         {{- end }}
+        global:
+          image_registry_account_id: {{ .Values.global.image_registry_account_id | quote }}
         awsRegion: {{ .Values.global.aws_region }}
         baseDomain: {{ .Values.baseDomain }}
         oidcS3Bucket: {{ index .Values "seaplane" "oidcS3Bucket" }}
