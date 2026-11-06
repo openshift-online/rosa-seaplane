@@ -23,6 +23,7 @@ Detailed architecture and rationale for key technical decisions:
 | Document                                                                             | Topic                                                                     |
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | [Alerting Architecture](design/alerting-architecture.md)                             | Fan-out alert routing (AlertManager, PagerDuty, SNS)                      |
+| [API Gateway Account Ownership](design/api-gateway-account-ownership.md)             | Single account-level owner of the shared CloudWatch logging role          |
 | [AWS IAM Hosted Cluster Auth](design/aws-iam-hosted-cluster-authentication.md)       | AWS IAM authentication for hosted clusters (experimental)                 |
 | [DNS Architecture](design/dns-architecture.md)                                       | Hierarchical DNS with zone shards, `deployment_name`, DNSSEC chain        |
 | [ECS Fargate Bootstrap](design/fully-private-eks-bootstrap.md)                       | How fully private EKS clusters are bootstrapped via ECS                   |
