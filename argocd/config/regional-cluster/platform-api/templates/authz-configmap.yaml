@@ -21,3 +21,7 @@ metadata:
 data:
   config.yaml: |
 {{ $config | indent 4 }}
+{{- $management := include "platform-api.managementConfig" . }}
+{{- if $management }}
+  management.yaml: {{ $management | quote }}
+{{- end }}

@@ -253,7 +253,7 @@ awscurl -X POST $API_GATEWAY_URL/api/v0/accounts \
     -d '{"accountId": "<AWS_ACCOUNT_ID>"}'
 ```
 
-> **Note:** The `API_GATEWAY_URL` can be obtained from `terraform output -raw api_gateway_invoke_url` in the regional cluster terraform config. The allowlist is temporary; see [Platform API authorization](platform-api-authorization.md#allowlist-an-account-sop).
+> **Note:** The `API_GATEWAY_URL` can be obtained from `terraform output -raw api_gateway_invoke_url` in the regional cluster terraform config. The allowlist is temporary; see [Platform API authorization](platform-api-authorization.md#use-the-legacy-account-allowlist).
 
 ### Trigger pipelines via CLI
 

@@ -1,3 +1,4 @@
+{{- $management := include "platform-api.managementConfig" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,6 +57,10 @@ spec:
               value: {{ .Values.global.aws_region | quote }}
             - name: AUTHZ_CONFIG_FILE
               value: /etc/platform-api/authz/config.yaml
+            {{- if $management }}
+            - name: AUTHZ_MANAGEMENT_CONFIG_FILE
+              value: /etc/platform-api/authz/management.yaml
+            {{- end }}
             # The only account that may change the temporary account allowlist.
             - name: AWS_ACCOUNT_ID
               value: {{ .Values.global.aws_account_id | quote }}
