@@ -1831,6 +1831,103 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
+    def test_regional_rollingsync_orders_cert_manager_prerequisites(self, tmp_path):
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={},
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {"us-east-1": {"provision_mcs": {}}},
+                }
+            },
+        )
+
+        rc_appset_file = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-regional-cluster"
+            / "applicationset.yaml"
+        )
+        mc_appset_file = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-management-cluster"
+            / "applicationset.yaml"
+        )
+        rc_appset = yaml.safe_load(rc_appset_file.read_text())
+        mc_appset = yaml.safe_load(mc_appset_file.read_text())
+
+        steps = rc_appset["spec"]["strategy"]["rollingSync"]["steps"]
+        assert [step["matchExpressions"][0]["values"] for step in steps] == [
+            ["external-secrets"],
+            ["external-secrets-config"],
+            ["cert-manager"],
+            ["aws-load-balancer-controller"],
+            [
+                "external-secrets",
+                "external-secrets-config",
+                "cert-manager",
+                "aws-load-balancer-controller",
+            ],
+        ]
+        assert steps[-1]["matchExpressions"][0]["operator"] == "NotIn"
+        assert (
+            rc_appset["spec"]["template"]["metadata"]["labels"]["appset_application"]
+            == "{{ .path.basename }}"
+        )
+        argo_values = (
+            rc_appset["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["argo-cd"]
+        )
+        assert "configs" not in argo_values
+        assert "strategy" not in mc_appset["spec"]
+        assert "argocd/config/management-cluster/cert-manager" in rc_appset[
+            "spec"
+        ]["templatePatch"]
+
+    def test_lbc_cert_manager_secret_placeholder_has_required_tls_keys(self):
+        template = (
+            REAL_ARGOCD_CONFIG_DIR
+            / "regional-cluster"
+            / "aws-load-balancer-controller"
+            / "templates"
+            / "webhook-secret.yaml"
+        ).read_text()
+        rendered = (
+            template.replace(
+                '{{- $controller := index .Values "aws-load-balancer-controller" }}', ""
+            )
+            .replace("{{- if $controller.enableCertManager }}", "")
+            .replace("{{ .Release.Namespace }}", "aws-load-balancer-controller")
+            .replace("{{- end }}", "")
+        )
+        secret = yaml.safe_load(rendered)
+        assert secret["type"] == "kubernetes.io/tls"
+        assert secret["metadata"]["name"] == "aws-load-balancer-tls"
+        assert set(secret["data"]) == {"tls.crt", "tls.key"}
+        assert secret["data"]["tls.crt"] == ""
+        assert secret["data"]["tls.key"] == ""
+
+    def test_shared_argocd_bootstrap_values_enable_first_install_features(self):
+        values_file = REAL_ARGOCD_CONFIG_DIR / "shared" / "argocd" / "values.yaml"
+        values = yaml.safe_load(values_file.read_text())["argo-cd"]
+        configs = values["configs"]
+
+        assert configs["cm"]["kustomize.buildOptions"] == "--enable-helm"
+        assert configs["params"]["reposerver.enable.git.submodule"] is True
+        assert (
+            configs["params"]["applicationsetcontroller.enable.progressive.syncs"]
+            == "true"
+        )
+
+        bootstrap = (PROJECT_ROOT / "terraform/modules/ecs-bootstrap/main.tf").read_text()
+        assert (
+            'helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd"'
+            in bootstrap
+        )
+
     def test_argocd_bootstrap_pinned_revision(self, tmp_path):
         deploy_dir = self._run_main(
             tmp_path,

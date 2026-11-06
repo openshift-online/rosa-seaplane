@@ -28,10 +28,21 @@ spec:
           repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
           revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
 {% if cluster_type == 'regional-cluster' %}
+  # External Secrets must be running before its stores, and the stores before
+  # cert-manager's pull-secret ExternalSecret. LBC health also waits for its
+  # Certificate and cainjector-populated webhook CA before workload apps sync.
   strategy:
     type: RollingSync
     rollingSync:
       steps:
+      - matchExpressions:
+        - key: appset_application
+          operator: In
+          values: [external-secrets]
+      - matchExpressions:
+        - key: appset_application
+          operator: In
+          values: [external-secrets-config]
       - matchExpressions:
         - key: appset_application
           operator: In
@@ -43,7 +54,7 @@ spec:
       - matchExpressions:
         - key: appset_application
           operator: NotIn
-          values: [cert-manager, aws-load-balancer-controller]
+          values: [external-secrets, external-secrets-config, cert-manager, aws-load-balancer-controller]
 {% endif %}
   template:
     metadata:
@@ -170,11 +181,6 @@ spec:
                 targetGroup:
                   arn: '{{ '{{ .metadata.annotations.sre_grafana_target_group_arn }}' }}'
             argo-cd:
-              configs:
-                cm:
-                  kustomize.buildOptions: --enable-helm
-                params:
-                  reposerver.enable.git.submodule: true
               sre:
                 targetGroup:
                   arn: '{{ '{{ .metadata.annotations.sre_argocd_target_group_arn }}' }}'

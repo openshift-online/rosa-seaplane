@@ -152,11 +152,6 @@ spec:
                 targetGroup:
                   arn: '{{ .metadata.annotations.sre_grafana_target_group_arn }}'
             argo-cd:
-              configs:
-                cm:
-                  kustomize.buildOptions: --enable-helm
-                params:
-                  reposerver.enable.git.submodule: true
               sre:
                 targetGroup:
                   arn: '{{ .metadata.annotations.sre_argocd_target_group_arn }}'
