@@ -1,15 +1,24 @@
 # Configure Platform API authorization
 
-This repository delivers the Platform API's authorization bundle. Bundle format,
-evaluation rules, actions, and metrics are defined in
-`rosa-seaplane-api/docs/authz.md`.
+This repository delivers the Platform API's resource authorization bundle and
+optional management configuration. Canonical API references:
 
-The API repo owns the canonical
-[DynamoDB authorization storage design](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz-storage-contract.md).
+- [Authorization](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/README.md)
+  defines runtime behavior, bundle format, actions, labels, and metrics.
+- [Management](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/management.md)
+  defines management HTTP, delegation, revisions, and writer guidance.
+- [Storage contract](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/storage-contract.md)
+  defines storage guarantees and infrastructure gates.
+
 This repository retains ownership of storage provisioning, Terraform state, IAM,
 and configuration delivery. AWS provisioning has not started.
 
-Authorization is mandatory and denies by default. Enrollment grants nothing.
+Resource authorization still uses the startup bundle and runtime account allowlist,
+not management's DynamoDB policies, until ROSAENG-67498. Management is disabled by
+default. Management bootstrap grants no resource access.
+
+Resource authorization is mandatory and denies by default. Startup-bundle
+enrollment alone grants nothing.
 
 ## Prerequisite: gateway-only access
 
@@ -40,6 +49,79 @@ applications:
 ```
 
 That bundle denies everything.
+
+## Bootstrap a policy administrator
+
+Set `applications.regional-cluster.platformApi.authz.managementConfig` in source
+configuration. Replace these illustrative table names and identities with approved
+values. They are not deployed resources:
+
+```yaml
+applications:
+  regional-cluster:
+    platformApi:
+      authz:
+        managementConfig: |
+          formatVersion: 1
+          policyTable: example-authz-policies
+          globalTable: example-authz-global-attachments
+          regionalTable: example-authz-regional-attachments
+          accounts:
+            "111111111111":
+              writerRegion: us-east-1
+              administratorARNs:
+                - arn:aws:iam::111111111111:role/customer-policy-admin
+```
+
+Administrators manage only their configured account. Role ARNs cover assumed-role
+sessions. No Red Hat linking or `/accounts` enrollment is required for management.
+This configuration does not change customer resource onboarding through
+[the runtime account allowlist](#use-the-legacy-account-allowlist).
+
+Before enabling management, provide:
+
+- An API image implementing `AUTHZ_MANAGEMENT_CONFIG_FILE` and management routes.
+- Approved policy/global-attachment replicas and a local regional-attachment table
+  matching the storage contract. The chart provisions no tables, IAM, or Pod
+  Identity association. That remains separate ROSAENG-67496 work.
+- Workload SDK credentials with table-scoped CRUD, query, batch-read, and
+  transactional-write permissions, network access, and required KMS permissions.
+- An agreed writer per account and authenticated gateway access for administrators.
+  Global writes must use that writer. Follow the API management contract for
+  wrong-writer retries, local-commit receipts, and asynchronous replication limits.
+  Do not fail over global writes to another region.
+
+Ownership, revisions, and regions are server-assigned. Updates and deletes require
+`If-Match`; stale revisions return 409. Follow the
+[management contract](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/management.md)
+for revision preconditions and write requests.
+
+For ephemeral environments, merge the override into `.ephemeral-env/defaults.yaml`.
+Preserve unrelated overrides. These commands perform a rollout and authenticated
+reads, not local validation:
+
+```sh
+make ephemeral-resync ID=<id>
+AWS_PROFILE=customer-policy-admin awscurl --service execute-api --region us-east-1 \
+  "$API_URL/api/v0/authz/policies"
+AWS_PROFILE=customer-policy-admin awscurl --service execute-api --region us-east-1 \
+  "$API_URL/api/v0/authz/attachments?scope=regional"
+```
+
+Reads are repeatable and return empty lists for an empty store. They need no
+resource grant. `/authz/check` remains absent.
+
+Omitted, empty, or Helm `null` management config disables the routes and emits no
+management file or environment variable. Non-string values fail Helm rendering.
+Nonempty strings receive basic YAML syntax/object checks, not full semantic
+validation. Go's `LoadManagementConfig` and `checkManagementConfig` validate the
+complete contract at startup. Delivery does not expand resource markers or
+execute Helm templates inside the management string.
+
+The chart adds `management.yaml` beside `config.yaml` in ConfigMap `authz-config`.
+Both use the read-only `/etc/platform-api/authz` mount and `checksum/authz-config`.
+It sets `AUTHZ_CONFIG_FILE` and, when enabled, `AUTHZ_MANAGEMENT_CONFIG_FILE`.
+Separate API loaders read the files at startup. Either change requires a rollout.
 
 ## Enrollment and management clusters
 
@@ -74,12 +156,13 @@ cp -n docs/examples/authz-dev/*.yaml .ephemeral-env/
 make ephemeral-resync ID=<id>
 ```
 
-## Allowlist an account (SOP)
+## Use the legacy account allowlist
 
 The temporary allowlist admits an account and gives it full access to its own
-resources, without a bundle change or rollout. It lives in seaplane-db and is
+resources, without a bundle change or rollout. It lives in seaplane-db and will be
 replaced by DynamoDB policy storage. Only callers from the RC's own account may
-change it (`AWS_ACCOUNT_ID`, from `global.aws_account_id`).
+change it (`AWS_ACCOUNT_ID`, from `global.aws_account_id`). It grants no management
+authority.
 
 Ephemeral environments:
 
@@ -123,7 +206,7 @@ helm template platform-api argocd/config/regional-cluster/platform-api \
   pods keep old permissions until replaced, so revocation is not instantaneous.
   Logs carry `bundle_hash` (SHA-256 of the loaded bundle) to identify it.
 - The `platform-api` and `seaplane-operator` images must be pinned to the same
-  API commit: both run FleetDB migrations at startup.
+  API commit. Both run FleetDB migrations at startup.
 - Bundles naming actions or a schema namespace an older API lacks fail its
   startup. Change the image pin in the same commit as such a bundle, and never
   deploy a more permissive interim bundle.
@@ -131,7 +214,9 @@ helm template platform-api argocd/config/regional-cluster/platform-api \
 ## Metrics
 
 The Service exposes port `metrics` (9090) and the ServiceMonitor scrapes
-`/metrics`. Metric names and labels: `rosa-seaplane-api/docs/authz.md`.
+`/metrics`. See the canonical
+[authorization reference](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/README.md)
+for metric names and labels.
 
 ## Tests
 

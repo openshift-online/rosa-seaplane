@@ -282,6 +282,9 @@ applications:
     baseDomain: "{% if dns.domain %}{{ deployment_name }}.{{ dns.domain }}{% endif %}"
     platformApi:
       authz:
+        # @doc applications.regional-cluster.platformApi.authz.managementConfig Optional serialized v1 management config with policyTable, globalTable, regionalTable and account-scoped writerRegion/administratorARNs. Empty disables management routes. Does not grant resource access or provision tables/IAM.
+        # @used-by applications.regional-cluster.platformApi.authz.managementConfig _context
+        managementConfig: ""
         # @doc applications.regional-cluster.platformApi.authz.config Complete serialized v1 authorization bundle. Enrolls the RC account (@@AWS_ACCOUNT_ID@@, resolved by Helm) and grants the identities behind rrp-rc (the child-admin role; CI's e2e user) AllActions on the RC account's own resources, except the authz deny probe. Customer accounts are allowlisted at runtime. Overrides replace the entire bundle.
         # @used-by applications.regional-cluster.platformApi.authz.config _context
         config: |

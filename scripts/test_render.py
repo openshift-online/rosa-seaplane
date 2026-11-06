@@ -2595,7 +2595,8 @@ class TestAuthzDelivery:
         monkeypatch.setenv("BUILD_ID", "test-ci" if ci else "")
         values = _authz_values(tmp_path, env, eph_prefix=eph_prefix)
         authz = values["platformApi"]["authz"]
-        assert set(authz) == {"config"}
+        assert set(authz) == {"config", "managementConfig"}
+        assert authz["managementConfig"] == ""
         bundle = yaml.safe_load(authz["config"])
         assert bundle["registeredAccounts"] == ["@@AWS_ACCOUNT_ID@@"]
         _assert_rc_grants(bundle, "@@AWS_ACCOUNT_ID@@", role)
@@ -2620,7 +2621,7 @@ class TestAuthzDelivery:
         }}}}
         overrides["aws"] = {"account_id": "987654321098"}
         values = _authz_values(tmp_path, "ephemeral", overrides, eph_prefix="authz-test")
-        assert values["platformApi"]["authz"] == {"config": content.removesuffix("\n")}
+        assert values["platformApi"]["authz"] == {"config": content.removesuffix("\n"), "managementConfig": ""}
         resources, _ = _helm_platform(tmp_path, values)
         config = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
         assert config == content
@@ -2737,7 +2738,7 @@ class TestRuntimeIdentityDelivery:
     @pytest.mark.parametrize("env", ["ephemeral", "integration", "stage"])
     def test_runtime_delivery(self, tmp_path, env):
         values = _authz_values(tmp_path, env)
-        assert set(values["platformApi"]["authz"]) == {"config"}
+        assert set(values["platformApi"]["authz"]) == {"config", "managementConfig"}
         assert "ssm:///" not in values["platformApi"]["authz"]["config"]
         values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
         resources, _ = _helm_platform(tmp_path, values)
@@ -2827,6 +2828,135 @@ class TestRuntimeIdentityDelivery:
         annotation = lambda resources: _resource(resources, "Deployment", "platform-api")["spec"]["template"]["metadata"]["annotations"]
         assert annotation(before)["checksum/authz-config"] != annotation(after)["checksum/authz-config"]
         assert annotation(before)["checksum/rate-limits"] == annotation(after)["checksum/rate-limits"]
+
+
+MANAGEMENT_CONFIG = '''formatVersion: 1
+policyTable: example-policies
+globalTable: example-global-attachments
+regionalTable: example-regional-attachments
+accounts:
+  "012345678901":
+    writerRegion: us-east-1
+    administratorARNs:
+      - arn:aws:iam::012345678901:role/policy-admin
+'''
+
+
+class TestManagementDelivery:
+    @pytest.mark.parametrize("env", ["ephemeral", "integration", "stage"])
+    def test_source_to_mount(self, tmp_path, env):
+        """test_source_to_mount checks the serialized contract through renderer and Helm."""
+        values = _authz_values(tmp_path, env, {"applications": {"regional-cluster": {
+            "platformApi": {"authz": {"managementConfig": MANAGEMENT_CONFIG}},
+        }}})
+        assert values["platformApi"]["authz"]["managementConfig"] == MANAGEMENT_CONFIG.rstrip("\n")
+        values["global"] = {"aws_account_id": "987654321098", "aws_region": "us-east-1"}
+        resources, _ = _helm_platform(tmp_path, values)
+        config = _resource(resources, "ConfigMap", "authz-config")
+        assert set(config["data"]) == {"config.yaml", "management.yaml"}
+        assert config["data"]["management.yaml"] == values["platformApi"]["authz"]["managementConfig"]
+        assert not any(r["kind"] == "ConfigMap" and r["metadata"]["name"] == "authz-management-config" for r in resources)
+        pod = _resource(resources, "Deployment", "platform-api")["spec"]["template"]
+        app = pod["spec"]["containers"][0]
+        assert {e["name"]: e.get("value") for e in app["env"]}["AUTHZ_MANAGEMENT_CONFIG_FILE"] == "/etc/platform-api/authz/management.yaml"
+        assert {"name": "authz-config", "mountPath": "/etc/platform-api/authz", "readOnly": True} in app["volumeMounts"]
+        assert {"name": "authz-config", "configMap": {"name": "authz-config", "defaultMode": 0o644}} in pod["spec"]["volumes"]
+        assert not any(m["name"] == "authz-management-config" for m in app["volumeMounts"])
+        assert not any(v["name"] == "authz-management-config" for v in pod["spec"]["volumes"])
+        assert "checksum/authz-management-config" not in pod["metadata"]["annotations"]
+        assert len(pod["metadata"]["annotations"]["checksum/authz-config"]) == 64
+        bundle = yaml.safe_load(_resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"])
+        assert bundle["registeredAccounts"] == ["987654321098"]
+        _assert_rc_grants(bundle, "987654321098", "rosa-seaplane-account-admin")
+        assert "012345678901" not in str(bundle)
+
+    def test_delegates_without_bootstrap(self, tmp_path):
+        """test_delegates_without_bootstrap allows an account with no bootstrap principals."""
+        config = MANAGEMENT_CONFIG.replace("administratorARNs:\n      - arn:aws:iam::012345678901:role/policy-admin", "administratorARNs: []")
+        resources, _ = _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": config}}})
+        assert yaml.safe_load(_resource(resources, "ConfigMap", "authz-config")["data"]["management.yaml"])["accounts"]["012345678901"]["administratorARNs"] == []
+
+    @pytest.mark.parametrize("authz", [{}, {"managementConfig": ""}, {"managementConfig": None}])
+    def test_optional_omission(self, tmp_path, authz):
+        """test_optional_omission keeps charts without management configuration compatible."""
+        resources, _ = _helm_platform(tmp_path, {"platformApi": {"authz": authz}})
+        assert set(_resource(resources, "ConfigMap", "authz-config")["data"]) == {"config.yaml"}
+        assert not any(r["kind"] == "ConfigMap" and r["metadata"]["name"] == "authz-management-config" for r in resources)
+        pod = _resource(resources, "Deployment", "platform-api")["spec"]["template"]
+        assert "checksum/authz-management-config" not in pod["metadata"]["annotations"]
+        assert not any(v["name"] == "authz-management-config" for v in pod["spec"]["volumes"])
+        app = pod["spec"]["containers"][0]
+        assert not any(e["name"] == "AUTHZ_MANAGEMENT_CONFIG_FILE" for e in app["env"])
+        assert not any(m["name"] == "authz-management-config" for m in app["volumeMounts"])
+
+    @pytest.mark.parametrize("before,after", [
+        ("example-policies", "other-policies"),
+        ("example-global-attachments", "other-global-attachments"),
+        ("example-regional-attachments", "other-regional-attachments"),
+        ("us-east-1", "us-west-2"), ("role/policy-admin", "role/other-admin"),
+        ("012345678901", "111111111111"),
+        (MANAGEMENT_CONFIG, ""),
+    ])
+    def test_management_checksum(self, tmp_path, before, after):
+        """test_management_checksum covers management changes with the shared config hash."""
+        resources, _ = _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": MANAGEMENT_CONFIG}}})
+        changed, _ = _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": MANAGEMENT_CONFIG.replace(before, after)}}})
+        pod = _resource(resources, "Deployment", "platform-api")["spec"]["template"]
+        other = _resource(changed, "Deployment", "platform-api")["spec"]["template"]
+        assert pod["metadata"]["annotations"]["checksum/authz-config"] != other["metadata"]["annotations"]["checksum/authz-config"]
+        assert pod["metadata"]["annotations"]["checksum/rate-limits"] == other["metadata"]["annotations"]["checksum/rate-limits"]
+        original = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
+        assert _resource(changed, "ConfigMap", "authz-config")["data"]["config.yaml"] == original
+
+    @pytest.mark.parametrize("content", [
+        "{}", "---\n{}\n...\n", "# empty map\n{}\n",
+        '# @@AWS_ACCOUNT_ID@@ @@AWS_REGION@@ {{ fail "must stay literal" }}\n' + MANAGEMENT_CONFIG,
+        '---\n# preserve document markers\n' + MANAGEMENT_CONFIG + '...\n',
+        'unknownField: "{{ fail \'must stay literal\' }}"\n',
+        MANAGEMENT_CONFIG.replace("formatVersion: 1", "formatVersion: 2"),
+        MANAGEMENT_CONFIG.replace("policyTable: example-policies\n", ""),
+        MANAGEMENT_CONFIG.replace("policyTable: example-policies", "policyTable: []"),
+        MANAGEMENT_CONFIG.replace("globalTable: example-global-attachments", 'globalTable: ""'),
+        MANAGEMENT_CONFIG.replace("accounts:\n", "accounts: []\nunused:\n"),
+        MANAGEMENT_CONFIG.replace('"012345678901":', '"bad":'),
+        MANAGEMENT_CONFIG.replace("writerRegion: us-east-1", "writerRegion: bad"),
+        MANAGEMENT_CONFIG.replace("administratorARNs:\n      - arn:aws:iam::012345678901:role/policy-admin", "administratorARNs: null"),
+        MANAGEMENT_CONFIG.replace("arn:aws:iam::012345678901", "arn:aws:iam::999999999999"),
+        MANAGEMENT_CONFIG.replace("administratorARNs:", "unknownField:"),
+        MANAGEMENT_CONFIG + "tables: {}\n",
+        MANAGEMENT_CONFIG.replace("example-global-attachments", "example-policies"),
+    ])
+    def test_literal_management_config(self, tmp_path, content):
+        """test_literal_management_config preserves maps for Go's semantic validation."""
+        resources, _ = _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": content}}})
+        assert _resource(resources, "ConfigMap", "authz-config")["data"]["management.yaml"] == content
+
+    @pytest.mark.parametrize("content", [
+        " ", "\n\t ", "# comment only\n", "---\n", "---\n...\n",
+        "null", "Null", "NULL", "~", "!!null null", "---\nnull\n...\n",
+        "plain scalar", '"quoted scalar"', "123", "true", '""',
+        "[]", "- item\n", "[{}]", "formatVersion: [", "accounts:\n  bad: [\n",
+    ])
+    def test_management_shape(self, tmp_path, content):
+        """test_management_shape rejects malformed YAML and non-map documents."""
+        with pytest.raises(subprocess.CalledProcessError) as failure:
+            _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": content}}})
+        assert "managementConfig must be a YAML object" in failure.value.stderr
+
+    @pytest.mark.parametrize("content", [{}, [], False, True, 0, 1])
+    def test_management_type(self, tmp_path, content):
+        """test_management_type rejects values except Helm's omitted null."""
+        with pytest.raises(subprocess.CalledProcessError) as failure:
+            _helm_platform(tmp_path, {"platformApi": {"authz": {"managementConfig": content}}})
+        assert "managementConfig must be a serialized YAML string" in failure.value.stderr
+
+    def test_ci_keeps_legacy_onboarding(self):
+        """test_ci_keeps_legacy_onboarding preserves existing customer setup and suite selection."""
+        script = (PROJECT_ROOT / "ci" / "e2e-tests.sh").read_text()
+        assert "/api/v0/accounts" in script
+        assert 'E2E_SKIP_HCP="true"' in script
+        assert 'E2E_SKIP_ROSA_CLI="false"' in script
+        assert "customer_resource_access.py" not in script
 
 
 if __name__ == "__main__":
