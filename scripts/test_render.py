@@ -1631,10 +1631,12 @@ class TestMainIntegration:
         assert data["region"] == "us-east-1"
         assert data["_generated"].startswith("DO NOT EDIT")
 
-    def test_ephemeral_ci_omits_zoa_suffixes_in_regional_terraform_json(
+    def test_ephemeral_ci_uses_eph_ci_zoa_trust_in_regional_terraform_json(
         self, tmp_path, monkeypatch
     ):
-        """CI ephemeral (EPH_PREFIX + BUILD_ID) must not trust operator suffixes in ci00 central."""
+        """CI ephemeral (EPH_PREFIX + BUILD_ID) is eph-ci via Prow: the ZOA invoker trusts
+        the central rosa-seaplane-account-admin role (rrp-central, since Prow can't SAML)
+        plus the eph-ci ZOA operator SAML role."""
         monkeypatch.setenv("BUILD_ID", "prow-123")
         deploy_dir = self._run_main(
             tmp_path,
@@ -1668,7 +1670,12 @@ class TestMainIntegration:
             / "terraform.json"
         )
         data = json.loads(tf_file.read_text())
-        assert data["zoa_access_trusted_assumer_role_name_suffixes"] == []
+        assert data["zoa_access_trusted_assumer_role_names"] == [
+            "rosa-seaplane-ci",
+        ]
+        assert data["zoa_access_trusted_assumer_role_name_suffixes"] == [
+            "rosa-seaplane-zoa-operator-eph-ci",
+        ]
 
     def test_pipeline_management_cluster_inputs_terraform_json(self, tmp_path):
         deploy_dir = self._run_main(
@@ -2580,9 +2587,9 @@ class TestAuthzDelivery:
     @pytest.mark.parametrize("env,ci,eph_prefix,role", [
         ("integration", False, "", "rosa-seaplane-account-admin"),
         ("stage", False, "", "rosa-seaplane-account-admin"),
-        ("ephemeral", False, "", "OrganizationAccountAccessRole"),
-        ("ephemeral", False, "authz-test", "OrganizationAccountAccessRole"),
-        ("ephemeral", True, "", "OrganizationAccountAccessRole"),
+        ("ephemeral", False, "", "rosa-seaplane-account-admin"),
+        ("ephemeral", False, "authz-test", "rosa-seaplane-account-admin"),
+        ("ephemeral", True, "", "rosa-seaplane-account-admin"),
     ])
     def test_safe_source_defaults(self, tmp_path, monkeypatch, env, ci, eph_prefix, role):
         monkeypatch.setenv("BUILD_ID", "test-ci" if ci else "")
@@ -2632,7 +2639,7 @@ class TestAuthzDelivery:
         assert bundle["registeredAccounts"] == ["012345678901"]
         assert [p["id"] for p in bundle["policies"]] == ["rc-all-actions", "dev-read-only"]
         assert [a["principalARN"] for a in bundle["attachments"]] == [
-            "arn:aws:iam::012345678901:role/OrganizationAccountAccessRole",
+            "arn:aws:iam::012345678901:role/rosa-seaplane-account-admin",
             "arn:aws:iam::012345678901:user/e2e",
             "arn:aws:iam::012345678901:role/dev-readers",
         ]
@@ -2740,7 +2747,7 @@ class TestRuntimeIdentityDelivery:
         ).replace("@@AWS_REGION@@", "us-east-1") + "\n"
         bundle = yaml.safe_load(config)
         assert bundle["registeredAccounts"] == ["012345678901"]
-        _assert_rc_grants(bundle, "012345678901", "OrganizationAccountAccessRole" if env == "ephemeral" else "rosa-seaplane-account-admin")
+        _assert_rc_grants(bundle, "012345678901", "rosa-seaplane-account-admin")
         _assert_bundle_fields(bundle)
 
     @pytest.mark.parametrize("field,invalid", [

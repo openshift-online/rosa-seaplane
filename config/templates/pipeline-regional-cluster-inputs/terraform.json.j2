@@ -45,8 +45,8 @@
   "zoa_lambda_api_concurrency": {{ regional_cluster.zoa_lambda_api_concurrency | tojson }},
   "zoa_lambda_worker_concurrency": {{ regional_cluster.zoa_lambda_worker_concurrency | tojson }},
   "zoa_lambda_access_concurrency": {{ regional_cluster.zoa_lambda_access_concurrency | tojson }},
-  "zoa_access_trusted_assumer_role_names": {{ zoa_access_trusted_assumer_role_names | tojson }},
-  "zoa_access_trusted_assumer_role_name_suffixes": {% if ci %}[]{% else %}{{ zoa_access_trusted_assumer_role_name_suffixes | tojson }}{% endif %},{# Ephemeral dev (dev0) and CI (ci00) share config/ephemeral defaults; central IAM roles differ per pool. Trust policy principals must exist in that pool's central account at apply time (invalid principal fails RC apply). ci=true (EPH_PREFIX + BUILD_ID): omit suffixes — CI central has no operator SAML role; dev suffixes stay for local ephemeral without BUILD_ID. #}
+  "zoa_access_trusted_assumer_role_names": {% if ci %}["rosa-seaplane-ci"]{% else %}{{ zoa_access_trusted_assumer_role_names | tojson }}{% endif %},
+  "zoa_access_trusted_assumer_role_name_suffixes": {% if ci %}["rosa-seaplane-zoa-operator-eph-ci"]{% else %}{{ zoa_access_trusted_assumer_role_name_suffixes | tojson }}{% endif %},{# ZOA Access invoker trust. eph-dev and eph-ci share config/ephemeral but have different central identities, so the ci branch substitutes the eph-ci values. names = the CI/e2e caller (ci: the central rosa-seaplane-ci role Prow assumes; non-ci: none). suffixes = SAML roles prefixed with the central account ID at apply: the per-pool ZOA operator role (human break-glass) and, for eph-dev, the control-admin role local/e2e runs as. Each principal must exist in that pool's central account at apply time. #}
   "worker_node_ami_id": {% if worker_node_ami %}{{ worker_node_ami.id | tojson }}{% else %}""{% endif %},
   "worker_node_root_volume_size": {{ worker_node_root_volume_size | default(50) | tojson }}
 {%- set _mc_info = [] %}

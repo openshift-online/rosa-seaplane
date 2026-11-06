@@ -7,29 +7,44 @@
 #
 # DNS account pool selection:
 #   Ephemeral environments run in two account pools with separate DNS:
-#     - dev accounts  → dev0.rosa.devshift.net  (local developer environments)
-#     - CI accounts   → ci00.rosa.devshift.net  (CI e2e test environments)
+#     - eph-dev accounts → eph-dev0.rosa.devshift.org  (local developer environments)
+#     - eph-ci accounts  → eph-ci0.rosa.devshift.org   (CI e2e test environments)
 #   The `ci` template variable (true when both EPH_PREFIX and BUILD_ID are
 #   set) selects the correct pool. BUILD_ID is set by CI pipelines; when
 #   rendering locally or during CI lint checks (no EPH_PREFIX), the default
-#   dev0 domain is used so rendered files match what is committed.
+#   eph-dev0 domain is used so rendered files match what is committed.
 
 deployment_name: "{{ aws_region }}{% if eph_prefix %}-{{ eph_prefix }}{% endif %}"
 
 aws:
-  # Temporary: ephemeral runs in shared CI/dev accounts, not the accounts minted
-  # here, so it keeps the pre-alignment account_id path and the Organizations role.
-  account_id: "ssm:///infra/{{ aws_region }}/account_id"
-  child_admin_role_name: "OrganizationAccountAccessRole"
-  # Prow ephemeral Vault rrp-central assumes central role ci (user ci cannot assume OrgAccess).
-  zoa_access_trusted_assumer_role_names:
-    - OrganizationAccountAccessRole
-    - ci
+  # ZOA Access invoker trust: who may assume the <deployment>-zoa-access-invoker role
+  # in RC and call the ZOA Access Function URL. Two inputs, each a different kind of
+  # principal, and both differ per pool (eph-dev vs eph-ci) — the regional-cluster
+  # template substitutes the eph-ci values for ci renders:
+  #
+  #   zoa_access_trusted_assumer_role_names  (full IAM role names, used as-is)
+  #     The CI/e2e caller. eph-ci: the central `rosa-seaplane-ci` role Prow assumes
+  #     (set in the template's ci branch). eph-dev: empty — its callers are SAML
+  #     roles, expressed as suffixes below.
+  #
+  #   zoa_access_trusted_assumer_role_name_suffixes  (app-interface SAML roles;
+  #   RC prefixes each with the central account ID at apply, so no account ID in git)
+  #     - rosa-seaplane-zoa-operator-<pool>: the ZOA operator role (human SRE break-glass).
+  #     - rosa-hyperfleet-eph-dev-admin: eph-dev only — the control-admin role the
+  #       local/e2e identity (rrp-central) runs as; eph-ci uses `rosa-seaplane-ci` instead.
+  #
+  # TODO: split eph-dev and eph-ci into separate env configs so these principals are
+  # static per env, instead of swapping them via the `{% if ci %}` branch in the
+  # regional-cluster template. The branch exists only because the two pools have
+  # different principals AND each must already exist in that pool's central account at
+  # apply time (IAM rejects a trust naming a nonexistent role) — so a single shared
+  # list can't be valid for both. Once the envs are separate, drop the dynamic layering.
   zoa_access_trusted_assumer_role_name_suffixes:
-    - rosa-seaplane-zoa-operator-dev # future: rosa-seaplane-zoa-operator-eph
+    - rosa-seaplane-zoa-operator-eph-dev # human SRE break-glass (ZOA operator)
+    - rosa-hyperfleet-eph-dev-admin # local/e2e caller (control-admin via SAML)
 
 dns:
-  domain: "{% if ci %}ci00{% else %}dev0{% endif %}.rosa.devshift.net"
+  domain: "{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org"
 
 regional_cluster:
   enable_bastion: true
@@ -41,7 +56,6 @@ regional_cluster:
   seaplane_db_performance_insights_enabled: false
   seaplane_db_monitoring_interval: 0
   enable_sre_tools_gateway: true
-  enable_sre_public_access: false
   # Ephemeral accounts: use unreserved pool (-1) for all ZOA Lambdas. Do not use 0 (AWS/Terraform
   # disable the function). Avoid fleet reserves (50/10/10) so PutFunctionConcurrency does not exhaust quota.
   zoa_lambda_api_concurrency: -1
