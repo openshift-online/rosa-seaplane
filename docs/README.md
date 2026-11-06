@@ -84,6 +84,12 @@ Each module has its own README with usage, inputs, outputs, and architecture:
 - [`seaplane-db`](../terraform/modules/seaplane-db/) - Aurora PostgreSQL for seaplane-operator cluster/nodepool state
 - [`grafana-cloudwatch-logs`](../terraform/modules/grafana-cloudwatch-logs/) - IAM + Pod Identity for Grafana CloudWatch Logs datasources (RC primary + MC reader)
 - [`aws-load-balancer-controller`](../terraform/modules/aws-load-balancer-controller/README.md) - IAM role and Pod Identity association for AWS Load Balancer Controller
+- [`bedrock`](../terraform/modules/bedrock/README.md) - Per-account Bedrock onboarding (foundation model agreements)
+- [`codebuild-notifications`](../terraform/modules/codebuild-notifications/README.md) - Automated Slack notifications for CodeBuild failures via EventBridge and Lambda
+- [`rhobs-api-gateway`](../terraform/modules/rhobs-api-gateway/README.md) - Dedicated REST API Gateway for RHOBS observability traffic, isolated from Platform API Gateway
+- [`zoa`](../terraform/modules/zoa/README.md) - Shared ZOA data layer (DynamoDB, S3, KMS, ECR) deployed once per region in the RC account
+- [`zoa-access`](../terraform/modules/zoa-access/README.md) - ZOA Access Lambda for session control plane (Function URL, IAM auth, deployment discovery)
+- [`zoa-lambda`](../terraform/modules/zoa-lambda/README.md) - ZOA per-VPC Lambda (API + Worker), EventBridge Scheduler, and Boundary (ECS Fargate) with direct EKS API access
 
 ### ArgoCD Helm Chart Documentation
 

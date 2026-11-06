@@ -2,10 +2,10 @@
 
 This repository delivers the Platform API's authorization bundle. Bundle format,
 evaluation rules, actions, and metrics are defined in
-`rosa-seaplane-api/docs/authz.md`.
+`rosa-seaplane-api/docs/authz/README.md`.
 
 The API repo owns the canonical
-[DynamoDB authorization storage design](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz-storage-contract.md).
+[DynamoDB authorization storage design](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/storage-contract.md).
 This repository retains ownership of storage provisioning, Terraform state, IAM,
 and configuration delivery. AWS provisioning has not started.
 
@@ -131,7 +131,7 @@ helm template platform-api argocd/config/regional-cluster/platform-api \
 ## Metrics
 
 The Service exposes port `metrics` (9090) and the ServiceMonitor scrapes
-`/metrics`. Metric names and labels: `rosa-seaplane-api/docs/authz.md`.
+`/metrics`. Metric names and labels: `rosa-seaplane-api/docs/authz/README.md`.
 
 ## Tests
 

@@ -21,7 +21,6 @@ rendered.
 rosa-seaplane/
 ├── argocd/
 │   └── config/                       # Live Helm chart configurations
-│       ├── applicationset/           # ApplicationSet templates
 │       ├── management-cluster/       # Management cluster application templates
 │       ├── regional-cluster/         # Regional cluster application templates
 │       └── shared/                   # Shared configurations (ArgoCD, etc.)
