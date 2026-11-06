@@ -27,35 +27,9 @@ spec:
           - path: argocd/config/shared/*
           repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
           revision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-{% if cluster_type == 'regional-cluster' %}
-  # External Secrets must be running before its stores, and the stores before
-  # cert-manager's pull-secret ExternalSecret. LBC health also waits for its
-  # Certificate and cainjector-populated webhook CA before workload apps sync.
-  strategy:
-    type: RollingSync
-    rollingSync:
-      steps:
-      - matchExpressions:
-        - key: appset_application
-          operator: In
-          values: [external-secrets]
-      - matchExpressions:
-        - key: appset_application
-          operator: In
-          values: [external-secrets-config]
-      - matchExpressions:
-        - key: appset_application
-          operator: In
-          values: [cert-manager]
-      - matchExpressions:
-        - key: appset_application
-          operator: In
-          values: [aws-load-balancer-controller]
-      - matchExpressions:
-        - key: appset_application
-          operator: NotIn
-          values: [external-secrets, external-secrets-config, cert-manager, aws-load-balancer-controller]
-{% endif %}
+  # Sync apps independently, as on MCs. Cross-app health gates deadlock fresh
+  # bootstrap: cert-manager needs monitoring CRDs, and external-secrets-config
+  # needs the operator's seaplane namespace. Missing dependencies retry below.
   template:
     metadata:
       name: '{{ '{{ .path.basename }}' }}'
@@ -64,7 +38,6 @@ spec:
         environment: '{{ '{{ .metadata.labels.environment }}' }}'
         region_deployment: '{{ '{{ .metadata.labels.region_deployment }}' }}'
         aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
-        appset_application: '{{ '{{ .path.basename }}' }}'
     spec:
       project: default
       destination:

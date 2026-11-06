@@ -169,58 +169,9 @@ argo-cd:
     params:
       server.insecure: false
       # Keep first-install ArgoCD aligned with the self-managed Application.
-      applicationsetcontroller.enable.progressive.syncs: "true"
       reposerver.enable.git.submodule: true
     cm:
       kustomize.buildOptions: --enable-helm
-      # Keep the regional RollingSync on LBC until cert-manager has injected
-      # the CA into both webhook configurations.
-      "resource.customizations.health.admissionregistration.k8s.io_MutatingWebhookConfiguration": |
-        local hs = { status = "Healthy", message = "" }
-        if obj.metadata.name ~= "aws-load-balancer-webhook" then
-          return hs
-        end
-        local matched = false
-        for _, webhook in ipairs(obj.webhooks or {}) do
-          local service = webhook.clientConfig and webhook.clientConfig.service
-          if service and service.name == "aws-load-balancer-webhook-service" then
-            matched = true
-            local caBundle = webhook.clientConfig.caBundle
-            if caBundle == nil or caBundle == "" then
-              hs.status = "Progressing"
-              hs.message = "Waiting for cert-manager to inject the LBC mutating webhook CA bundle"
-              return hs
-            end
-          end
-        end
-        if not matched then
-          hs.status = "Progressing"
-          hs.message = "Waiting for LBC mutating webhook entries"
-        end
-        return hs
-      "resource.customizations.health.admissionregistration.k8s.io_ValidatingWebhookConfiguration": |
-        local hs = { status = "Healthy", message = "" }
-        if obj.metadata.name ~= "aws-load-balancer-webhook" then
-          return hs
-        end
-        local matched = false
-        for _, webhook in ipairs(obj.webhooks or {}) do
-          local service = webhook.clientConfig and webhook.clientConfig.service
-          if service and service.name == "aws-load-balancer-webhook-service" then
-            matched = true
-            local caBundle = webhook.clientConfig.caBundle
-            if caBundle == nil or caBundle == "" then
-              hs.status = "Progressing"
-              hs.message = "Waiting for cert-manager to inject the LBC validating webhook CA bundle"
-              return hs
-            end
-          end
-        end
-        if not matched then
-          hs.status = "Progressing"
-          hs.message = "Waiting for LBC validating webhook entries"
-        end
-        return hs
 
   # SRE UI ALB — injected at runtime by ApplicationSet; empty when ALB is not deployed
   sre:

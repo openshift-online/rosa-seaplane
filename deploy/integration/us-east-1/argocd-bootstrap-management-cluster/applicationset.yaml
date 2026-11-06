@@ -26,7 +26,9 @@ spec:
           - path: argocd/config/shared/*
           repoURL: '{{ .metadata.annotations.git_repo }}'
           revision: '{{ .metadata.annotations.git_revision }}'
-
+  # Sync apps independently, as on MCs. Cross-app health gates deadlock fresh
+  # bootstrap: cert-manager needs monitoring CRDs, and external-secrets-config
+  # needs the operator's seaplane namespace. Missing dependencies retry below.
   template:
     metadata:
       name: '{{ .path.basename }}'
@@ -35,7 +37,6 @@ spec:
         environment: '{{ .metadata.labels.environment }}'
         region_deployment: '{{ .metadata.labels.region_deployment }}'
         aws_region: '{{ .metadata.labels.aws_region }}'
-        appset_application: '{{ .path.basename }}'
     spec:
       project: default
       destination:

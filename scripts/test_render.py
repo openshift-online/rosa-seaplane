@@ -1831,7 +1831,7 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
-    def test_regional_rollingsync_orders_cert_manager_prerequisites(self, tmp_path):
+    def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path):
         deploy_dir = self._run_main(
             tmp_path,
             global_defaults={},
@@ -1860,24 +1860,18 @@ class TestMainIntegration:
         rc_appset = yaml.safe_load(rc_appset_file.read_text())
         mc_appset = yaml.safe_load(mc_appset_file.read_text())
 
-        steps = rc_appset["spec"]["strategy"]["rollingSync"]["steps"]
-        assert [step["matchExpressions"][0]["values"] for step in steps] == [
-            ["external-secrets"],
-            ["external-secrets-config"],
-            ["cert-manager"],
-            ["aws-load-balancer-controller"],
-            [
-                "external-secrets",
-                "external-secrets-config",
-                "cert-manager",
-                "aws-load-balancer-controller",
-            ],
-        ]
-        assert steps[-1]["matchExpressions"][0]["operator"] == "NotIn"
-        assert (
-            rc_appset["spec"]["template"]["metadata"]["labels"]["appset_application"]
-            == "{{ .path.basename }}"
-        )
+        # Monitoring supplies ServiceMonitor CRDs for cert-manager; the operator
+        # supplies namespace seaplane for external-secrets-config. All must be
+        # allowed to sync, not held behind the health of their dependants.
+        assert "strategy" not in rc_appset["spec"]
+        for appset in (rc_appset, mc_appset):
+            spec = appset["spec"]["template"]["spec"]
+            assert spec["syncPolicy"]["automated"] == {
+                "prune": True, "selfHeal": True,
+            }
+            assert spec["syncPolicy"]["retry"]["limit"] == -1
+            assert spec["syncPolicy"]["retry"]["refresh"] is True
+            assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
         argo_values = (
             rc_appset["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["argo-cd"]
         )
@@ -1886,6 +1880,15 @@ class TestMainIntegration:
         assert "argocd/config/management-cluster/cert-manager" in rc_appset[
             "spec"
         ]["templatePatch"]
+        cert_manager_values = load_yaml(
+            REAL_ARGOCD_CONFIG_DIR / "management-cluster/cert-manager/jetstack-values.yaml"
+        )
+        assert cert_manager_values["prometheus"]["servicemonitor"]["enabled"] is True
+        dsn = (
+            REAL_ARGOCD_CONFIG_DIR
+            / "regional-cluster/external-secrets-config/templates/seaplane-db-dsn.yaml"
+        ).read_text()
+        assert "  namespace: seaplane" in dsn
 
     def test_lbc_cert_manager_secret_placeholder_has_required_tls_keys(self):
         template = (
@@ -1917,10 +1920,7 @@ class TestMainIntegration:
 
         assert configs["cm"]["kustomize.buildOptions"] == "--enable-helm"
         assert configs["params"]["reposerver.enable.git.submodule"] is True
-        assert (
-            configs["params"]["applicationsetcontroller.enable.progressive.syncs"]
-            == "true"
-        )
+        assert "applicationsetcontroller.enable.progressive.syncs" not in configs["params"]
 
         bootstrap = (PROJECT_ROOT / "terraform/modules/ecs-bootstrap/main.tf").read_text()
         assert (
