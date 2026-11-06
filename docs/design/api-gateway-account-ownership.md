@@ -82,9 +82,37 @@ For an AWS account with no regional cluster yet, provision the account-level own
 2. **Provision, or re-apply, the account-level owner** once no cluster manages the setting any more. It writes its own role uncontended; this is the step that actually moves the value.
 3. **Before a pre-existing state is destroyed**, `terraform/config/regional-cluster/pre-destroy.sh` detaches the same three addresses, because step 1 may not have run for that state yet. `tf_apply` sources it on destroy only and refuses to destroy if a detach cannot be proven. The hook is transitional: delete it once every state has applied once, after which every address reports `[absent]`.
 
-   This protects a teardown that **runs this code**. A teardown executed from a checkout that predates this change has neither the `removed` blocks nor the hook, so it still performs the account-wide reset — the original defect. `make ephemeral-teardown` destroys from the environment's own branch, so resync an environment to a branch containing this change before tearing it down; the ADR's guarantees only hold from that point. If a teardown does slip through, the account setting is restored by re-applying the account-level owner (step 2). The owner's role is outside the cluster's state, so that teardown cannot delete it — but the departing cluster's own `<regional_id>-api-gateway-cloudwatch` role is deleted, because the pre-change module managed it directly, and access logging is expected to stay off account-wide until the owner is re-applied — a consequence of the documented account-level requirement, not something measured against a live account here.
+   This protects a teardown that **runs this code**. A teardown executed from a checkout that predates this change has neither the `removed` blocks nor the hook, so it still performs the account-wide reset — the original defect. `make ephemeral-teardown` destroys from the environment's own branch, so resync an environment to a branch containing this change before tearing it down; the ADR's guarantees only hold from that point. If a teardown does slip through once the owner exists, the account setting is restored by re-applying it (step 2); if it slips through during step 1, before step 2 has provisioned an owner, see [Recovering a reset before the owner exists](#recovering-a-reset-before-the-owner-exists). The owner's role is outside the cluster's state, so that teardown cannot delete it — but the departing cluster's own `<regional_id>-api-gateway-cloudwatch` role is deleted, because the pre-change module managed it directly, and access logging is expected to stay off account-wide until the owner is re-applied — a consequence of the documented account-level requirement, not something measured against a live account here.
 
 4. **Clean up** the per-cluster `<regional_id>-api-gateway-cloudwatch` roles left behind by steps 1 and 3. They are unreferenced once the owner's value is live. Until then the janitor preserves them (`ci/janitor/aws-nuke-config*.yaml`), because the live account setting may still name one.
+
+#### Recovering a reset before the owner exists
+
+Step 1 runs before step 2, so a stale-checkout teardown can clear the account setting while
+no account-level owner exists yet. There is then nothing to re-apply, and neither resyncing
+the environment's branch nor the pre-destroy hook repairs the setting on its own: both only
+stop the _next_ teardown from clearing it, and the hook changes Terraform state rather than
+calling AWS. Whether any role survives, and whether logging still works, is unknown until
+someone looks.
+
+1. Pause competing applies and destroys across the affected account, then snapshot and
+   reconcile the affected states against the live role and the live account setting. Do not
+   assume a role still exists or is usable, and never restore the setting by pointing it at
+   a role that has been deleted.
+2. Move any per-cluster ownership of the singleton that remains, non-destructively, using
+   the safeguards already in this repository — the `removed` blocks and the pre-destroy
+   hook — before those runs resume. Do not re-apply the old per-cluster configuration and
+   do not blindly restore a state file.
+3. Establish or reconcile the intended single account-level owner, with a role API Gateway
+   can assume and the logging permissions it needs, and restore the account setting through
+   that owner rather than from a cluster. Where an owner already exists, re-apply or
+   reconcile it only after the stale runs above have been dealt with.
+4. Verify actual log delivery before the migrated runs resume. Nothing here recovers
+   automatically, and none of it is verifiable from this repository.
+
+If no reviewed owner or recovery can be verified, stay paused and ask for an
+account-specific recovery plan. Do not improvise a fallback or stand up a second, temporary
+owner: that recreates the contention this ADR removes.
 
 Rollback is **not** a straight revert of this change. Applying the `removed` blocks detaches the three addresses from state, and reverting configuration does not put them back: nothing re-adopts them, and `terraform/config/regional-cluster/imports.sh` has no adoption entry for them. Reverting the HCL therefore restores the resource blocks but not the state, so Terraform plans creates. A retained object of the same name conflicts with the role create — the pre-change module named it `<regional_id>-api-gateway-cloudwatch` — and because the account resource reads that role's ARN and `depends_on` its policy attachment, a failed role create stops the account create in the same apply. Wherever the creates do execute, the account create issues an `UpdateAccount` patch, which overwrites the live value and can reintroduce the multi-owner contention this ADR removes. Either way the outcome is a failed or contended apply, not the clean no-op a revert suggests.
 
