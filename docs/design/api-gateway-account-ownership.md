@@ -1,6 +1,6 @@
 # API Gateway Account Ownership
 
-**Last Updated Date**: 2026-11-05
+**Last Updated Date**: 2026-11-06
 
 ## Summary
 
@@ -82,11 +82,13 @@ For an AWS account with no regional cluster yet, provision the account-level own
 2. **Provision, or re-apply, the account-level owner** once no cluster manages the setting any more. It writes its own role uncontended; this is the step that actually moves the value.
 3. **Before a pre-existing state is destroyed**, `terraform/config/regional-cluster/pre-destroy.sh` detaches the same three addresses, because step 1 may not have run for that state yet. `tf_apply` sources it on destroy only and refuses to destroy if a detach cannot be proven. The hook is transitional: delete it once every state has applied once, after which every address reports `[absent]`.
 
-   This protects a teardown that **runs this code**. A teardown executed from a checkout that predates this change has neither the `removed` blocks nor the hook, so it still performs the account-wide reset — the original defect. `make ephemeral-teardown` destroys from the environment's own branch, so resync an environment to a branch containing this change before tearing it down; the ADR's guarantees only hold from that point. If a teardown does slip through, the account setting is restored by re-applying the account-level owner (step 2), and the role it names was never deleted.
+   This protects a teardown that **runs this code**. A teardown executed from a checkout that predates this change has neither the `removed` blocks nor the hook, so it still performs the account-wide reset — the original defect. `make ephemeral-teardown` destroys from the environment's own branch, so resync an environment to a branch containing this change before tearing it down; the ADR's guarantees only hold from that point. If a teardown does slip through, the account setting is restored by re-applying the account-level owner (step 2). The owner's role is outside the cluster's state, so that teardown cannot delete it — but the departing cluster's own `<regional_id>-api-gateway-cloudwatch` role is deleted, because the pre-change module managed it directly, and access logging is expected to stay off account-wide until the owner is re-applied — a consequence of the documented account-level requirement, not something measured against a live account here.
 
 4. **Clean up** the per-cluster `<regional_id>-api-gateway-cloudwatch` roles left behind by steps 1 and 3. They are unreferenced once the owner's value is live. Until then the janitor preserves them (`ci/janitor/aws-nuke-config*.yaml`), because the live account setting may still name one.
 
-Rollback is step 1 reverted: the cluster module takes its copies back by creating them again, which overwrites the setting but deletes nothing.
+Rollback is **not** a straight revert of this change. Applying the `removed` blocks detaches the three addresses from state, and reverting configuration does not put them back: nothing re-adopts them, and `terraform/config/regional-cluster/imports.sh` has no adoption entry for them. Reverting the HCL therefore restores the resource blocks but not the state, so Terraform plans creates. A retained object of the same name conflicts with the role create — the pre-change module named it `<regional_id>-api-gateway-cloudwatch` — and because the account resource reads that role's ARN and `depends_on` its policy attachment, a failed role create stops the account create in the same apply. Wherever the creates do execute, the account create issues an `UpdateAccount` patch, which overwrites the live value and can reintroduce the multi-owner contention this ADR removes. Either way the outcome is a failed or contended apply, not the clean no-op a revert suggests.
+
+A partial rollback of unrelated changes does not reintroduce this defect provided it keeps both the `removed` blocks and the pre-destroy hook, and leaves the account-level owner in place; dropping the hook re-exposes the teardown reset described in step 3 for any state that has not yet applied the handover. Handing ownership back to this repository is a separate, reviewed state-reconciliation exercise rather than a revert, and is out of scope here.
 
 ### Coverage boundary
 
