@@ -6,10 +6,8 @@ version: 0.1.0
 
 dependencies:
   - name: aws-load-balancer-controller
-    # Pinned to 1.17.1. The 3.x bump broke RC bootstrap: the webhook serving
-    # cert and injected caBundle can drift apart under ArgoCD, causing the
-    # mutate-v1-service webhook to reject all Service creation cluster-wide and
-    # platform-api to never come up. Do not bump without reworking the webhook
-    # cert handling. See ROSAENG-75299.
+    # Keep 1.17.1 until 3.x is tested with cert-manager-managed webhook certs.
+    # Version 3.6.2 caused intermittent serving-cert/caBundle mismatches during
+    # RC bootstrap (ROSAENG-75299).
     version: 1.17.1
     repository: https://aws.github.io/eks-charts

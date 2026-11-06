@@ -1831,6 +1831,126 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
+    @pytest.mark.parametrize("revision", ["main", "a" * 40])
+    def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path, revision):
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={"git": {"revision": revision}},
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {"us-east-1": {"provision_mcs": {}}},
+                }
+            },
+        )
+
+        rc_appset_file = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-regional-cluster"
+            / "applicationset.yaml"
+        )
+        mc_appset_file = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-management-cluster"
+            / "applicationset.yaml"
+        )
+        rc_appset = yaml.safe_load(rc_appset_file.read_text())
+        mc_appset = yaml.safe_load(mc_appset_file.read_text())
+
+        # Monitoring supplies ServiceMonitor CRDs for cert-manager; the operator
+        # supplies namespace seaplane for external-secrets-config. All must be
+        # allowed to sync, not held behind the health of their dependants.
+        assert "strategy" not in rc_appset["spec"]
+        for appset in (rc_appset, mc_appset):
+            spec = appset["spec"]["template"]["spec"]
+            assert spec["syncPolicy"]["automated"] == {
+                "prune": True, "selfHeal": True,
+            }
+            assert spec["syncPolicy"]["retry"]["limit"] == -1
+            assert spec["syncPolicy"]["retry"]["refresh"] is True
+            assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
+            assert "RespectIgnoreDifferences=true" not in spec["syncPolicy"]["syncOptions"]
+            assert "ignoreDifferences" not in spec
+            assert "templatePatch" not in appset["spec"]
+            sources = spec["sources"]
+            assert len(sources) == 3
+            assert sum("helm" in source for source in sources) == 1
+            expected_revision = (
+                "{{ .metadata.annotations.git_revision }}" if revision == "main" else revision
+            )
+            assert sources[0]["targetRevision"] == expected_revision
+            assert sources[1] == {
+                "path": '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}',
+                "repoURL": "{{ .metadata.annotations.git_repo }}",
+                "targetRevision": expected_revision,
+                "ref": "operand",
+                "kustomize": {},
+            }
+            assert sources[2]["ref"] == "values"
+            assert sources[2]["targetRevision"] == "{{ .metadata.annotations.git_revision }}"
+            assert "path" not in sources[2]
+        argo_values = (
+            rc_appset["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["argo-cd"]
+        )
+        assert "configs" not in argo_values
+        assert "strategy" not in mc_appset["spec"]
+        cert_manager_values = load_yaml(
+            REAL_ARGOCD_CONFIG_DIR / "shared/cert-manager/jetstack-values.yaml"
+        )
+        assert cert_manager_values["prometheus"]["servicemonitor"]["enabled"] is True
+        dsn = (
+            REAL_ARGOCD_CONFIG_DIR
+            / "regional-cluster/external-secrets-config/templates/seaplane-db-dsn.yaml"
+        ).read_text()
+        assert "  namespace: seaplane" in dsn
+
+    def test_cert_manager_shared_chart_and_secret_ownership(self):
+        placeholder = (
+            REAL_ARGOCD_CONFIG_DIR
+            / "regional-cluster"
+            / "aws-load-balancer-controller"
+            / "templates"
+            / "webhook-secret.yaml"
+        )
+        assert not placeholder.exists()
+        assert not (REAL_ARGOCD_CONFIG_DIR / "regional-cluster/cert-manager").joinpath("Chart.yaml").exists()
+        assert not (REAL_ARGOCD_CONFIG_DIR / "management-cluster/cert-manager").joinpath("Chart.yaml").exists()
+        shared = REAL_ARGOCD_CONFIG_DIR / "shared/cert-manager"
+        assert (shared / "Chart.yaml").is_file()
+        kustomization = load_yaml(shared / "kustomization.yaml")
+        assert kustomization["helmCharts"][0]["name"] == "jetstack-chart"
+        assert (shared / "jetstack-chart/templates").is_symlink()
+        assert "path = argocd/config/shared/cert-manager/upstream" in (
+            PROJECT_ROOT / ".gitmodules"
+        ).read_text()
+        pull_secret = load_yaml(shared / "templates/pull-secret.yaml")
+        assert "argocd.argoproj.io/sync-wave" not in pull_secret["metadata"]["annotations"]
+        issuer = (shared / "templates/clusterissuer.yaml").read_text()
+        assert 'eq .Values.global.cluster_type "management-cluster"' in issuer
+        controller = load_yaml(
+            REAL_ARGOCD_CONFIG_DIR / "regional-cluster/aws-load-balancer-controller/values.yaml"
+        )["aws-load-balancer-controller"]
+        assert controller["enableCertManager"] is True
+
+    def test_shared_argocd_bootstrap_values_enable_first_install_features(self):
+        values_file = REAL_ARGOCD_CONFIG_DIR / "shared" / "argocd" / "values.yaml"
+        values = yaml.safe_load(values_file.read_text())["argo-cd"]
+        configs = values["configs"]
+
+        assert configs["cm"]["kustomize.buildOptions"] == "--enable-helm"
+        assert configs["params"]["reposerver.enable.git.submodule"] is True
+        assert "applicationsetcontroller.enable.progressive.syncs" not in configs["params"]
+
+        bootstrap = (PROJECT_ROOT / "terraform/modules/ecs-bootstrap/main.tf").read_text()
+        assert (
+            'helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd"'
+            in bootstrap
+        )
+
     def test_argocd_bootstrap_pinned_revision(self, tmp_path):
         deploy_dir = self._run_main(
             tmp_path,

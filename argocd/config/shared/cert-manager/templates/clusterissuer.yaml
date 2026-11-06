@@ -1,4 +1,4 @@
-{{- if .Values.global.dns_zone_operator_role_arn }}
+{{- if and (eq .Values.global.cluster_type "management-cluster") .Values.global.dns_zone_operator_role_arn }}
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

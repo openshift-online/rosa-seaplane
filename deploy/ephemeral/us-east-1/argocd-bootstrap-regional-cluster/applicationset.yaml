@@ -26,6 +26,9 @@ spec:
           - path: argocd/config/shared/*
           repoURL: '{{ .metadata.annotations.git_repo }}'
           revision: '{{ .metadata.annotations.git_revision }}'
+  # Sync apps independently, as on MCs. Cross-app health gates deadlock fresh
+  # bootstrap: cert-manager needs monitoring CRDs, and external-secrets-config
+  # needs the operator's seaplane namespace. Missing dependencies retry below.
   template:
     metadata:
       name: '{{ .path.basename }}'
@@ -39,21 +42,6 @@ spec:
       destination:
         namespace: '{{ .path.basename }}'
         server: '{{ .server }}'
-      # --- Workaround: LBC webhook TLS cert drift (argoproj/argo-cd#5202, aws-load-balancer-controller#1828) ---
-      ignoreDifferences:
-      - kind: Secret
-        name: aws-load-balancer-tls
-        jsonPointers:
-        - /data
-      - group: admissionregistration.k8s.io
-        kind: MutatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[].clientConfig.caBundle
-      - group: admissionregistration.k8s.io
-        kind: ValidatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[].clientConfig.caBundle
-      # --- End workaround ---
       syncPolicy:
         automated:
           prune: true
@@ -153,6 +141,14 @@ spec:
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
+      # A ref-only source with an empty path generates no resources. Only
+      # cert-manager supplies a path here to render its Kustomize operand;
+      # the Helm source above still renders its wrapper with the same globals.
+      - repoURL: '{{ .metadata.annotations.git_repo }}'
+        targetRevision: '{{ .metadata.annotations.git_revision }}'
+        ref: operand
+        path: '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}'
+        kustomize: {}
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
