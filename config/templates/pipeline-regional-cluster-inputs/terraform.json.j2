@@ -5,6 +5,7 @@
   "cost_center": "{{ terraform_tags.cost_center }}",
   "environment": "{{ environment }}",
   "account_id": "{{ account_id }}",
+  "image_registry_account_id": {{ image_registry_account_id | default('') | tojson }},
   "region": "{{ aws_region }}",
   "deployment_name": "{{ deployment_name }}",
   "alias": "regional-{{ aws_region }}",

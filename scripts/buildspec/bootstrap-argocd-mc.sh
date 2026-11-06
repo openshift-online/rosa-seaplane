@@ -88,6 +88,9 @@ print_provision_param_summary "MC ArgoCD bootstrap" \
     "DNS_ZONE_OPERATOR_ROLE_ARN" "RC derived" "${DNS_ZONE_OPERATOR_ROLE_ARN}" \
     "OIDC_KEY_READER_ROLE_ARN" "RC derived" "${OIDC_KEY_READER_ROLE_ARN}"
 
+# Read the registry account parameter with the MC account's credentials.
 use_mc_account
+resolve_image_registry_account_id_from_target \
+    "$(jq -r '.image_registry_account_id // empty' "$DEPLOY_CONFIG_FILE")"
 terraform_init_backend management-cluster "${TARGET_REGION}" "${MANAGEMENT_ID}"
 bootstrap_argocd management-cluster "${TARGET_ACCOUNT_ID}"
