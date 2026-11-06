@@ -167,6 +167,18 @@ module "dns_pod_identity" {
 }
 
 # =============================================================================
+# ECR Credentials Sync Pod Identity
+# =============================================================================
+
+module "ecr_creds_sync" {
+  count  = var.enable_ecr_creds_sync ? 1 : 0
+  source = "../../modules/ecr-creds-sync"
+
+  management_id    = var.management_id
+  eks_cluster_name = module.management_cluster.cluster_name
+}
+
+# =============================================================================
 # HyperShift OIDC (Private S3 + CloudFront + Pod Identity)
 # =============================================================================
 
