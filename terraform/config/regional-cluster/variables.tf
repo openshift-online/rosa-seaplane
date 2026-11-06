@@ -262,6 +262,12 @@ variable "seaplane_db_deletion_protection" {
   default     = true
 }
 
+variable "zoa_dynamodb_deletion_protection" {
+  description = "Enable deletion protection for ZOA DynamoDB tables"
+  type        = bool
+  default     = true
+}
+
 variable "seaplane_db_skip_final_snapshot" {
   description = "Skip final snapshot when destroying (ephemeral only)"
   type        = bool
