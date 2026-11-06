@@ -58,7 +58,6 @@ spec:
         - ServerSideApply=true
         - CreateNamespace=true
       sources:
-{% macro _helm_source() %}
       - helm:
           valueFiles:
           - values.yaml
@@ -145,26 +144,14 @@ spec:
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-{% endmacro %}
-{{ _helm_source() }}
-      - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
-        targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
-        ref: values
-  # sources is an atomic list, so templatePatch must repeat it to add Kustomize.
-  # Reuse the common Helm source (including all globals); the only extra source
-  # renders the shared submodule chart with its Red Hat image command patches.
-  templatePatch: |
-    {{ '{{- if eq .path.basename "cert-manager" }}' }}
-    spec:
-      sources:
-{{ _helm_source() }}
-      - path: '{{ '{{ .path.path }}' }}'
-        repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
+      # A ref-only source with an empty path generates no resources. Only
+      # cert-manager supplies a path here to render its Kustomize operand;
+      # the Helm source above still renders its wrapper with the same globals.
+      - repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
+        ref: operand
+        path: '{{ '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}' }}'
         kustomize: {}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
-    {{ '{{- else }}' }}
-    {}
-    {{ '{{- end }}' }}

@@ -57,8 +57,6 @@ spec:
         - ServerSideApply=true
         - CreateNamespace=true
       sources:
-
-
       - helm:
           valueFiles:
           - values.yaml
@@ -143,110 +141,14 @@ spec:
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
-
-      - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
+      # A ref-only source with an empty path generates no resources. Only
+      # cert-manager supplies a path here to render its Kustomize operand;
+      # the Helm source above still renders its wrapper with the same globals.
+      - repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
-        ref: values
-  # sources is an atomic list, so templatePatch must repeat it to add Kustomize.
-  # Reuse the common Helm source (including all globals); the only extra source
-  # renders the shared submodule chart with its Red Hat image command patches.
-  templatePatch: |
-    {{- if eq .path.basename "cert-manager" }}
-    spec:
-      sources:
-
-      - helm:
-          valueFiles:
-          - values.yaml
-          - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
-          valuesObject:
-            global:
-              cluster_type: '{{ .metadata.labels.cluster_type }}'
-              environment: '{{ .metadata.labels.environment }}'
-              aws_region: '{{ .metadata.labels.aws_region }}'
-              cluster_name: '{{ .metadata.labels.cluster_name }}'
-              aws_account_id: '{{ .metadata.annotations.aws_account_id }}'
-
-              management_clusters: '{{ .metadata.annotations.management_clusters }}'
-              rhobs_api_url: '{{ .metadata.annotations.rhobs_api_url }}'
-              dns_zone_operator_role_arn: '{{ .metadata.annotations.dns_zone_operator_role_arn }}'
-              oidc_key_reader_role_arn: '{{ .metadata.annotations.oidc_key_reader_role_arn }}'
-              git_revision: '{{ .metadata.annotations.git_revision }}'
-            platformApi:
-              targetGroup:
-                arn: '{{ .metadata.annotations.api_target_group_arn }}'
-              app:
-                args:
-                  dynamodbRegion: '{{ .metadata.annotations.dynamodb_region }}'
-                  dynamodbPrefix: '{{ .metadata.annotations.dynamodb_prefix }}'
-                  oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
-              rateLimit:
-                redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
-            # Seaplane Operator values (keys must match chart's values.yaml structure)
-            seaplane:
-              oidcS3Bucket: '{{ .metadata.annotations.oidc_bucket_name }}'
-              oidcIssuerBaseUrl: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
-            # Thanos Operator values (keys must match chart's values.yaml structure)
-            thanos:
-              kmsKeyArn: '{{ .metadata.annotations.thanos_kms_key_arn }}'
-              targetGroup:
-                arn: '{{ .metadata.annotations.thanos_target_group_arn }}'
-              queryTargetGroup:
-                arn: '{{ .metadata.annotations.thanos_query_target_group_arn }}'
-              # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
-              sre:
-                targetGroup:
-                  arn: '{{ .metadata.annotations.sre_thanos_target_group_arn }}'
-            # Loki platform values (keys must match chart's values.yaml structure)
-            platform:
-              kmsKeyArn: '{{ .metadata.annotations.loki_kms_key_arn }}'
-              distributorTargetGroup:
-                arn: '{{ .metadata.annotations.loki_distributor_target_group_arn }}'
-              queryFrontendTargetGroup:
-                arn: '{{ .metadata.annotations.loki_query_frontend_target_group_arn }}'
-            # Loki subchart runtime values (bucket names, region, SSE-KMS)
-            loki:
-              loki:
-                storage:
-                  s3:
-                    region: '{{ .metadata.labels.aws_region }}'
-                    sse:
-                      type: SSE-KMS
-                      kms_key_id: '{{ .metadata.annotations.loki_kms_key_arn }}'
-                  bucketNames:
-                    chunks: '{{ .metadata.labels.cluster_name }}-loki-logs-{{ .metadata.annotations.aws_account_id }}'
-                    ruler: '{{ .metadata.labels.cluster_name }}-loki-logs-{{ .metadata.annotations.aws_account_id }}'
-            # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
-            grafana:
-              sre:
-                targetGroup:
-                  arn: '{{ .metadata.annotations.sre_grafana_target_group_arn }}'
-            argo-cd:
-              sre:
-                targetGroup:
-                  arn: '{{ .metadata.annotations.sre_argocd_target_group_arn }}'
-            monitoring:
-              sre:
-                targetGroup:
-                  arn: '{{ .metadata.annotations.sre_prometheus_target_group_arn }}'
-            aws-load-balancer-controller:
-              clusterName: '{{ .metadata.labels.cluster_name }}'
-              vpcId: '{{ .metadata.annotations.vpc_id }}'
-            karpenter:
-              settings:
-                clusterName: '{{ .metadata.labels.cluster_name }}'
-                interruptionQueue: '{{ .metadata.labels.cluster_name }}-karpenter'
-        path: '{{ .path.path }}'
-        repoURL: '{{ .metadata.annotations.git_repo }}'
-        targetRevision: '{{ .metadata.annotations.git_revision }}'
-
-      - path: '{{ .path.path }}'
-        repoURL: '{{ .metadata.annotations.git_repo }}'
-        targetRevision: '{{ .metadata.annotations.git_revision }}'
+        ref: operand
+        path: '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}'
         kustomize: {}
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
-    {{- else }}
-    {}
-    {{- end }}

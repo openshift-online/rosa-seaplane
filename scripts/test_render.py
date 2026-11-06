@@ -1831,10 +1831,11 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
-    def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path):
+    @pytest.mark.parametrize("revision", ["main", "a" * 40])
+    def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path, revision):
         deploy_dir = self._run_main(
             tmp_path,
-            global_defaults={},
+            global_defaults={"git": {"revision": revision}},
             environments={
                 "staging": {
                     "defaults": {},
@@ -1874,20 +1875,24 @@ class TestMainIntegration:
             assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
             assert "RespectIgnoreDifferences=true" not in spec["syncPolicy"]["syncOptions"]
             assert "ignoreDifferences" not in spec
-            # Remove only the outer Go conditional to inspect the patch as YAML.
-            # Its shared Helm source must be identical to the generic one; the
-            # only additional source is the Kustomize operand at the same path.
-            patch_text = appset["spec"]["templatePatch"]
-            patch_body = patch_text.split("\n", 1)[1].split("{{- else }}")[0]
-            sources = yaml.safe_load(patch_body)["spec"]["sources"]
-            assert sources[0] == spec["sources"][0]
-            assert sources[2] == spec["sources"][1]
+            assert "templatePatch" not in appset["spec"]
+            sources = spec["sources"]
+            assert len(sources) == 3
+            assert sum("helm" in source for source in sources) == 1
+            expected_revision = (
+                "{{ .metadata.annotations.git_revision }}" if revision == "main" else revision
+            )
+            assert sources[0]["targetRevision"] == expected_revision
             assert sources[1] == {
-                "path": "{{ .path.path }}",
+                "path": '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}',
                 "repoURL": "{{ .metadata.annotations.git_repo }}",
-                "targetRevision": "{{ .metadata.annotations.git_revision }}",
+                "targetRevision": expected_revision,
+                "ref": "operand",
                 "kustomize": {},
             }
+            assert sources[2]["ref"] == "values"
+            assert sources[2]["targetRevision"] == "{{ .metadata.annotations.git_revision }}"
+            assert "path" not in sources[2]
         argo_values = (
             rc_appset["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["argo-cd"]
         )
