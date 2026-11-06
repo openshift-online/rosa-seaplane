@@ -43,32 +43,6 @@ spec:
       destination:
         namespace: '{{ '{{ .path.basename }}' }}'
         server: '{{ '{{ .server }}' }}'
-      # cert-manager owns the LBC Secret data and webhook CA bundles. Name-keyed
-      # LBC paths prevent a removed webhook entry from being merged back.
-      ignoreDifferences:
-      - kind: Secret
-        name: aws-load-balancer-tls
-        namespace: aws-load-balancer-controller
-        jsonPointers:
-        - /data
-      - group: admissionregistration.k8s.io
-        kind: MutatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[] | select(.name == "mpod.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "quicid.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "mservice.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "alb-target-control.namespace.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "alb-target-control.object.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "mtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
-      - group: admissionregistration.k8s.io
-        kind: ValidatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[] | select(.name == "vingressclassparams.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vingress.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vglobalaccelerator.aga.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
       syncPolicy:
         automated:
           prune: true
@@ -83,8 +57,8 @@ spec:
         syncOptions:
         - ServerSideApply=true
         - CreateNamespace=true
-        - RespectIgnoreDifferences=true
       sources:
+{% macro _helm_source() %}
       - helm:
           valueFiles:
           - values.yaml
@@ -171,31 +145,20 @@ spec:
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
+{% endmacro %}
+{{ _helm_source() }}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'
         ref: values
-  # Cert-manager has a cluster-specific Helm wrapper plus a Kustomize source for
-  # the same Jetstack submodule chart so the Red Hat image patches apply. RC uses
-  # the MC Kustomize path but its own Helm wrapper (without the ClusterIssuer).
-  # templatePatch replaces the common sources for cert-manager only.
-  # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
+  # sources is an atomic list, so templatePatch must repeat it to add Kustomize.
+  # Reuse the common Helm source (including all globals); the only extra source
+  # renders the shared submodule chart with its Red Hat image command patches.
   templatePatch: |
     {{ '{{- if eq .path.basename "cert-manager" }}' }}
     spec:
       sources:
-      - helm:
-          valueFiles:
-          - values.yaml
-          - $values/deploy/{{ '{{ .metadata.labels.environment }}' }}/{{ '{{ .metadata.labels.region_deployment }}' }}/argocd-values-{{ '{{ .metadata.labels.cluster_type }}' }}.yaml
-          valuesObject:
-            global:
-              aws_region: '{{ '{{ .metadata.labels.aws_region }}' }}'
-              cluster_type: '{{ '{{ .metadata.labels.cluster_type }}' }}'
-              dns_zone_operator_role_arn: '{{ '{{ .metadata.annotations.dns_zone_operator_role_arn }}' }}'
-        path: '{{ '{{ .path.path }}' }}'
-        repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
-        targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-      - path: '{{ '{{ if eq .metadata.labels.cluster_type "regional-cluster" }}argocd/config/management-cluster/cert-manager{{ else }}{{ .path.path }}{{ end }}' }}'
+{{ _helm_source() }}
+      - path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
         kustomize: {}

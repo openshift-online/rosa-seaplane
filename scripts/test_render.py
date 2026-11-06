@@ -1872,16 +1872,29 @@ class TestMainIntegration:
             assert spec["syncPolicy"]["retry"]["limit"] == -1
             assert spec["syncPolicy"]["retry"]["refresh"] is True
             assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
+            assert "RespectIgnoreDifferences=true" not in spec["syncPolicy"]["syncOptions"]
+            assert "ignoreDifferences" not in spec
+            # Remove only the outer Go conditional to inspect the patch as YAML.
+            # Its shared Helm source must be identical to the generic one; the
+            # only additional source is the Kustomize operand at the same path.
+            patch_text = appset["spec"]["templatePatch"]
+            patch_body = patch_text.split("\n", 1)[1].split("{{- else }}")[0]
+            sources = yaml.safe_load(patch_body)["spec"]["sources"]
+            assert sources[0] == spec["sources"][0]
+            assert sources[2] == spec["sources"][1]
+            assert sources[1] == {
+                "path": "{{ .path.path }}",
+                "repoURL": "{{ .metadata.annotations.git_repo }}",
+                "targetRevision": "{{ .metadata.annotations.git_revision }}",
+                "kustomize": {},
+            }
         argo_values = (
             rc_appset["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["argo-cd"]
         )
         assert "configs" not in argo_values
         assert "strategy" not in mc_appset["spec"]
-        assert "argocd/config/management-cluster/cert-manager" in rc_appset[
-            "spec"
-        ]["templatePatch"]
         cert_manager_values = load_yaml(
-            REAL_ARGOCD_CONFIG_DIR / "management-cluster/cert-manager/jetstack-values.yaml"
+            REAL_ARGOCD_CONFIG_DIR / "shared/cert-manager/jetstack-values.yaml"
         )
         assert cert_manager_values["prometheus"]["servicemonitor"]["enabled"] is True
         dsn = (
@@ -1890,28 +1903,33 @@ class TestMainIntegration:
         ).read_text()
         assert "  namespace: seaplane" in dsn
 
-    def test_lbc_cert_manager_secret_placeholder_has_required_tls_keys(self):
-        template = (
+    def test_cert_manager_shared_chart_and_secret_ownership(self):
+        placeholder = (
             REAL_ARGOCD_CONFIG_DIR
             / "regional-cluster"
             / "aws-load-balancer-controller"
             / "templates"
             / "webhook-secret.yaml"
-        ).read_text()
-        rendered = (
-            template.replace(
-                '{{- $controller := index .Values "aws-load-balancer-controller" }}', ""
-            )
-            .replace("{{- if $controller.enableCertManager }}", "")
-            .replace("{{ .Release.Namespace }}", "aws-load-balancer-controller")
-            .replace("{{- end }}", "")
         )
-        secret = yaml.safe_load(rendered)
-        assert secret["type"] == "kubernetes.io/tls"
-        assert secret["metadata"]["name"] == "aws-load-balancer-tls"
-        assert set(secret["data"]) == {"tls.crt", "tls.key"}
-        assert secret["data"]["tls.crt"] == ""
-        assert secret["data"]["tls.key"] == ""
+        assert not placeholder.exists()
+        assert not (REAL_ARGOCD_CONFIG_DIR / "regional-cluster/cert-manager").joinpath("Chart.yaml").exists()
+        assert not (REAL_ARGOCD_CONFIG_DIR / "management-cluster/cert-manager").joinpath("Chart.yaml").exists()
+        shared = REAL_ARGOCD_CONFIG_DIR / "shared/cert-manager"
+        assert (shared / "Chart.yaml").is_file()
+        kustomization = load_yaml(shared / "kustomization.yaml")
+        assert kustomization["helmCharts"][0]["name"] == "jetstack-chart"
+        assert (shared / "jetstack-chart/templates").is_symlink()
+        assert "path = argocd/config/shared/cert-manager/upstream" in (
+            PROJECT_ROOT / ".gitmodules"
+        ).read_text()
+        pull_secret = load_yaml(shared / "templates/pull-secret.yaml")
+        assert "argocd.argoproj.io/sync-wave" not in pull_secret["metadata"]["annotations"]
+        issuer = (shared / "templates/clusterissuer.yaml").read_text()
+        assert 'eq .Values.global.cluster_type "management-cluster"' in issuer
+        controller = load_yaml(
+            REAL_ARGOCD_CONFIG_DIR / "regional-cluster/aws-load-balancer-controller/values.yaml"
+        )["aws-load-balancer-controller"]
+        assert controller["enableCertManager"] is True
 
     def test_shared_argocd_bootstrap_values_enable_first_install_features(self):
         values_file = REAL_ARGOCD_CONFIG_DIR / "shared" / "argocd" / "values.yaml"

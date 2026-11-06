@@ -83,14 +83,14 @@ ROSA_REGIONAL_HELM_OVERRIDE_YAML: |
 For overriding a Helm chart dependency version in `Chart.yaml`:
 
 ```yaml
-ROSA_REGIONAL_HELM_VALUES_FILE: argocd/config/management-cluster/cert-manager/Chart.yaml
+ROSA_REGIONAL_HELM_VALUES_FILE: argocd/config/shared/karpenter/Chart.yaml
 ROSA_REGIONAL_HELM_OVERRIDE_YAML: |
   dependencies:
-    - name: cert-manager
-      version: v1.20.0
+    - name: karpenter
+      version: 1.15.1
 ```
 
-The `name: cert-manager` entry is matched against the existing dependencies list, and only the `version` field is updated. No placeholders needed since this isn't an image override.
+The `name: karpenter` entry is matched against the existing dependencies list, and only the `version` field is updated. No placeholders needed since this isn't an image override.
 
 ## OCP release image selection
 

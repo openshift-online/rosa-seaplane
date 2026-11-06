@@ -42,32 +42,6 @@ spec:
       destination:
         namespace: '{{ .path.basename }}'
         server: '{{ .server }}'
-      # cert-manager owns the LBC Secret data and webhook CA bundles. Name-keyed
-      # LBC paths prevent a removed webhook entry from being merged back.
-      ignoreDifferences:
-      - kind: Secret
-        name: aws-load-balancer-tls
-        namespace: aws-load-balancer-controller
-        jsonPointers:
-        - /data
-      - group: admissionregistration.k8s.io
-        kind: MutatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[] | select(.name == "mpod.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "quicid.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "mservice.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "alb-target-control.namespace.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "alb-target-control.object.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "mtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
-      - group: admissionregistration.k8s.io
-        kind: ValidatingWebhookConfiguration
-        jqPathExpressions:
-        - .webhooks[] | select(.name == "vingressclassparams.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vtargetgroupbinding.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vingress.elbv2.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.name == "vglobalaccelerator.aga.k8s.aws") | .clientConfig.caBundle
-        - .webhooks[] | select(.clientConfig.service.name != "aws-load-balancer-webhook-service") | .clientConfig.caBundle
       syncPolicy:
         automated:
           prune: true
@@ -82,8 +56,9 @@ spec:
         syncOptions:
         - ServerSideApply=true
         - CreateNamespace=true
-        - RespectIgnoreDifferences=true
       sources:
+
+
       - helm:
           valueFiles:
           - values.yaml
@@ -170,31 +145,106 @@ spec:
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
+
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
-  # Cert-manager has a cluster-specific Helm wrapper plus a Kustomize source for
-  # the same Jetstack submodule chart so the Red Hat image patches apply. RC uses
-  # the MC Kustomize path but its own Helm wrapper (without the ClusterIssuer).
-  # templatePatch replaces the common sources for cert-manager only.
-  # https://github.com/MitaliBhalla/rosa-hyperfleet/pull/1
+  # sources is an atomic list, so templatePatch must repeat it to add Kustomize.
+  # Reuse the common Helm source (including all globals); the only extra source
+  # renders the shared submodule chart with its Red Hat image command patches.
   templatePatch: |
     {{- if eq .path.basename "cert-manager" }}
     spec:
       sources:
+
       - helm:
           valueFiles:
           - values.yaml
           - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
           valuesObject:
             global:
-              aws_region: '{{ .metadata.labels.aws_region }}'
               cluster_type: '{{ .metadata.labels.cluster_type }}'
+              environment: '{{ .metadata.labels.environment }}'
+              aws_region: '{{ .metadata.labels.aws_region }}'
+              cluster_name: '{{ .metadata.labels.cluster_name }}'
+              aws_account_id: '{{ .metadata.annotations.aws_account_id }}'
+
+              rc_aws_account_id: '{{ .metadata.annotations.rc_aws_account_id }}'
+
+              management_clusters: '{{ .metadata.annotations.management_clusters }}'
+              rhobs_api_url: '{{ .metadata.annotations.rhobs_api_url }}'
               dns_zone_operator_role_arn: '{{ .metadata.annotations.dns_zone_operator_role_arn }}'
+              oidc_key_reader_role_arn: '{{ .metadata.annotations.oidc_key_reader_role_arn }}'
+              git_revision: '{{ .metadata.annotations.git_revision }}'
+            platformApi:
+              targetGroup:
+                arn: '{{ .metadata.annotations.api_target_group_arn }}'
+              app:
+                args:
+                  dynamodbRegion: '{{ .metadata.annotations.dynamodb_region }}'
+                  dynamodbPrefix: '{{ .metadata.annotations.dynamodb_prefix }}'
+                  oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
+              rateLimit:
+                redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
+            # Seaplane Operator values (keys must match chart's values.yaml structure)
+            seaplane:
+              oidcS3Bucket: '{{ .metadata.annotations.oidc_bucket_name }}'
+              oidcIssuerBaseUrl: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
+            # Thanos Operator values (keys must match chart's values.yaml structure)
+            thanos:
+              kmsKeyArn: '{{ .metadata.annotations.thanos_kms_key_arn }}'
+              targetGroup:
+                arn: '{{ .metadata.annotations.thanos_target_group_arn }}'
+              queryTargetGroup:
+                arn: '{{ .metadata.annotations.thanos_query_target_group_arn }}'
+              # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
+              sre:
+                targetGroup:
+                  arn: '{{ .metadata.annotations.sre_thanos_target_group_arn }}'
+            # Loki platform values (keys must match chart's values.yaml structure)
+            platform:
+              kmsKeyArn: '{{ .metadata.annotations.loki_kms_key_arn }}'
+              distributorTargetGroup:
+                arn: '{{ .metadata.annotations.loki_distributor_target_group_arn }}'
+              queryFrontendTargetGroup:
+                arn: '{{ .metadata.annotations.loki_query_frontend_target_group_arn }}'
+            # Loki subchart runtime values (bucket names, region, SSE-KMS)
+            loki:
+              loki:
+                storage:
+                  s3:
+                    region: '{{ .metadata.labels.aws_region }}'
+                    sse:
+                      type: SSE-KMS
+                      kms_key_id: '{{ .metadata.annotations.loki_kms_key_arn }}'
+                  bucketNames:
+                    chunks: '{{ .metadata.labels.cluster_name }}-loki-logs-{{ .metadata.annotations.aws_account_id }}'
+                    ruler: '{{ .metadata.labels.cluster_name }}-loki-logs-{{ .metadata.annotations.aws_account_id }}'
+            # SRE UI ALB target group ARNs (empty when enable_sre_tools_gateway = false)
+            grafana:
+              sre:
+                targetGroup:
+                  arn: '{{ .metadata.annotations.sre_grafana_target_group_arn }}'
+            argo-cd:
+              sre:
+                targetGroup:
+                  arn: '{{ .metadata.annotations.sre_argocd_target_group_arn }}'
+            monitoring:
+              sre:
+                targetGroup:
+                  arn: '{{ .metadata.annotations.sre_prometheus_target_group_arn }}'
+            aws-load-balancer-controller:
+              clusterName: '{{ .metadata.labels.cluster_name }}'
+              vpcId: '{{ .metadata.annotations.vpc_id }}'
+            karpenter:
+              settings:
+                clusterName: '{{ .metadata.labels.cluster_name }}'
+                interruptionQueue: '{{ .metadata.labels.cluster_name }}-karpenter'
         path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
-      - path: '{{ if eq .metadata.labels.cluster_type "regional-cluster" }}argocd/config/management-cluster/cert-manager{{ else }}{{ .path.path }}{{ end }}'
+
+      - path: '{{ .path.path }}'
         repoURL: '{{ .metadata.annotations.git_repo }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         kustomize: {}
