@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1793578971
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1793862054
 
 # Tool versions - update these and rebuild to upgrade
 ARG KUBECTL_VERSION=v1.31.0
