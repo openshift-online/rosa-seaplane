@@ -11,5 +11,5 @@ dependencies:
     # mutate-v1-service webhook to reject all Service creation cluster-wide and
     # platform-api to never come up. Do not bump without reworking the webhook
     # cert handling. See ROSAENG-75299.
-    version: 1.17.1
+    version: 3.6.2
     repository: https://aws.github.io/eks-charts
