@@ -141,6 +141,11 @@ presets:
         - type: glob
           value: "rosa-seaplane-aws-nuke:*"
 
+      # Shared GitHub CodeStar connection used by the central codepipelines.
+      # Not taggable, so keep it by name; only the central account has it.
+      CodeStarConnection:
+        - "rosa-regional-github-shared"
+
       # AWS-managed, SSO, service-linked and org StackSet-deployed roles.
       IAMRole:
         - "OrganizationAccountAccessRole"
