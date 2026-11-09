@@ -67,7 +67,7 @@ seaplane-operator has `ECR_MIRROR_BASE_SECRET_NAME` set to match.
 
 ### Step 1 — seaplane-operator: image source redirect
 
-The seaplane-operator reads four environment variables at startup. Set all four
+The seaplane-operator reads five environment variables at startup. Set all five
 together or none at all; partial configuration causes the operator to exit.
 
 | Variable                      | Description                                       |
@@ -76,13 +76,42 @@ together or none at all; partial configuration causes the operator to exit.
 | `ECR_MIRROR_REGISTRY_REGION`  | AWS region of the ECR registry                    |
 | `ECR_MIRROR_REPOSITORY`       | ECR repository name                               |
 | `ECR_MIRROR_SOURCES`          | Comma-separated source registry paths to redirect |
+| `ECR_MIRROR_BASE_SECRET_NAME` | Base pull-secret name (must not be `pull-secret`) |
 
-Set these via `applications.regional-cluster.seaplane.ecrMirror` in
-`config/<env>/defaults.yaml`. After running `uv run scripts/render.py`, the
-render script writes them into the bootstrap-rendered ApplicationSet
-`valuesObject`, which carries them to the seaplane-operator chart as
-`ECR_MIRROR_*` env vars. Do not set them directly in
-`argocd/config/regional-cluster/platform-api/values.yaml`.
+**These values are sourced from SSM, not from git.** They are provisioned as SSM
+parameters in the RC account by `rosa-seaplane-internal` and read by the RC
+bootstrap script, which threads them into ArgoCD cluster secret annotations. The
+ApplicationSet template forwards the annotations to the seaplane-operator chart
+as `ECR_MIRROR_*` env vars.
+
+**To provision the SSM parameters**, set the four locals in
+`infra/environments/<env>/account-config/rc/defaults.hcl` in
+`rosa-seaplane-internal` and apply:
+
+```hcl
+# infra/environments/<env>/account-config/rc/defaults.hcl
+locals {
+  ecr_mirror_region           = "<ecr-region>"
+  ecr_mirror_repository       = "<repository>"
+  ecr_mirror_sources          = "<source1>,<source2>"
+  ecr_mirror_base_secret_name = "base-pull-secret"
+}
+```
+
+```bash
+make apply-account-config ENV=<env>
+```
+
+For per-region overrides, create
+`infra/environments/<env>/account-config/rc/<region>.hcl` with the same locals.
+Regions without a file inherit from `defaults.hcl`.
+
+The ECR registry account ID (`ECR_MIRROR_REGISTRY_ACCOUNT`) is sourced from the
+existing `/infra/image-registry/account_id` SSM parameter, which is provisioned
+separately by the shared ECR account onboarding.
+
+**To activate the mirror in rosa-seaplane**, set only the boolean opt-in in
+`config/<env>/defaults.yaml` and re-render:
 
 ```yaml
 applications:
@@ -90,12 +119,15 @@ applications:
     seaplane:
       ecrMirror:
         enabled: true
-        registryAccount: "<account>"
-        registryRegion: "<region>"
-        repository: "<repository>"
-        sources: "<source1>,<source2>"
-        baseSecretName: "base-pull-secret"
 ```
+
+```bash
+uv run scripts/render.py
+```
+
+The re-bootstrap (or next scheduled bootstrap pipeline run) reads the SSM values
+and updates the ArgoCD cluster secret annotations. No ECR config values live in
+git.
 
 See `docs/operator/configuration.md` in `rosa-seaplane-api` for the full
 operator configuration reference.
@@ -189,10 +221,34 @@ ECR resource policy in `rosa-srep-zero-egress` (the MC account OU is listed in
 
 ## Enabling per environment
 
-### Integration (int0)
+Enabling the mirror requires changes in two repositories and re-bootstrap.
+
+### Step A — provision SSM parameters (`rosa-seaplane-internal`)
+
+Set the ECR mirror locals in
+`infra/environments/<env>/account-config/rc/defaults.hcl` and apply:
+
+```hcl
+# infra/environments/int/account-config/rc/defaults.hcl  (or stage/)
+locals {
+  ecr_mirror_region           = "<ecr-region>"
+  ecr_mirror_repository       = "<repository>"
+  ecr_mirror_sources          = "<source1>,<source2>"
+  ecr_mirror_base_secret_name = "base-pull-secret"
+}
+```
+
+```bash
+make apply-account-config ENV=int   # or stage
+```
+
+For per-region values, create `account-config/rc/<region>.hcl` with the locals
+that differ from the defaults.
+
+### Step B — activate in config (`rosa-seaplane`)
 
 ```yaml
-# config/integration/defaults.yaml
+# config/integration/defaults.yaml  (or stage/)
 management_cluster_defaults:
   enable_ecr_creds_sync: true
 
@@ -201,7 +257,7 @@ applications:
     ecrCredsSync:
       ecrRepository: "<ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/<repository>"
       awsRegion: "<ecr-region>"
-      sourceSecrets: "base-pull-secret" # must match ecrMirror.baseSecretName
+      sourceSecrets: "base-pull-secret"
     eksNodePool:
       ecrMirror:
         mirrors:
@@ -212,51 +268,23 @@ applications:
   regional-cluster:
     seaplane:
       ecrMirror:
-        enabled: true
-        registryAccount: "<ecr-account>"
-        registryRegion: "<ecr-region>"
-        repository: "<repository>"
-        sources: "<source1>,<source2>"
-        baseSecretName: "base-pull-secret"
+        enabled: true # all other fields come from SSM — do not set them here
 ```
-
-### Stage
-
-```yaml
-# config/stage/defaults.yaml
-management_cluster_defaults:
-  enable_ecr_creds_sync: true
-
-applications:
-  management-cluster:
-    ecrCredsSync:
-      ecrRepository: "<ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/<repository>"
-      awsRegion: "<ecr-region>"
-      sourceSecrets: "base-pull-secret" # must match ecrMirror.baseSecretName
-    eksNodePool:
-      ecrMirror:
-        mirrors:
-          - sourcePrefix: source-registry.example.com/org/component-images
-            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
-          - sourcePrefix: source-registry.example.com/org/release-image
-            registryUri: <ecr-account>.dkr.ecr.<ecr-region>.amazonaws.com/org/component-images
-  regional-cluster:
-    seaplane:
-      ecrMirror:
-        enabled: true
-        registryAccount: "<ecr-account>"
-        registryRegion: "<ecr-region>"
-        repository: "<repository>"
-        sources: "<source1>,<source2>"
-        baseSecretName: "base-pull-secret"
-```
-
-After editing, regenerate rendered files and commit both together:
 
 ```bash
 uv run scripts/render.py
 make pre-push
 ```
+
+The seaplane-operator values (`registryAccount`, `registryRegion`, `repository`,
+`sources`, `baseSecretName`) are sourced from the SSM parameters provisioned in
+Step A and are not committed to git.
+
+### Step C — re-bootstrap the RC
+
+Re-run the RC bootstrap pipeline (or wait for the next scheduled run). The
+bootstrap script reads the new SSM parameters and updates the ArgoCD cluster
+secret annotations. ArgoCD then syncs the new values to the seaplane-operator.
 
 ## Token refresh behaviour
 

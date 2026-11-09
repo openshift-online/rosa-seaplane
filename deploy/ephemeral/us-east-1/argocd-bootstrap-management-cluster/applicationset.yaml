@@ -93,12 +93,24 @@ spec:
               oidcIssuerBaseUrl: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
               helmValues:
                 ecrMirror:
+                  # enabled is set explicitly per environment in config — requires human opt-in.
+                  # All other fields come from SSM via cluster secret annotations so that
+                  # sensitive ECR config is not stored in git and cannot change via ArgoCD
+                  # auto-sync alone.
                   enabled: False
-                  registryAccount: ""
-                  registryRegion: ""
-                  repository: ""
-                  sources: ""
-                  baseSecretName: ""
+                  registryAccount: '{{ index .metadata.annotations "ecr_mirror_registry_account" | default "" }}'
+                  registryRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
+                  repository: '{{ index .metadata.annotations "ecr_mirror_repository" | default "" }}'
+                  sources: '{{ index .metadata.annotations "ecr_mirror_sources" | default "" }}'
+                  baseSecretName: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'
+
+            # ecr-creds-sync values derived from SSM-sourced annotations so that
+            # ecrRepository, awsRegion, and sourceSecrets stay out of git.
+            ecrCredsSync:
+              ecrRepository: '{{ index .metadata.annotations "ecr_mirror_ecr_repository" | default "" }}'
+              awsRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
+              sourceSecrets: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'
+
             # Thanos Operator values (keys must match chart's values.yaml structure)
             thanos:
               kmsKeyArn: '{{ .metadata.annotations.thanos_kms_key_arn }}'

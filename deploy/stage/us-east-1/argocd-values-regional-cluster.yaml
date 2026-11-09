@@ -30,11 +30,6 @@ platformApi:
 seaplane:
   ecrMirror:
     enabled: false
-    registryAccount: ''
-    registryRegion: us-east-1
-    repository: ''
-    sources: ''
-    baseSecretName: ''
   oidcS3Bucket: PLACEHOLDER-overridden-by-terraform-output
 pagerduty:
   enabled: false

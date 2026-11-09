@@ -30,11 +30,6 @@ platformApi:
 seaplane:
   ecrMirror:
     enabled: false
-    registryAccount: ''
-    registryRegion: us-east-1
-    repository: ''
-    sources: ''
-    baseSecretName: ''
   oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
 pagerduty:
   enabled: false
