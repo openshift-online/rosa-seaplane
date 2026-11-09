@@ -168,9 +168,10 @@ argo-cd:
   configs:
     params:
       server.insecure: false
-      # Off by default so RC does not clone .gitmodules (cert-manager/cert-manager)
-      # on every repo-server fetch. MC ApplicationSet turns this on.
-      reposerver.enable.git.submodule: false
+      # Keep first-install ArgoCD aligned with the self-managed Application.
+      reposerver.enable.git.submodule: true
+    cm:
+      kustomize.buildOptions: --enable-helm
 
   # SRE UI ALB — injected at runtime by ApplicationSet; empty when ALB is not deployed
   sre:
