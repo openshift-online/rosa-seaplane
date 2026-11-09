@@ -21,6 +21,9 @@ if [ "${DELETE_FLAG}" == "true" ]; then
     exit 0
 fi
 
+# Read the registry account parameter with the RC account's credentials.
 use_mc_account
+resolve_image_registry_account_id_from_target \
+    "$(jq -r '.image_registry_account_id // empty' "$RC_CONFIG_FILE")"
 terraform_init_backend regional-cluster "${TARGET_REGION}" "${REGIONAL_ID}"
 bootstrap_argocd regional-cluster "${TARGET_ACCOUNT_ID}"
