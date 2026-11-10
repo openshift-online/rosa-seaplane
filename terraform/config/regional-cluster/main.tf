@@ -165,7 +165,7 @@ locals {
   # RDS IAM authentication resource ARN for the ZOA Lambda read role.
   # Format: arn:aws:rds-db:region:account:dbuser:cluster-resource-id/username
   # Allows the zoa_aws_read role to connect as the zoa_ro role via IAM auth.
-  seaplane_db_iam_arn = "arn:aws:rds-db:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:dbuser:${module.seaplane_db.cluster_resource_id}/${local.zoa_db_reader_username}"
+  seaplane_db_iam_arn = "arn:aws:rds-db:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:dbuser:${module.seaplane_db.cluster_resource_id}/${local.zoa_db_reader_username}"
 }
 
 # =============================================================================

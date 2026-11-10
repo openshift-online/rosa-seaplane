@@ -22,7 +22,7 @@ resource "aws_iam_role" "access_lambda" {
       Action = "sts:AssumeRole"
       Condition = {
         ArnLike = {
-          "aws:SourceArn" = "arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:${var.cluster_id}-zoa-access"
+          "aws:SourceArn" = "arn:aws:lambda:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:function:${var.cluster_id}-zoa-access"
         }
       }
     }]

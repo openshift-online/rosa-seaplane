@@ -132,7 +132,7 @@ resource "aws_iam_role_policy" "oidc_key_reader" {
           "secretsmanager:GetSecretValue",
           "secretsmanager:DescribeSecret",
         ]
-        Resource = "arn:aws:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:/seaplane/oidc/*"
+        Resource = "arn:aws:secretsmanager:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:secret:/seaplane/oidc/*"
       },
       {
         Effect = "Allow"

@@ -240,8 +240,8 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:DescribeTable",
         ]
         Resource = [
-          "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.sessions_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${var.sessions_table_name}/index/*",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.sessions_table_name}",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.sessions_table_name}/index/*",
         ]
       },
       # Targets read via SSM (see lambda_ssm policy below)
@@ -252,7 +252,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:PutItem",
         ]
         Resource = [
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.audit_table_name}",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}",
         ]
       },
     ]
@@ -296,7 +296,7 @@ resource "aws_iam_role_policy" "lambda_ecs" {
         Sid      = "TagBoundaryTasks"
         Effect   = "Allow"
         Action   = ["ecs:TagResource"]
-        Resource = "arn:aws:ecs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:task/${var.regional_id}-zoa-boundary/*"
+        Resource = "arn:aws:ecs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:task/${var.regional_id}-zoa-boundary/*"
       },
       {
         Effect   = "Allow"
@@ -359,7 +359,7 @@ resource "aws_iam_role_policy" "lambda_ssm" {
           "ssm:PutParameter",
           "ssm:GetParameter",
         ]
-        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/zoa/deployments/*"
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/zoa/deployments/*"
       },
       {
         Sid    = "TargetDiscovery"
@@ -368,7 +368,7 @@ resource "aws_iam_role_policy" "lambda_ssm" {
           "ssm:GetParametersByPath",
           "ssm:GetParameter",
         ]
-        Resource = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/zoa/targets/*"
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/zoa/targets/*"
       },
     ]
   })

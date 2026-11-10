@@ -121,14 +121,14 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
       ]
       Resource = concat(
         [
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.dynamodb_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.dynamodb_table_name}/index/*",
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.audit_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.audit_table_name}/index/*",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}/index/*",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}/index/*",
         ],
         var.sessions_table_name != "" ? [
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.sessions_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.name}:*:table/${var.sessions_table_name}/index/*",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}",
+          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}/index/*",
         ] : [],
       )
     }]
@@ -404,7 +404,7 @@ resource "aws_iam_role_policy" "lambda_eks" {
       Action = [
         "eks:DescribeCluster",
       ]
-      Resource = "arn:aws:eks:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:cluster/${var.eks_cluster_name}"
+      Resource = "arn:aws:eks:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:cluster/${var.eks_cluster_name}"
     }]
   })
 }
@@ -661,7 +661,7 @@ resource "aws_iam_role_policy" "lambda_boundary_reaper_idle" {
         Action = [
           "logs:DescribeLogStreams",
         ]
-        Resource = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.cluster_id}/zoa-boundary/ssm-sessions:*"
+        Resource = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.cluster_id}/zoa-boundary/ssm-sessions:*"
       },
     ]
   })
@@ -727,7 +727,7 @@ resource "aws_lambda_permission" "scheduler_invoke_worker" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.worker.function_name
   principal     = "scheduler.amazonaws.com"
-  source_arn    = "arn:aws:scheduler:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:schedule/default/${local.function_prefix}-*"
+  source_arn    = "arn:aws:scheduler:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:schedule/default/${local.function_prefix}-*"
 }
 
 # -----------------------------------------------------------------------------
@@ -759,7 +759,7 @@ resource "aws_kms_key" "lambda_logs" {
         Sid    = "AllowCloudWatchLogs"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -771,7 +771,7 @@ resource "aws_kms_key" "lambda_logs" {
         Resource = "*"
         Condition = {
           ArnLike = {
-            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_prefix}-*"
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_prefix}-*"
           }
         }
       }
@@ -834,7 +834,7 @@ resource "aws_ssm_parameter" "zoa_target" {
     task_definition_arn = aws_ecs_task_definition.boundary.arn
     function_url        = aws_lambda_function_url.api.function_url
     account_id          = data.aws_caller_identity.current.account_id
-    region              = data.aws_region.current.name
+    region              = data.aws_region.current.region
     status              = "ready"
   })
 
