@@ -175,3 +175,22 @@ spec:
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
+  # ecr-creds-sync sources its chart from the rosa-seaplane-ecr-creds-sync
+  # repository rather than the local path, so the chart and controller code
+  # are co-located. All other applications use the default sources above.
+  templatePatch: |
+    {{- if eq .path.basename "ecr-creds-sync" }}
+    spec:
+      sources:
+      - repoURL: 'https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync'
+        targetRevision: 'f34824f'
+        path: helm
+        helm:
+          valueFiles:
+          - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
+      - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
+        targetRevision: '{{ .metadata.annotations.git_revision }}'
+        ref: values
+    {{- else }}
+    {}
+    {{- end }}

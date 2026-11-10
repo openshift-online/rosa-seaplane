@@ -1952,7 +1952,10 @@ class TestMainIntegration:
             assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
             assert "RespectIgnoreDifferences=true" not in spec["syncPolicy"]["syncOptions"]
             assert "ignoreDifferences" not in spec
-            assert "templatePatch" not in appset["spec"]
+            # RC must have no templatePatch. MC carries one for ecr-creds-sync
+            # (sources the chart from an external repo); that is expected.
+            if appset is rc_appset:
+                assert "templatePatch" not in appset["spec"]
             sources = spec["sources"]
             assert len(sources) == 3
             assert sum("helm" in source for source in sources) == 1
