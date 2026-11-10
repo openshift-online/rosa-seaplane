@@ -305,16 +305,10 @@ variable "environment_domain" {
 variable "dns_shard_account_id" {
   description = <<-EOT
     AWS account ID of the per-env DNS shard account (shard 0, token "00") that
-    owns the zone shards and the dns-zone-operator role. Model is 1:1 shard to
-    account, shards 0-based; v1 is single-shard. When set, zone shards and the
-    operator role are created in this account via the aws.dns_shard provider, and
-    MC operators assume the role there. When empty (default), zone shards and the
-    role stay in the regional (RC) account, preserving the pre-shard-account
-    behavior. The account is minted by rosa-seaplane-internal
-    (rosa-seaplane-<env>-dns-<regionshort>-00); the ID is resolved from SSM
-    (/infra/<region>/dns-00/account_id) in the RC buildspec. Route53 record
-    writes must be same-account as the zones, which is why the role moves with
-    them.
+    owns the zone shards and the dns-zone-operator role. Required when
+    environment_domain is set. Minted by rosa-seaplane-internal
+    (rosa-seaplane-<env>-dns-<regionshort>-00); resolved from SSM
+    (/infra/<region>/dns-00/account_id) in the RC buildspec.
   EOT
   type        = string
   default     = ""

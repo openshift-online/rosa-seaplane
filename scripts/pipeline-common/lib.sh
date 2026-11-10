@@ -210,48 +210,6 @@ _resolve_rc_account() {
     fi
 }
 
-# Resolve the account that owns the Route53 zone shards and the dns-zone-operator
-# role. Uses the SAME authoritative source as the RC side (provision-infra-rc.sh):
-# the rendered RC config's dns_shard_account_id. This keeps RC and MC in lockstep.
-#   - empty  -> shard account disabled; the role is in the RC account.
-#   - ssm:// -> resolve via central SSM; FATAL if it does not resolve, so we never
-#               build an ARN pointing at a non-existent role (the shard account is
-#               minted by rosa-seaplane-internal and must exist first).
-#   - digits -> use directly.
-# Args: $1 = path to the rendered RC config file. Must be called after
-# _resolve_rc_account. Sets _DNS_ZONE_ACCOUNT_ID.
-_DNS_ZONE_ACCOUNT_ID=""
-_resolve_dns_zone_account() {
-    if [ -n "$_DNS_ZONE_ACCOUNT_ID" ]; then
-        return
-    fi
-
-    local rc_config_file="$1"
-    local shard_ref
-    shard_ref=$(jq -r '.dns_shard_account_id // ""' "$rc_config_file" 2>/dev/null || echo "")
-
-    if [ -z "$shard_ref" ]; then
-        _DNS_ZONE_ACCOUNT_ID="$_RESOLVED_RC_ACCOUNT_ID"
-        return
-    fi
-
-    local resolved="$shard_ref"
-    if [[ "$shard_ref" =~ ^ssm:// ]]; then
-        if ! resolved=$(get_central_ssm_parameter "${shard_ref#ssm://}"); then
-            echo "ERROR: DNS shard account SSM parameter ${shard_ref#ssm://} not found in region ${TARGET_REGION}" >&2
-            echo "The DNS shard account is minted by rosa-seaplane-internal; apply it before provisioning MCs." >&2
-            exit 1
-        fi
-    fi
-
-    if [[ ! "$resolved" =~ ^[0-9]{12}$ ]]; then
-        echo "ERROR: resolved DNS shard account id '${resolved}' is not a 12-digit AWS account ID" >&2
-        exit 1
-    fi
-
-    _DNS_ZONE_ACCOUNT_ID="$resolved"
-}
-
 # ── management_clusters (RC Terraform) ───────────────────────────────────────
 #
 # Terraform always uses the same variable: management_clusters = "mc01:123456789012,..."

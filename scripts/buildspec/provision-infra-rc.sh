@@ -156,12 +156,11 @@ if [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
     export TF_VAR_environment_hosted_zone_id="${ENVIRONMENT_HOSTED_ZONE_ID}"
 fi
 
-# DNS shard account ID. When dns.shard_account_id is set (per env) it is an
-# ssm:///infra/<region>/dns-00/account_id reference that we resolve here to a
-# 12-digit ID, so the aws.dns_shard provider creates zone shards and the
-# dns-zone-operator role in the dedicated DNS shard account. Empty keeps them in
-# the RC account. A set-but-unresolvable reference is fatal: the shard account is
-# minted by rosa-seaplane-internal and must exist before the RC provisions into it.
+# DNS shard account ID. dns.shard_account_id (per env) is an
+# ssm:///infra/<region>/dns-00/account_id reference resolved here to a 12-digit
+# ID, so the aws.dns_shard provider creates the zone shards and dns-zone-operator
+# role in the DNS shard account. A set-but-unresolvable reference is fatal: the
+# shard account is minted by rosa-seaplane-internal and must exist first.
 _DNS_SHARD_ACCOUNT_ID=$(jq -r '.dns_shard_account_id // ""' "${DEPLOY_CONFIG_FILE}")
 if [[ "${_DNS_SHARD_ACCOUNT_ID}" =~ ^ssm:// ]]; then
     _DNS_SHARD_SSM_PARAM="${_DNS_SHARD_ACCOUNT_ID#ssm://}"

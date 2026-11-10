@@ -13,19 +13,13 @@ variable "regional_id" {
   type        = string
 }
 
-variable "regional_hosted_zone_id" {
-  description = "Route53 hosted zone ID for the regional (parent) zone. Grants read access so external-dns can discover zone shards. Set to null when the role lives in a separate DNS shard account (the regional zone is then in a different account and cannot be listed cross-account; external-dns relies on ListHostedZones on * for discovery)."
-  type        = string
-  default     = null
-}
-
 variable "zone_shard_hosted_zone_ids" {
   description = "Route53 hosted zone IDs for zone shards that operators can manage"
   type        = list(string)
 }
 
 variable "permissions_boundary_arn" {
-  description = "Permissions boundary ARN for the dns-zone-operator role. Set to the shard account's rosa-seaplane-dns-operator-boundary when the role is created there (the dns-provisioner requires it on CreateRole). Null in the RC-account fallback."
+  description = "Permissions boundary ARN applied to the dns-zone-operator role. The dns-provisioner requires this boundary on CreateRole."
   type        = string
   default     = null
 }

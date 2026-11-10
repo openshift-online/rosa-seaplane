@@ -58,26 +58,16 @@ data "aws_caller_identity" "central" {
   provider = aws.central
 }
 
-# DNS shard account provider for cross-account Route53. Route53 cannot change
-# records cross-account, so the zone shards and the dns-zone-operator role must
-# live together in the shard account.
-#
-# Credential origin mirrors aws.central: the DNS shard account trusts the central
-# pipeline principals, not the RC account, so this provider originates from the
-# central credentials (central_aws_profile, written by the buildspec) and then
-# assume_roles the dedicated, least-privilege dns-provisioner role in the shard
-# account. The profile is only applied when assuming into the shard account, so
-# the disabled case still uses the ambient (RC) creds and keeps zone shards and
-# the role in the RC account exactly as before.
-#
-# Local-dev fallback: with no central profile and a target_account_id set, assume
-# OrganizationAccountAccessRole in the target (RC) account, matching the default
-# provider so zone shards stay in the RC account.
+# Provider for the DNS shard account. Route53 record changes cannot cross
+# accounts, so the zone shards and the dns-zone-operator role are created in the
+# shard account by assuming a role there: the least-privilege dns-provisioner role
+# in the pipeline (central creds, which the shard account trusts), or
+# OrganizationAccountAccessRole for local dev.
 locals {
   dns_shard_assume_role_arn = (
-    var.dns_shard_account_id != "" ? "arn:aws:iam::${var.dns_shard_account_id}:role/${var.dns_shard_provisioner_role_name}" :
-    var.target_account_id != "" ? "arn:aws:iam::${var.target_account_id}:role/OrganizationAccountAccessRole" :
-    ""
+    var.dns_shard_account_id == "" ? "" :
+    var.central_aws_profile != "" ? "arn:aws:iam::${var.dns_shard_account_id}:role/${var.dns_shard_provisioner_role_name}" :
+    "arn:aws:iam::${var.dns_shard_account_id}:role/OrganizationAccountAccessRole"
   )
 }
 
@@ -86,8 +76,7 @@ provider "aws" {
   region            = var.region
   use_fips_endpoint = can(regex("^(us|us-gov)-", var.region)) ? true : false
 
-  # Central-origin credentials only when assuming into the shard account; null
-  # otherwise so the disabled/local-dev paths use ambient creds.
+  # Central creds only when assuming into the shard account; ambient otherwise.
   profile = (var.dns_shard_account_id != "" && var.central_aws_profile != "") ? var.central_aws_profile : null
 
   dynamic "assume_role" {
@@ -518,17 +507,10 @@ resource "aws_route53_record" "regional_delegation" {
 # providing ~10k records per shard. MC operators (external-dns, cert-manager)
 # create cluster records in shards. seaplane-operator assigns clusters to shards.
 #
-# Model: 1 zone shard maps 1:1 to its own DNS account, shards 0-based. Shard 0
-# (zone 0.<deployment>.<domain>) maps to account token "00". v1 is single-shard
-# (zone_shard_count defaults to 1), so one zone shard maps to one shard account
-# via the single aws.dns_shard provider below. Scaling to N shard-accounts is
-# deferred: Terraform cannot for_each providers, so N accounts would need either
-# N statically-declared provider aliases here or per-shard zone+role creation
-# moved to a per-account unit.
-#
-# Zone shards live in the DNS shard account (via aws.dns_shard) when
-# dns_shard_account_id is set, and in the RC account otherwise. The regional
-# zone stays in the RC account; the NS delegation below bridges the two accounts.
+# Model: one zone shard maps 1:1 to its own DNS account (0-based; shard 0 = token
+# "00"). v1 is single-shard. Shards are created in the DNS shard account via
+# aws.dns_shard. The regional zone stays in the RC account; the NS delegation
+# below bridges them.
 # =============================================================================
 
 resource "aws_route53_zone" "zone_shard" {
@@ -543,6 +525,13 @@ resource "aws_route53_zone" "zone_shard" {
     Shard    = tostring(count.index)
     function = "dns"
     module   = "regional-cluster"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.dns_shard_account_id != ""
+      error_message = "dns_shard_account_id is required when environment_domain is set: mint the DNS shard account (rosa-seaplane-internal) before provisioning the RC."
+    }
   }
 }
 
@@ -573,18 +562,13 @@ module "dns_zone_operator" {
     aws = aws.dns_shard
   }
 
-  regional_id = var.regional_id
-  # Grant the regional-zone read only when the role is same-account as that zone
-  # (no shard account). Cross-account ListResourceRecordSets is not possible, and
-  # external-dns discovers shards via ListHostedZones on * instead.
-  regional_hosted_zone_id    = var.dns_shard_account_id != "" ? null : aws_route53_zone.regional[0].zone_id
+  regional_id                = var.regional_id
   zone_shard_hosted_zone_ids = aws_route53_zone.zone_shard[*].zone_id
   region_ou_path             = var.region_ou_path
 
-  # When the role is created in the shard account, cap it with the boundary that
-  # account's bootstrap created there. The dns-provisioner can only CreateRole
-  # with this boundary attached, so the ARNs must match.
-  permissions_boundary_arn = var.dns_shard_account_id != "" ? "arn:aws:iam::${var.dns_shard_account_id}:policy/rosa-seaplane-dns-operator-boundary" : null
+  # The dns-provisioner can only create the role with this boundary attached, so
+  # the ARN must match the boundary the shard account provides.
+  permissions_boundary_arn = "arn:aws:iam::${var.dns_shard_account_id}:policy/rosa-seaplane-dns-operator-boundary"
 }
 
 # =============================================================================
