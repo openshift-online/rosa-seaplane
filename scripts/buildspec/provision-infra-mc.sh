@@ -83,7 +83,7 @@ else
     # The dns-zone-operator role lives in the DNS shard account when one exists,
     # otherwise in the RC account. Resolve the owning account so external-dns and
     # cert-manager assume the role where the RC actually created it.
-    _resolve_dns_zone_account
+    _resolve_dns_zone_account "$_RC_CONFIG_FILE"
     export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${_DNS_ZONE_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
     export OIDC_WRITER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-writer"
     export OIDC_KEY_READER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-key-reader"
@@ -175,8 +175,10 @@ else
         TF_VAR_oidc_cloudfront_domain TF_VAR_oidc_bucket_name \
         TF_VAR_oidc_bucket_arn TF_VAR_oidc_bucket_region \
         DNS_ZONE_OPERATOR_ROLE_ARN OIDC_WRITER_ROLE_ARN OIDC_KEY_READER_ROLE_ARN
+    # DNS_ZONE_OPERATOR_ROLE_ARN is built from the DNS zone account (shard account
+    # when enabled, else RC account), so validate it against that same account.
     validate_arn_account "DNS_ZONE_OPERATOR_ROLE_ARN" \
-        "${DNS_ZONE_OPERATOR_ROLE_ARN}" "${RESOLVED_REGIONAL_ACCOUNT_ID}"
+        "${DNS_ZONE_OPERATOR_ROLE_ARN}" "${_DNS_ZONE_ACCOUNT_ID}"
     validate_arn_account "OIDC_WRITER_ROLE_ARN" \
         "${OIDC_WRITER_ROLE_ARN}" "${RESOLVED_REGIONAL_ACCOUNT_ID}"
     validate_arn_account "OIDC_KEY_READER_ROLE_ARN" \

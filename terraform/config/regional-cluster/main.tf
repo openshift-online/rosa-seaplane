@@ -60,10 +60,19 @@ data "aws_caller_identity" "central" {
 
 # DNS shard account provider for cross-account Route53. Route53 cannot change
 # records cross-account, so the zone shards and the dns-zone-operator role must
-# live together in the shard account. When dns_shard_account_id is set, assume
-# into the shard account; otherwise fall back to the same account/creds the
-# default provider uses (target account for local dev, ambient in pipelines),
-# which keeps zone shards and the role in the RC account exactly as before.
+# live together in the shard account.
+#
+# Credential origin mirrors aws.central: the DNS shard account trusts the central
+# pipeline principals, not the RC account, so this provider originates from the
+# central credentials (central_aws_profile, written by the buildspec) and then
+# assume_roles the dedicated, least-privilege dns-provisioner role in the shard
+# account. The profile is only applied when assuming into the shard account, so
+# the disabled case still uses the ambient (RC) creds and keeps zone shards and
+# the role in the RC account exactly as before.
+#
+# Local-dev fallback: with no central profile and a target_account_id set, assume
+# OrganizationAccountAccessRole in the target (RC) account, matching the default
+# provider so zone shards stay in the RC account.
 locals {
   dns_shard_assume_role_arn = (
     var.dns_shard_account_id != "" ? "arn:aws:iam::${var.dns_shard_account_id}:role/${var.dns_shard_provisioner_role_name}" :
@@ -76,6 +85,10 @@ provider "aws" {
   alias             = "dns_shard"
   region            = var.region
   use_fips_endpoint = can(regex("^(us|us-gov)-", var.region)) ? true : false
+
+  # Central-origin credentials only when assuming into the shard account; null
+  # otherwise so the disabled/local-dev paths use ambient creds.
+  profile = (var.dns_shard_account_id != "" && var.central_aws_profile != "") ? var.central_aws_profile : null
 
   dynamic "assume_role" {
     for_each = local.dns_shard_assume_role_arn != "" ? [1] : []

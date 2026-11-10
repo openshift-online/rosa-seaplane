@@ -326,9 +326,9 @@ variable "dns_shard_account_id" {
 }
 
 variable "dns_shard_provisioner_role_name" {
-  description = "IAM role name assumed in the DNS shard account to provision zone shards and the dns-zone-operator role. Created by rosa-seaplane-internal account bootstrap. Only used when dns_shard_account_id is set."
+  description = "Dedicated least-privilege IAM role assumed in the DNS shard account to provision zone shards and manage the dns-zone-operator role. Created by rosa-seaplane-internal account bootstrap, trusted by the central pipeline principals, with only Route53 and manage-the-operator-role permissions (not account-admin). Only used when dns_shard_account_id is set."
   type        = string
-  default     = "rosa-seaplane-account-admin"
+  default     = "rosa-seaplane-dns-provisioner"
 }
 
 # =============================================================================
