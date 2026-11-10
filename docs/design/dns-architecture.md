@@ -138,7 +138,7 @@ Zone shards do not live in the regional (RC) account. Each zone shard is placed 
 
 These are orthogonal. A shard can approach the API-rate limit well before the record-count limit under churn, or vice versa. Placing one shard per account lets us scale out horizontally against whichever limit is hit first.
 
-v1 is single-shard (`zone_shard_count` defaults to 1), because one shard and account are expected to handle current load. The account-per-shard structure exists so scale-out is available without redesign.
+v1 defaults to one shard because one shard and account are expected to handle current load. Additional shards currently share one account. Multi-account scale-out requires one of the provisioning changes described below.
 
 **Account naming and discovery:**
 
@@ -305,9 +305,10 @@ The DNS zone hierarchy splits into two tiers:
   - Pre-provisioned once per environment and reused across runs
 - **Per-run (created and destroyed with each e2e run)**:
   - Regional zone in the regional account - the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.ci00.rosa.devshift.net`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
-  - Cluster-specific records (api, oauth, ACME challenge) in the regional zone - created by external-dns and cert-manager on the MC
+  - Shard zone(s) under the regional zone, in the DNS shard account - created and destroyed with the RC terraform lifecycle; cluster records live here
+  - Cluster-specific records (api, oauth, ACME challenge) in the shard zone - created by external-dns and cert-manager on the MC
   - Ingress zones (public + private) in the customer account - created and reconciled by HyperShift CPO
-  - NS delegation from the regional zone to the customer ingress zone - created via DNSEndpoint CRs
+  - NS delegation from the shard zone to the customer ingress zone - created via DNSEndpoint CRs
 
 This reuses the existing RC terraform for regional zone management - no extraction into a separate config is needed. The CI identifier suffix naturally leverages the `deployment_name` mechanism.
 
