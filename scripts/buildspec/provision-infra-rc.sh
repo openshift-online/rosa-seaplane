@@ -157,7 +157,7 @@ if [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
 fi
 
 # DNS shard account ID. dns.shard0_account_id (per env) is an
-# ssm:///infra/<region>/dns-00/account_id reference resolved here to a 12-digit
+# ssm:///infra/<region>/dns00/account_id reference resolved here to a 12-digit
 # ID, so the aws.dns_shard0 provider creates the zone shards and dns-zone-operator
 # role in the DNS shard account. A set-but-unresolvable reference is fatal: the
 # shard account is minted by rosa-seaplane-internal and must exist first.

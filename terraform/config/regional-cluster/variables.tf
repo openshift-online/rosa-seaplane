@@ -308,7 +308,7 @@ variable "dns_shard0_account_id" {
     owns the zone shards and the dns-zone-operator role. Required when
     environment_domain is set. Minted by rosa-seaplane-internal
     (rosa-seaplane-<env>-dns-<regionshort>-00); resolved from SSM
-    (/infra/<region>/dns-00/account_id) in the RC buildspec.
+    (/infra/<region>/dns00/account_id) in the RC buildspec.
   EOT
   type        = string
   default     = ""
