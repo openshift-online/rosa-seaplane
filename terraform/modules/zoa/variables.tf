@@ -4,8 +4,14 @@ variable "regional_id" {
 }
 
 variable "environment" {
-  description = "Deployment environment name (e.g. 'ephemeral', 'integration', 'production'). Controls DynamoDB protection settings and S3 force_destroy behavior."
+  description = "Deployment environment name (e.g. 'ephemeral', 'integration', 'production'). Controls S3 force_destroy behavior."
   type        = string
+}
+
+variable "dynamodb_deletion_protection" {
+  description = "Enable deletion protection for ZOA DynamoDB tables"
+  type        = bool
+  default     = true
 }
 
 variable "billing_mode" {
@@ -61,4 +67,3 @@ variable "zoa_runner_image_tag" {
   type        = string
   default     = "67ef089"
 }
-
