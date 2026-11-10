@@ -51,6 +51,8 @@ dns:
   shard0_account_id: "ssm:///infra/{{ aws_region }}/dns00/account_id"
 
 regional_cluster:
+  # Authz tables are created and destroyed with the ephemeral RC.
+  enable_ephemeral_authz_tables: true
   enable_bastion: true
   enable_write_sre_tools: true
   node_instance_families: ["m8i-flex", "m7i-flex"]

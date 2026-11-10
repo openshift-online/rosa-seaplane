@@ -107,6 +107,16 @@ worker_node_ami:
 worker_node_root_volume_size: 50
 
 regional_cluster:
+  # @doc regional_cluster.authz_tables Same-account regional authz table names, <deployment_name>-authz-*. Retained tables come from separate authz-storage state with these names unless enable_ephemeral_authz_tables. Null leaves API IAM disabled and fails apply.
+  # @used-by regional_cluster.authz_tables _context
+  # @used-by regional_cluster.authz_tables pipeline-regional-cluster-inputs/terraform.json.j2
+  authz_tables:
+    policies: "{{ deployment_name }}-authz-policies"
+    global: "{{ deployment_name }}-authz-global"
+    regional: "{{ deployment_name }}-authz-regional"
+  # @doc regional_cluster.enable_ephemeral_authz_tables RC terraform creates authz_tables without retention, destroyed with the RC. Ephemeral environments only.
+  # @used-by regional_cluster.enable_ephemeral_authz_tables pipeline-regional-cluster-inputs/terraform.json.j2
+  enable_ephemeral_authz_tables: false
   # @doc regional_cluster.enable_bastion Enable bastion host for regional cluster access.
   # @used-by regional_cluster.enable_bastion pipeline-regional-cluster-inputs/terraform.json.j2
   enable_bastion: true
@@ -293,27 +303,9 @@ applications:
     baseDomain: "{% if dns.domain %}{{ deployment_name }}.{{ dns.domain }}{% endif %}"
     platformApi:
       authz:
-        # @doc applications.regional-cluster.platformApi.authz.config Complete serialized v1 authorization bundle. Enrolls the RC account (@@AWS_ACCOUNT_ID@@, resolved by Helm) and grants the identities behind rrp-rc (the child-admin role; CI's e2e user) AllActions on the RC account's own resources, except the authz deny probe. Customer accounts are allowlisted at runtime. Overrides replace the entire bundle.
-        # @used-by applications.regional-cluster.platformApi.authz.config _context
-        config: |
-          formatVersion: 1
-          registeredAccounts: ["@@AWS_ACCOUNT_ID@@"]
-          policies:
-            - id: rc-all-actions
-              ownerAccountID: "@@AWS_ACCOUNT_ID@@"
-              content: |
-                permit(principal, action in Seaplane::Action::"AllActions", resource)
-                when { context.accountId == "@@AWS_ACCOUNT_ID@@" }
-                unless { context.requestLabels.hasTag("authz-deny-probe") };
-          attachments:
-            - id: rc-child-admin
-              policyID: rc-all-actions
-              principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:role/{{ aws.child_admin_role_name }}
-              scope: global
-            - id: rc-e2e-user
-              policyID: rc-all-actions
-              principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:user/e2e
-              scope: global
+        # @doc applications.regional-cluster.platformApi.authz.tables Maps regional_cluster.authz_tables into the platform-api AUTHZ_*_TABLE env vars, so table names have one source. Helm rejects null.
+        # @used-by applications.regional-cluster.platformApi.authz.tables _context
+        tables: "{{ regional_cluster.authz_tables }}"
       app:
         args:
           # @doc applications.regional-cluster.platformApi.app.args.defaultClusterExpiration Maps cluster_lifecycle.default_expiration into the platform-api --default-cluster-expiration flag.

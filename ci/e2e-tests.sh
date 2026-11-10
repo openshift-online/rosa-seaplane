@@ -210,6 +210,57 @@ echo "working commit $(git rev-parse HEAD)"
 go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
+# Enrollment never supplies resource permissions. Seed grants before any lifecycle or cleanup.
+_customer_account=$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)
+if [[ ! "${_customer_account}" =~ ^[0-9]{12}$ || "${E2E_CUSTOMER_ACCOUNT_ID:-${_customer_account}}" != "${_customer_account}" ]]; then
+  echo "ERROR: E2E_CUSTOMER_ACCOUNT_ID must match the actual rrp-customer account" >&2
+  exit 1
+fi
+_rc_account=$(aws sts get-caller-identity --profile rrp-rc --query Account --output text)
+if [[ ! "${_rc_account}" =~ ^[0-9]{12}$ || "${E2E_ACCOUNT_ID:-${_rc_account}}" != "${_rc_account}" ]]; then
+  echo "ERROR: E2E_ACCOUNT_ID must match the actual rrp-rc account" >&2
+  exit 1
+fi
+export E2E_CUSTOMER_ACCOUNT_ID="${_customer_account}" E2E_ACCOUNT_ID="${_rc_account}"
+
+# Writes an account's first grants straight into the authz tables, in the API storage
+# contract format: the account-admin role may manage authz and run every resource action
+# except on deny-probe-tagged resources. All tables live in the RC account, so rrp-rc
+# writes every account's rows. Fixed IDs make reruns a no-op.
+# shortcut: pre-prod CI seeding until SSO org-admin linking replaces it.
+seed_authz_grants() {
+  local account=$1 prefix=$2 transaction output
+  transaction=$(jq -n --arg a "${account}" --arg pt "${prefix}-authz-policies" --arg gt "${prefix}-authz-global" '
+    def put($t; $pk; $sk; $rev; $rec): {Put: {TableName: $t, ConditionExpression: "attribute_not_exists(pk)",
+      Item: {pk: {S: $pk}, sk: {S: $sk}, revision: {S: $rev}, record: {S: ($rec | tojson)}}}};
+    "rosa-seaplane-account-admin" as $role | "ACCOUNT#\($a)" as $key
+    | [["e2e-all-actions", "permit(principal, action in Seaplane::Action::\"AllActions\", resource) unless { context.requestLabels.hasTag(\"authz-deny-probe\") };"],
+       ["e2e-policy-admin", "permit(principal, action in Seaplane::Action::\"PolicyAdmin\", resource);"]]
+    | to_entries | map(.value[0] as $id | .value[1] as $content
+      | $ARGS.positional[2 * .key] as $policyRev | $ARGS.positional[2 * .key + 1] as $attachmentRev
+      | {Policy: {ID: $id, Kind: "custom"}, PrincipalARN: "arn:aws:iam::\($a):role/\($role)", Scope: "global",
+         ID: $id, OwnerAccountID: $a, Region: "", Revision: $attachmentRev} as $attachment
+      | put($pt; $key; "POLICY#\($id)"; $policyRev; {ID: $id, OwnerAccountID: $a, Content: $content, Revision: $policyRev, Kind: "custom"}),
+        put($gt; $key; "ATTACHMENT#\($id)"; $attachmentRev; $attachment),
+        put($gt; "\($key)#ROLE#aws/\($a)/\($role)"; "ATTACHMENT#\($id)"; $attachmentRev; $attachment))
+    | {TransactItems: .}' --args $(for _ in 1 2 3 4; do cat /proc/sys/kernel/random/uuid; done))
+  if ! output=$(AWS_PROFILE=rrp-rc aws dynamodb transact-write-items --cli-input-json "${transaction}" 2>&1); then
+    [[ "${output}" == *ConditionalCheckFailed* ]] || { echo "ERROR: seeding authz grants for ${account}: ${output}" >&2; return 1; }
+    echo "Authz grants for ${account} already seeded"
+  fi
+}
+
+# Tables are <deployment_name>-authz-*; deployment_name equals the region outside ephemeral.
+_authz_prefix="${ZOA_DEPLOYMENT_NAME:-${AWS_DEFAULT_REGION}}"
+for _account in "${_rc_account}" "${_customer_account}"; do
+  AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
+    -X POST -H "Content-Type: application/json" \
+    -d "{\"accountId\":\"${_account}\"}" "${BASE_URL}/api/v0/accounts"
+done
+for _account in "${_rc_account}" "${_customer_account}"; do
+  seed_authz_grants "${_account}" "${_authz_prefix}"
+done
+
 platform_rc=0
 hcp_rc=0
 monitoring_rc=0
@@ -262,12 +313,6 @@ else
   fi
 fi
 
-# Get regional account ID for CLI tests
-if [[ -z "${E2E_ACCOUNT_ID:-}" ]]; then
-  export E2E_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-  echo "Regional account ID: ${E2E_ACCOUNT_ID}"
-fi
-
 # --- HCP Creation E2E Tests ---
 # Customer credentials are supplied via the rrp-customer AWS profile (CUSTOMER_AWS_PROFILE).
 # Subprocesses use credential_process auto-refresh, avoiding the 15-minute STS TTL cliff.
@@ -280,11 +325,6 @@ elif aws configure export-credentials --profile rrp-customer --format process &>
   echo "Customer profile rrp-customer is available"
   echo "Customer API caller (rrp-customer):"
   aws sts get-caller-identity --profile rrp-customer --query '{Account:Account,Arn:Arn}' --output json
-
-  if [[ -z "${E2E_CUSTOMER_ACCOUNT_ID:-}" ]]; then
-    export E2E_CUSTOMER_ACCOUNT_ID="$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)"
-    echo "Customer account ID: ${E2E_CUSTOMER_ACCOUNT_ID:0:8}..."
-  fi
   _have_customer_creds=true
 else
   echo "WARNING: No rrp-customer profile available — skipping HCP creation tests"
@@ -361,17 +401,7 @@ if [[ "$_have_customer_creds" == "true" ]]; then
     export ROSA_REPO_URL ROSA_REPO_BRANCH TEST_PROFILE="${ROSA_TEST_PROFILE}"
     export GOTOOLCHAIN=auto
     echo "ROSA_LABEL_FILTER: ${ROSA_LABEL_FILTER}"
-    # Register the customer account as the RC account. "privileged" is for the legacy
-    # accounts API; the Cedar allowlist ignores it.
-    if AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
-      -X POST -H "Content-Type: application/json" \
-      -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
-      "${BASE_URL}/api/v0/accounts"; then
-      AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
-    else
-      echo "ERROR: allowlisting customer account failed" >&2
-      rosa_cli_rc=1
-    fi
+    AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
   else
     echo ""
     echo "=== ROSA CLI Tests ==="

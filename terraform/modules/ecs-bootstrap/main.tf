@@ -189,8 +189,6 @@ resource "aws_ecs_task_definition" "bootstrap" {
               git_repo: "$REPOSITORY_URL"
               git_revision: "$REPOSITORY_BRANCH"
               api_target_group_arn: "$API_TARGET_GROUP_ARN"
-              dynamodb_prefix: "$CLUSTER_NAME"
-              dynamodb_region: "$AWS_REGION"
               thanos_kms_key_arn: "$THANOS_KMS_KEY_ARN"
               thanos_target_group_arn: "$THANOS_TARGET_GROUP_ARN"
               thanos_query_target_group_arn: "$THANOS_QUERY_TARGET_GROUP_ARN"
