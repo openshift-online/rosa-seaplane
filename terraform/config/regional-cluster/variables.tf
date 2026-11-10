@@ -302,7 +302,7 @@ variable "environment_domain" {
   default     = null
 }
 
-variable "dns_shard_account_id" {
+variable "dns_shard0_account_id" {
   description = <<-EOT
     AWS account ID of the per-env DNS shard account (shard 0, token "00") that
     owns the zone shards and the dns-zone-operator role. Required when
@@ -314,13 +314,13 @@ variable "dns_shard_account_id" {
   default     = ""
 
   validation {
-    condition     = var.dns_shard_account_id == "" || can(regex("^[0-9]{12}$", var.dns_shard_account_id))
-    error_message = "dns_shard_account_id must be empty or a 12-digit AWS account ID"
+    condition     = var.dns_shard0_account_id == "" || can(regex("^[0-9]{12}$", var.dns_shard0_account_id))
+    error_message = "dns_shard0_account_id must be empty or a 12-digit AWS account ID"
   }
 }
 
 variable "dns_shard_provisioner_role_name" {
-  description = "Dedicated least-privilege IAM role assumed in the DNS shard account to provision zone shards and manage the dns-zone-operator role. Created by rosa-seaplane-internal account bootstrap, trusted by the central pipeline principals, with only Route53 and manage-the-operator-role permissions (not account-admin). Only used when dns_shard_account_id is set."
+  description = "Dedicated least-privilege IAM role assumed in the DNS shard account to provision zone shards and manage the dns-zone-operator role. Created by rosa-seaplane-internal account bootstrap, trusted by the central pipeline principals, with only Route53 and manage-the-operator-role permissions (not account-admin). Only used when dns_shard0_account_id is set."
   type        = string
   default     = "rosa-seaplane-dns-provisioner"
 }

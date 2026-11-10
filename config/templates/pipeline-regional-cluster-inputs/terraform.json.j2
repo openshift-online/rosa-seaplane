@@ -27,7 +27,7 @@
   "sre_prometheus_oidc_client_id": {{ regional_cluster.sre_prometheus_oidc_client_id | default("") | tojson }},
   "sre_thanos_oidc_client_id": {{ regional_cluster.sre_thanos_oidc_client_id | default("") | tojson }},
   "environment_domain": {{ dns.domain | default(None) | tojson }},
-  "dns_shard_account_id": {{ dns.shard_account_id | default('') | tojson }},
+  "dns_shard0_account_id": {{ dns.shard0_account_id | default('') | tojson }},
   "regional_id": "{{ regional_id }}",
   "eph_prefix": "{{ eph_prefix | default('') }}",
   "seaplane_db_instance_class": {{ regional_cluster.seaplane_db_instance_class | default('db.r6g.large') | tojson }},

@@ -64,26 +64,26 @@ data "aws_caller_identity" "central" {
 # in the pipeline (central creds, which the shard account trusts), or
 # OrganizationAccountAccessRole for local dev.
 locals {
-  dns_shard_assume_role_arn = (
-    var.dns_shard_account_id == "" ? "" :
-    var.central_aws_profile != "" ? "arn:aws:iam::${var.dns_shard_account_id}:role/${var.dns_shard_provisioner_role_name}" :
-    "arn:aws:iam::${var.dns_shard_account_id}:role/OrganizationAccountAccessRole"
+  dns_shard0_assume_role_arn = (
+    var.dns_shard0_account_id == "" ? "" :
+    var.central_aws_profile != "" ? "arn:aws:iam::${var.dns_shard0_account_id}:role/${var.dns_shard_provisioner_role_name}" :
+    "arn:aws:iam::${var.dns_shard0_account_id}:role/OrganizationAccountAccessRole"
   )
 }
 
 provider "aws" {
-  alias             = "dns_shard"
+  alias             = "dns_shard0"
   region            = var.region
   use_fips_endpoint = can(regex("^(us|us-gov)-", var.region)) ? true : false
 
   # Central creds only when assuming into the shard account; ambient otherwise.
-  profile = (var.dns_shard_account_id != "" && var.central_aws_profile != "") ? var.central_aws_profile : null
+  profile = (var.dns_shard0_account_id != "" && var.central_aws_profile != "") ? var.central_aws_profile : null
 
   dynamic "assume_role" {
-    for_each = local.dns_shard_assume_role_arn != "" ? [1] : []
+    for_each = local.dns_shard0_assume_role_arn != "" ? [1] : []
     content {
-      role_arn     = local.dns_shard_assume_role_arn
-      session_name = "terraform-dns-shard-${var.regional_id}"
+      role_arn     = local.dns_shard0_assume_role_arn
+      session_name = "terraform-dns-shard0-${var.regional_id}"
     }
   }
 
@@ -509,12 +509,12 @@ resource "aws_route53_record" "regional_delegation" {
 #
 # Model: one zone shard maps 1:1 to its own DNS account (0-based; shard 0 = token
 # "00"). v1 is single-shard. Shards are created in the DNS shard account via
-# aws.dns_shard. The regional zone stays in the RC account; the NS delegation
+# aws.dns_shard0. The regional zone stays in the RC account; the NS delegation
 # below bridges them.
 # =============================================================================
 
 resource "aws_route53_zone" "zone_shard" {
-  provider = aws.dns_shard
+  provider = aws.dns_shard0
 
   count = var.environment_domain != null ? var.zone_shard_count : 0
 
@@ -529,8 +529,8 @@ resource "aws_route53_zone" "zone_shard" {
 
   lifecycle {
     precondition {
-      condition     = var.dns_shard_account_id != ""
-      error_message = "dns_shard_account_id is required when environment_domain is set: mint the DNS shard account (rosa-seaplane-internal) before provisioning the RC."
+      condition     = var.dns_shard0_account_id != ""
+      error_message = "dns_shard0_account_id is required when environment_domain is set: mint the DNS shard account (rosa-seaplane-internal) before provisioning the RC."
     }
   }
 }
@@ -559,7 +559,7 @@ module "dns_zone_operator" {
   source = "../../modules/dns-zone-operator"
 
   providers = {
-    aws = aws.dns_shard
+    aws = aws.dns_shard0
   }
 
   regional_id                = var.regional_id
@@ -568,7 +568,7 @@ module "dns_zone_operator" {
 
   # The dns-provisioner can only create the role with this boundary attached, so
   # the ARN must match the boundary the shard account provides.
-  permissions_boundary_arn = "arn:aws:iam::${var.dns_shard_account_id}:policy/rosa-seaplane-dns-operator-boundary"
+  permissions_boundary_arn = "arn:aws:iam::${var.dns_shard0_account_id}:policy/rosa-seaplane-dns-operator-boundary"
 }
 
 # =============================================================================
