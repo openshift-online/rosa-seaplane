@@ -1,10 +1,10 @@
 # DNS Architecture for ROSA Seaplane
 
-**Last Updated Date**: 2026-05-11
+**Last Updated Date**: 2026-11-10
 
 ## Summary
 
-ROSA Seaplane uses a hierarchical DNS architecture built on AWS Route 53, with DNSSEC throughout, that distributes records across per-region zone shards to scale beyond 10k records. Each regional deployment is uniquely identified by a `deployment_name` — which defaults to the AWS region name but can be suffixed to support multiple deployments per region within the same environment.
+ROSA Seaplane uses a hierarchical DNS architecture built on AWS Route 53, with DNSSEC throughout, that distributes records across per-region zone shards. Each zone shard lives in its own dedicated DNS account with a 1:1 shard-to-account mapping (shards are 0-based; shard 0 maps to account token `00`). Account-level sharding addresses two distinct scaling limits at once: the per-zone record count (~10k records per HostedZone) and the per-account Route 53 API request-rate quota. The `dns-zone-operator` IAM role lives in the shard account alongside the zones, because Route 53 cannot change records cross-account. Each regional deployment is uniquely identified by a `deployment_name`, which defaults to the AWS region name but can be suffixed to support multiple deployments per region within the same environment. v1 is single-shard (`zone_shard_count` defaults to 1); the account-per-shard structure keeps horizontal scale-out available when either limit is approached.
 
 ## Context
 
@@ -25,7 +25,7 @@ ROSA Seaplane uses a hierarchical DNS architecture built on AWS Route 53, with D
 
 Each regional deployment is identified by a `deployment_name` that serves as its unique identifier within an environment. This appears in DNS names, directory structures, and ArgoCD labels.
 
-`deployment_name` is an explicit config field (default: `"{{ aws_region }}"`). `aws_region` is always the config file stem — it is not configurable.
+`deployment_name` is an explicit config field (default: `"{{ aws_region }}"`). `aws_region` is always the config file stem - it is not configurable.
 
 For the common case (one deployment per region), the default template resolves `deployment_name` to the AWS region:
 
@@ -72,7 +72,7 @@ provision_mcs:
 8 -              ├── _acme-challenge.{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com (TXT) [MC cert-manager]
 9 -              └── in.{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com (NS → public zone 11) [HyperShift CPO via DNSEndpoint CR]
 
-Zones created by HyperShift CPO in the customer account (not delegated from shard — VPC-associated for private, NS-delegated for public):
+Zones created by HyperShift CPO in the customer account (not delegated from shard - VPC-associated for private, NS-delegated for public):
 
 10- in.{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com (private zone, VPC-associated) [HyperShift CPO]
     └── *.apps.in.{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com (A → Customer Ingress) [HCP ingress operator]
@@ -87,22 +87,22 @@ Zones created by HyperShift CPO in the customer account (not delegated from shar
 
 ### Zone Ownership
 
-| #   | Zone / Record                                           | Owner                          | Notes                                                                                                                                                                   |
-| :-- | :------------------------------------------------------ | :----------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `openshiftapps.com`                                     | app-interface                  | Top-level, exists in Cloudflare                                                                                                                                         |
-| 2   | `rosa.openshiftapps.com`                                | Control-account terraform      | Commons zone, NS via app-interface                                                                                                                                      |
-| 3   | `{deployment_name}.rosa.openshiftapps.com`              | Control-account terraform      | Regional zone; creates NS record in the commons zone (2)                                                                                                                |
-| 4   | `api.{deployment_name}.rosa.openshiftapps.com`          | Regional pipeline              | Platform API record                                                                                                                                                     |
-| 5   | `{zone_shard}.{deployment_name}.rosa.openshiftapps.com` | Regional pipeline              | Zone shard; creates NS record in the regional zone (3). Grants permissions to external-dns and cert-manager from each MC. Informs seaplane-operator of all zone shards. |
-| 6–8 | Cluster API, OAuth, ACME records                        | MC external-dns / cert-manager | Created in the zone shard (5)                                                                                                                                           |
-| 9   | NS delegation for `in.{...}` in shard                   | HyperShift CPO                 | DNSEndpoint CR picked up by external-dns on MC; delegates to the public ingress zone (11)                                                                               |
-| 10  | Private ingress zone + records                          | HyperShift CPO                 | VPC-associated (not NS-delegated); created and reconciled in the customer account                                                                                       |
-| 11  | Public ingress zone + records                           | HyperShift CPO                 | NS-delegated from the shard (5) via (9); includes ACME CNAME delegation for cert-manager                                                                                |
-| 12  | `{cluster_alias}.hypershift.local`                      | HyperShift CPO                 | Private zone, VPC-associated, in customer account                                                                                                                       |
+| #   | Zone / Record                                           | Owner                                | Notes                                                                                                                                                                                                                                                                                                  |
+| :-- | :------------------------------------------------------ | :----------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `openshiftapps.com`                                     | app-interface                        | Top-level, exists in Cloudflare                                                                                                                                                                                                                                                                        |
+| 2   | `rosa.openshiftapps.com`                                | Control-account terraform            | Commons zone, NS via app-interface                                                                                                                                                                                                                                                                     |
+| 3   | `{deployment_name}.rosa.openshiftapps.com`              | Control-account terraform            | Regional zone; creates NS record in the commons zone (2)                                                                                                                                                                                                                                               |
+| 4   | `api.{deployment_name}.rosa.openshiftapps.com`          | Regional pipeline                    | Platform API record                                                                                                                                                                                                                                                                                    |
+| 5   | `{zone_shard}.{deployment_name}.rosa.openshiftapps.com` | Regional pipeline (in shard account) | Zone shard, created in the dedicated DNS shard account (1:1 shard-to-account); the RC account creates the NS delegation into the regional zone (3). The `dns-zone-operator` role in the shard account grants external-dns and cert-manager from each MC. Informs seaplane-operator of all zone shards. |
+| 6–8 | Cluster API, OAuth, ACME records                        | MC external-dns / cert-manager       | Created in the zone shard (5)                                                                                                                                                                                                                                                                          |
+| 9   | NS delegation for `in.{...}` in shard                   | HyperShift CPO                       | DNSEndpoint CR picked up by external-dns on MC; delegates to the public ingress zone (11)                                                                                                                                                                                                              |
+| 10  | Private ingress zone + records                          | HyperShift CPO                       | VPC-associated (not NS-delegated); created and reconciled in the customer account                                                                                                                                                                                                                      |
+| 11  | Public ingress zone + records                           | HyperShift CPO                       | NS-delegated from the shard (5) via (9); includes ACME CNAME delegation for cert-manager                                                                                                                                                                                                               |
+| 12  | `{cluster_alias}.hypershift.local`                      | HyperShift CPO                       | Private zone, VPC-associated, in customer account                                                                                                                                                                                                                                                      |
 
 **Seaplane-operator responsibilities:**
 
-- Create and reconcile `DNSReservation` CRs to reserve DNS prefixes within zone shards. Each reservation lives in the account namespace (`account-<accountID>`) for isolation, and global uniqueness of the prefix within its shard is guaranteed by a corresponding `Index` resource in the shard's uniqueness namespace (`dns-shard-<id>-reservations`). Reservations are decoupled from cluster names — a `DNSReservation` can exist before a cluster claims it (e.g. for shared-VPC flows).
+- Create and reconcile `DNSReservation` CRs to reserve DNS prefixes within zone shards. Each reservation lives in the account namespace (`account-<accountID>`) for isolation, and global uniqueness of the prefix within its shard is guaranteed by a corresponding `Index` resource in the shard's uniqueness namespace (`dns-shard-<id>-reservations`). Reservations are decoupled from cluster names - a `DNSReservation` can exist before a cluster claims it (e.g. for shared-VPC flows).
 - Monitor capacity and manage zone shard allocation (zone placement decision)
 - Propagate the selected zone shard to HyperShift Operator via the HostedCluster CR spec
 
@@ -111,10 +111,10 @@ Zones created by HyperShift CPO in the customer account (not delegated from shar
 - Create and reconcile public and private Route 53 hosted zones for ingress in the customer's AWS account (10, 11)
 - Establish DNS delegation from the service provider's zone shard (5) to the customer's public ingress zone (11) via DNSEndpoint CRs (9) picked up by external-dns on the MC
 - Set up ACME DNS01 challenge delegation via CNAME records in the public ingress zone (11), enabling cert-manager to provision ingress certificates through CNAME-follow without write access to the customer's zone
-- The private ingress zone (10) is associated to the customer VPC directly — no NS delegation needed
+- The private ingress zone (10) is associated to the customer VPC directly - no NS delegation needed
 - This is gated behind a managed ingress DNS toggle on the HostedCluster spec (`AWSIngressDNSManagement: Managed`)
 
-**Cert-manager note:** Cert-manager on MCs is configured to "follow CNAME", so it follows the ACME CNAME record in the customer's public ingress zone (11) which points at `{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com` in the zone shard (5). Cert-manager on MCs has access to create records only in the regional account.
+**Cert-manager note:** Cert-manager on MCs is configured to "follow CNAME", so it follows the ACME CNAME record in the customer's public ingress zone (11) which points at `{cluster_alias}.{hash4}.{zone_shard}.{deployment_name}.rosa.openshiftapps.com` in the zone shard (5). Cert-manager on MCs has access to create records only in the DNS shard account (via the shared `dns-zone-operator` role), scoped to the zone shard HostedZones.
 
 ### Domain Name Identifiers
 
@@ -127,15 +127,62 @@ Zones created by HyperShift CPO in the customer account (not delegated from shar
 
 All identifiers must be DNS-subdomain compatible: lowercase alphanumeric characters or `-`, starting and ending with an alphanumeric character.
 
+### DNS Shard Accounts
+
+Zone shards do not live in the regional (RC) account. Each zone shard is placed in its own dedicated DNS account, with a strict 1:1 shard-to-account mapping. Shards are 0-based, so shard 0 (zone `0.{deployment_name}.{domain}`) maps to the account carrying token `00`.
+
+**Why separate accounts and not just separate zones in one account:** account-level sharding addresses two independent scaling limits.
+
+- **Per-zone record count**: Route 53 caps a HostedZone at ~10k records. This is the original reason for zone sharding and is unchanged.
+- **Per-account Route 53 API request rate**: Route 53 API throttling and request-rate limits are enforced per account. external-dns and cert-manager across many MCs all writing into one account would collectively throttle against that single account's quota. One account per shard gives each shard its own Route 53 API rate budget.
+
+These are orthogonal. A shard can approach the API-rate limit well before the record-count limit under churn, or vice versa. Placing one shard per account lets us scale out horizontally against whichever limit is hit first.
+
+v1 is single-shard (`zone_shard_count` defaults to 1), because one shard and account are expected to handle current load. The account-per-shard structure exists so scale-out is available without redesign.
+
+**Account naming and discovery:**
+
+- The DNS shard account is minted by [rosa-seaplane-internal](https://github.com/openshift-online/rosa-seaplane-internal) as `rosa-seaplane-<env>-dns-<regionshort>-0N` (shard 0 = `...-00`).
+- Its account ID is published to SSM Parameter Store at `/infra/<region>/dns-0N/account_id` (shard 0 = `/infra/<region>/dns-00/account_id`).
+- The RC provisioning pipeline resolves this SSM parameter and passes it to Terraform as `dns_shard_account_id`. When empty, zone shards and the operator role stay in the RC account, which preserves the pre-shard-account behavior for environments that have not yet enabled it.
+
 ### Cross-Account Access
 
-external-dns and cert-manager run on MCs (in MC accounts) but need to create records in zone shards hosted in the regional account. The access pattern uses EKS Pod Identity with OU-based cross-account trust:
+external-dns and cert-manager run on MCs (in MC accounts) but create records in zone shards hosted in the DNS shard account. The `dns-zone-operator` IAM role must live in the shard account alongside the zones, because Route 53 does not support cross-account `route53:ChangeResourceRecordSets` - the writing principal has to be in the same account as the HostedZone. The access pattern uses EKS Pod Identity with OU-based cross-account trust:
 
-- **MC side**: Each operator pod (external-dns, cert-manager) gets an EKS Pod Identity role in the MC account. This role has `sts:AssumeRole` permission for the regional account's cross-account role.
-- **RC side**: An IAM role in the regional account with Route 53 permissions (`route53:ChangeResourceRecordSets`, `route53:ListHostedZones`, `route53:GetChange`) scoped to zone shard HostedZones.
-- **OU-based trust**: The RC-side role's trust policy uses an `aws:PrincipalOrgPaths` condition to trust any account in the MC organizational unit. The OU path is read from SSM Parameter Store (`/infra/<environment>/<region>/ou-path`, e.g. `/infra/stage/us-east-1/ou-path`) in the RC account. New MC accounts automatically get access when added to the OU — no RC-side IAM updates are needed when scaling MCs.
+- **MC side**: Each operator pod (external-dns, cert-manager) gets an EKS Pod Identity role (`<management_id>-dns-operator`) in the MC account. This role has `sts:AssumeRole` permission for the shard account's `dns-zone-operator` role.
+- **Shard-account side**: The `dns-zone-operator` IAM role lives in the DNS shard account with Route 53 permissions (`route53:ChangeResourceRecordSets`, `route53:ListHostedZones`, `route53:GetChange`) scoped to that account's zone shard HostedZones.
+- **OU-based trust**: The role's trust policy is unchanged, byte-for-byte, from the prior RC-side role. It uses an `aws:PrincipalOrgPaths` condition plus a `*-dns-operator` principal match to trust any `*-dns-operator` role in the MC organizational unit. This works identically regardless of which account the role lives in, because the conditions evaluate the calling principal's org attributes, not the role's account. New MC accounts automatically get access when added to the OU - no shard-account IAM updates are needed when scaling MCs.
+
+The assume-role chain now terminates in the shard account:
+
+```mermaid
+flowchart LR
+    subgraph MC["MC account"]
+        pod["external-dns / cert-manager pod"]
+        podrole["Pod Identity role<br/>&lt;management_id&gt;-dns-operator"]
+    end
+    subgraph SHARD["DNS shard account (shard 0 = token 00)"]
+        oprole["dns-zone-operator role<br/>(OU-based trust, verbatim)"]
+        zones["zone shard HostedZones<br/>0.&lt;deployment&gt;.&lt;domain&gt;"]
+    end
+    pod -->|EKS Pod Identity| podrole
+    podrole -->|sts:AssumeRole| oprole
+    oprole -->|route53:ChangeResourceRecordSets| zones
+```
 
 Route 53 IAM does not support scoping by record type, so external-dns and cert-manager share the same cross-account role. Operator configuration determines which record types each creates.
+
+**Regional zone placement and delegation:** The regional zone (`{deployment_name}.{domain}`) stays in the RC account. Only the zone shards move to the shard account. NS delegation bridges the two accounts: the RC account creates NS records in the regional zone that point at each shard's name servers in the shard account (a cross-provider reference within the RC Terraform state). external-dns discovers its target shards via `ListHostedZones` on `*` within the shard account rather than reading the regional zone cross-account.
+
+### Scaling to Multiple Shard Accounts
+
+v1 provisions a single shard account through one static `aws.dns_shard` provider alias in the RC Terraform state (`terraform/config/regional-cluster/main.tf`). Scaling to N shard accounts is a known constraint rather than a solved problem: **Terraform cannot `for_each` over provider configurations**, so a shard account's zone and role cannot be created by iterating a provider. N shard accounts therefore require one of:
+
+- **N statically-declared provider aliases** (`aws.dns_shard_00`, `aws.dns_shard_01`, …) in the RC state, with the per-shard zone and role wired to each alias. Simple but caps the shard count at the number of declared aliases and bloats the RC state.
+- **Per-account provisioning unit**: move per-shard zone and `dns-zone-operator` creation into a unit that runs once per shard account (for example a dedicated Terragrunt/pipeline unit keyed by shard), so each account is provisioned by its own apply. Scales cleanly but adds a provisioning unit and cross-unit wiring.
+
+This decision is deferred; v1 is single-shard and does not need it.
 
 **Example FQDNs:**
 
@@ -171,17 +218,17 @@ FedRAMP requires DNSSEC validation in every VPC where our processes reside:
 
 ## Rollout Plan
 
-### Phase 1 — Kube-API DNS and Certificates
+### Phase 1 - Kube-API DNS and Certificates
 
 Phase 1 covers DNS hierarchy levels 1–8 (all records in the service provider's account):
 
-1. **DNS delegation setup** — establish the Cloudflare → environment zone → regional zone delegation chain for int, ci, and dev environments
-2. **Zone shard creation** — create initial zone shard(s) per regional zone
-3. **Cross-account IAM** — create the RC-side IAM role with OU-based trust and MC-side Pod Identity roles for external-dns and cert-manager
-4. **Operator zone shard awareness** — seaplane-operator tracks zone shard capacity and propagates the selected shard to the HostedCluster CR
-5. **Operator update** — update HostedCluster manifest rendering in the operator to include the DNS domain in the HostedCluster spec
+1. **DNS delegation setup** - establish the Cloudflare → environment zone → regional zone delegation chain for int, ci, and dev environments
+2. **Zone shard creation** - create initial zone shard(s) in the per-shard DNS account (shard 0 = account token `00`)
+3. **Cross-account IAM** - create the `dns-zone-operator` role in the shard account with OU-based trust and MC-side Pod Identity roles for external-dns and cert-manager
+4. **Operator zone shard awareness** - seaplane-operator tracks zone shard capacity and propagates the selected shard to the HostedCluster CR
+5. **Operator update** - update HostedCluster manifest rendering in the operator to include the DNS domain in the HostedCluster spec
 
-### Phase 2 — Customer Ingress DNS (pending HyperShift RFE)
+### Phase 2 - Customer Ingress DNS (pending HyperShift RFE)
 
 Phase 2 covers DNS hierarchy levels 9–12 (customer account zones) and depends on the HyperShift managed ingress DNS RFE:
 
@@ -192,7 +239,7 @@ Phase 2 covers DNS hierarchy levels 9–12 (customer account zones) and depends 
 
 ## Alternatives Considered
 
-1. **Associated HostedZone(s) in our own accounts**: We would need private and public HostedZones in a Red Hat account. Public zones work, but private zones require linking the customer's VPC to the HostedZone. Additionally, the ingress operator would need credentials to create records in RH-owned zones. The lift is not worth the benefit — customers can still break the HostedZone association, so we don't fully own ingress certificate challenges.
+1. **Associated HostedZone(s) in our own accounts**: We would need private and public HostedZones in a Red Hat account. Public zones work, but private zones require linking the customer's VPC to the HostedZone. Additionally, the ingress operator would need credentials to create records in RH-owned zones. The lift is not worth the benefit - customers can still break the HostedZone association, so we don't fully own ingress certificate challenges.
 
 2. **ACME wildcard at a higher hierarchy level**: Creating an ACME record in a higher-level zone for a wildcard certificate does not work because wildcard certificates are only valid at the same level.
 
@@ -202,7 +249,7 @@ Phase 2 covers DNS hierarchy levels 9–12 (customer account zones) and depends 
 
 - **Justification**: The `deployment_name` approach preserves the simplicity of using the region name as the DNS subdomain in the common case while supporting multi-deployment scenarios. Zone sharding provides effectively unlimited record scaling (10k shards × 10k records = 100M records per region).
 - **Evidence**: Route 53 quota of 10k records per HostedZone is a hard initial limit. The current single-zone architecture will hit this ceiling. Zone sharding is an established pattern used by GCP HCP DNS.
-- **Comparison**: The `deployment_name` identifier is preferred over bare `aws_region` because it allows `us-east-1-2` or `us-east-1-fedramp` as deployment names that map to the same underlying AWS region. `deployment_name` is an explicit config field with a sensible default (`"{{ aws_region }}"`) — the common case requires no override, while CI and multi-deployment scenarios override it in environment or region config.
+- **Comparison**: The `deployment_name` identifier is preferred over bare `aws_region` because it allows `us-east-1-2` or `us-east-1-fedramp` as deployment names that map to the same underlying AWS region. `deployment_name` is an explicit config field with a sensible default (`"{{ aws_region }}"`) - the common case requires no override, while CI and multi-deployment scenarios override it in environment or region config.
 
 ## Consequences
 
@@ -210,7 +257,7 @@ Phase 2 covers DNS hierarchy levels 9–12 (customer account zones) and depends 
 
 - DNS scales to ~100M records per region via zone sharding
 - DNSSEC chain of trust from Cloudflare to regional zones satisfies FedRAMP
-- Certificates are fully managed within Red Hat accounts — no dependency on customer zone configuration
+- Certificates are fully managed within Red Hat accounts - no dependency on customer zone configuration
 - Multiple deployments per region are supported without special-casing
 - Zero migration cost for existing single-deployment-per-region configurations
 
@@ -224,26 +271,25 @@ Phase 2 covers DNS hierarchy levels 9–12 (customer account zones) and depends 
 
 ### Reliability
 
-- **Scalability**: 10k shards × 10k records per shard = 100M records per region. The global account scales to 10k regions.
-- **Resiliency**: DNS is distributed across per-region accounts; a single region's DNS failure does not affect other regions.
+- **Scalability**: Two independent dimensions scale out via account-per-shard. Record count grows at ~10k records per shard HostedZone, and Route 53 API request-rate budget grows per shard account (one account's quota per shard). Shard count is bounded by the number of DNS accounts rather than by zones-per-account.
+- **Resiliency**: DNS is distributed across per-shard accounts; a single shard account's Route 53 throttling or failure does not consume the budget of other shards.
 
 ### Security
 
 - DNSSEC enabled and validated end-to-end (Cloudflare → Central → Regional), satisfying FedRAMP
-- Cert-manager on MCs can only create records in the regional account — no cross-account write access
+- Cert-manager and external-dns on MCs can only write to the DNS shard account, scoped by the `dns-zone-operator` role to the zone shard HostedZones. Access is granted solely through OU-based trust, so only `*-dns-operator` roles in the MC organizational unit can assume it.
 - Service-provider zones are public (required for ACME challenges); HyperShift CPO creates both public and private ingress zones in the customer account
 
 ### Cost
 
-- Each zone shard is a separate Route 53 HostedZone ($0.50/month per zone)
-- At 100 shards per region × 50 regions = 5,000 zones = $2,500/month for DNS hosting
+- Each zone shard is a separate Route 53 HostedZone ($0.50/month per zone). AWS member accounts are free, so the 1:1 account-per-shard mapping adds no hosting cost beyond the zone itself.
 - Query costs are volume-dependent but negligible relative to compute
 
 ### Operability
 
-- Zone shards are created by the regional pipeline — no manual DNS management
+- Zone shards are created by the regional pipeline - no manual DNS management
 - Seaplane-operator automates shard allocation and capacity monitoring
-- `deployment_name` defaults to `aws_region` — no separate configuration step needed for the common case
+- `deployment_name` defaults to `aws_region` - no separate configuration step needed for the common case
 
 ## Testing Strategy
 
@@ -258,18 +304,18 @@ The DNS zone hierarchy splits into two tiers:
   - Created and owned externally by the [rosa-seaplane-internal](https://github.com/openshift-online/rosa-seaplane-internal) control account (`aws_route53_zone.environment`); rosa-seaplane only looks it up by name to delegate into it
   - Pre-provisioned once per environment and reused across runs
 - **Per-run (created and destroyed with each e2e run)**:
-  - Regional zone in the regional account — the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.ci00.rosa.devshift.net`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
-  - Cluster-specific records (api, oauth, ACME challenge) in the regional zone — created by external-dns and cert-manager on the MC
-  - Ingress zones (public + private) in the customer account — created and reconciled by HyperShift CPO
-  - NS delegation from the regional zone to the customer ingress zone — created via DNSEndpoint CRs
+  - Regional zone in the regional account - the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.ci00.rosa.devshift.net`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
+  - Cluster-specific records (api, oauth, ACME challenge) in the regional zone - created by external-dns and cert-manager on the MC
+  - Ingress zones (public + private) in the customer account - created and reconciled by HyperShift CPO
+  - NS delegation from the regional zone to the customer ingress zone - created via DNSEndpoint CRs
 
-This reuses the existing RC terraform for regional zone management — no extraction into a separate config is needed. The CI identifier suffix naturally leverages the `deployment_name` mechanism.
+This reuses the existing RC terraform for regional zone management - no extraction into a separate config is needed. The CI identifier suffix naturally leverages the `deployment_name` mechanism.
 
 ### Skipping the API Gateway Custom Domain
 
 The environment hosted zone is always created and owned externally by rosa-seaplane-internal; rosa-seaplane looks it up by name rather than creating it. One flag controls provisioning speed for e2e environments:
 
-- `enable_api_custom_domain` (default `false`) — when false, skips the ACM certificate and API Gateway custom domain (~20 minutes). The API Gateway invoke URL is sufficient for testing. Production/staging set this to `true`.
+- `enable_api_custom_domain` (default `false`) - when false, skips the ACM certificate and API Gateway custom domain (~20 minutes). The API Gateway invoke URL is sufficient for testing. Production/staging set this to `true`.
 
 ### Per-Environment DNS Domains
 
@@ -285,7 +331,7 @@ Proposed domains (4-char prefix, matching `int0`/`stg0` length):
 
 ### Scaling
 
-The environment zone scales to 10k regional NS delegations. Adding regional or MC accounts just means more per-run regional zones under the same environment zone — no new Cloudflare delegations or domain changes needed.
+The environment zone scales to 10k regional NS delegations. Adding regional or MC accounts just means more per-run regional zones under the same environment zone - no new Cloudflare delegations or domain changes needed.
 
 ### Prerequisites
 
@@ -294,4 +340,4 @@ Each new environment requires a one-time setup:
 1. Cloudflare/app-interface delegation from `rosa.devshift.net` to the new environment subdomain
 2. Creation of the environment hosted zone in the central account via rosa-seaplane-internal (`control-account` module)
 
-DNSSEC is not required for CI/dev — only for FedRAMP compliance in staging and production.
+DNSSEC is not required for CI/dev - only for FedRAMP compliance in staging and production.

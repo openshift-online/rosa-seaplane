@@ -157,7 +157,7 @@ if [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
 fi
 
 # DNS shard account ID. When dns.shard_account_id is set (per env) it is an
-# ssm:///infra/<region>/dns-shard1/account_id reference that we resolve here to a
+# ssm:///infra/<region>/dns-00/account_id reference that we resolve here to a
 # 12-digit ID, so the aws.dns_shard provider creates zone shards and the
 # dns-zone-operator role in the dedicated DNS shard account. Empty keeps them in
 # the RC account. A set-but-unresolvable reference is fatal: the shard account is

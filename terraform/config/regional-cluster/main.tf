@@ -505,6 +505,14 @@ resource "aws_route53_record" "regional_delegation" {
 # providing ~10k records per shard. MC operators (external-dns, cert-manager)
 # create cluster records in shards. seaplane-operator assigns clusters to shards.
 #
+# Model: 1 zone shard maps 1:1 to its own DNS account, shards 0-based. Shard 0
+# (zone 0.<deployment>.<domain>) maps to account token "00". v1 is single-shard
+# (zone_shard_count defaults to 1), so one zone shard maps to one shard account
+# via the single aws.dns_shard provider below. Scaling to N shard-accounts is
+# deferred: Terraform cannot for_each providers, so N accounts would need either
+# N statically-declared provider aliases here or per-shard zone+role creation
+# moved to a per-account unit.
+#
 # Zone shards live in the DNS shard account (via aws.dns_shard) when
 # dns_shard_account_id is set, and in the RC account otherwise. The regional
 # zone stays in the RC account; the NS delegation below bridges the two accounts.

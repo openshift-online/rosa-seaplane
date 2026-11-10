@@ -211,7 +211,7 @@ _resolve_rc_account() {
 }
 
 # Resolve the account that owns the Route53 zone shards and the dns-zone-operator
-# role. When the DNS shard account exists (SSM /infra/<region>/dns-shard1/account_id,
+# role. When the DNS shard account exists (SSM /infra/<region>/dns-00/account_id,
 # written by rosa-seaplane-internal), MC operators must assume the role there,
 # matching where the RC created it. Otherwise the role is in the RC account.
 # Must be called after _resolve_rc_account. Sets _DNS_ZONE_ACCOUNT_ID.
@@ -222,7 +222,7 @@ _resolve_dns_zone_account() {
     fi
 
     local shard_account_id
-    shard_account_id=$(get_central_ssm_parameter "/infra/${TARGET_REGION}/dns-shard1/account_id" 2>/dev/null || true)
+    shard_account_id=$(get_central_ssm_parameter "/infra/${TARGET_REGION}/dns-00/account_id" 2>/dev/null || true)
 
     if [[ "$shard_account_id" =~ ^[0-9]{12}$ ]]; then
         _DNS_ZONE_ACCOUNT_ID="$shard_account_id"
