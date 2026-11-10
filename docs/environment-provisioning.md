@@ -8,6 +8,9 @@ For an existing environment using Terraform-managed pipelines, review [migration
 
 ## 1. Prerequisites
 
+Provision authorization storage and grants first; see
+[Platform API authorization](platform-api-authorization.md).
+
 ### Required tools
 
 ```bash
@@ -242,9 +245,9 @@ terraform output -raw api_test_command
 
 ## Appendix
 
-### Allowlist additional accounts
+### Enroll resource accounts
 
-The authorization bundle enrolls only the RC account. To admit a customer account, call the Platform API with credentials for the RC account:
+Enroll the RC and each customer resource account separately in seaplane-db. With RC credentials, call the Platform API for each approved account:
 
 ```bash
 awscurl -X POST $API_GATEWAY_URL/api/v0/accounts \
@@ -253,7 +256,7 @@ awscurl -X POST $API_GATEWAY_URL/api/v0/accounts \
     -d '{"accountId": "<AWS_ACCOUNT_ID>"}'
 ```
 
-> **Note:** The `API_GATEWAY_URL` can be obtained from `terraform output -raw api_gateway_invoke_url` in the regional cluster terraform config. The allowlist is temporary; see [Platform API authorization](platform-api-authorization.md#allowlist-an-account-sop).
+> **Note:** The `API_GATEWAY_URL` can be obtained from `terraform output -raw api_gateway_invoke_url` in the regional cluster terraform config. Enrollment grants no resource permission. See [Platform API authorization](platform-api-authorization.md#enroll-resource-accounts-separately) for explicit grants and mandatory configuration.
 
 ### Trigger pipelines via CLI
 

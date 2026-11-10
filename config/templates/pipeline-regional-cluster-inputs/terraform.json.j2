@@ -7,6 +7,8 @@
   "account_id": "{{ account_id }}",
   "image_registry_account_id": {{ image_registry_account_id | default('') | tojson }},
   "region": "{{ aws_region }}",
+  "authz_tables": {{ regional_cluster.authz_tables | default(none) | tojson }},
+  "enable_ephemeral_authz_tables": {{ regional_cluster.enable_ephemeral_authz_tables | default(false) | tojson }},
   "deployment_name": "{{ deployment_name }}",
   "alias": "regional-{{ aws_region }}",
   "enable_bastion": {{ regional_cluster.enable_bastion | default(false) | tojson }},

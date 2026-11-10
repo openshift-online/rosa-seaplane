@@ -129,7 +129,7 @@ terraform-validate: terraform-init ## Check formatting and validate all Terrafor
 
 # Global values (aws_region, environment, cluster_type) are injected by the
 # ApplicationSet at deploy time, so we supply stubs here for linting.
-HELM_LINT_SET := --set global.aws_region=us-east-1 --set global.environment=lint --set global.cluster_type=lint --set global.cluster_name=lint
+HELM_LINT_SET := --set global.aws_region=us-east-1 --set global.environment=lint --set global.cluster_type=lint --set global.cluster_name=lint -f ci/fixtures/authz-management-values.yaml
 helm-lint: ## Lint all Helm charts
 	@echo "🔍 Linting Helm charts..."
 	@failed=false; \
