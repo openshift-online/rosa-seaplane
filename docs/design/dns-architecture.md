@@ -177,12 +177,7 @@ Route 53 IAM does not support scoping by record type, so external-dns and cert-m
 
 ### Scaling to Multiple Shard Accounts
 
-v1 provisions a single shard account through one static `aws.dns_shard` provider alias in the RC Terraform state (`terraform/config/regional-cluster/main.tf`). Scaling to N shard accounts is a known constraint rather than a solved problem: **Terraform cannot `for_each` over provider configurations**, so a shard account's zone and role cannot be created by iterating a provider. N shard accounts therefore require one of:
-
-- **N statically-declared provider aliases** (`aws.dns_shard_00`, `aws.dns_shard_01`, …) in the RC state, with the per-shard zone and role wired to each alias. Simple but caps the shard count at the number of declared aliases and bloats the RC state.
-- **Per-account provisioning unit**: move per-shard zone and `dns-zone-operator` creation into a unit that runs once per shard account (for example a dedicated Terragrunt/pipeline unit keyed by shard), so each account is provisioned by its own apply. Scales cleanly but adds a provisioning unit and cross-unit wiring.
-
-This decision is deferred; v1 is single-shard and does not need it.
+v1 is single-shard, but the design can fan out to more shard accounts without redesign: the accounts, 0-based naming, OU-based trust, SSM discovery, and the operator's per-shard reservation model (each cluster already carries its shard in its domain, pinned to shard `0` today via `defaultDNSShard`) are all in place. Fanning out is three focused changes, done only when a limit is approached: have the operator pick a shard instead of the hardcoded default, run one external-dns per shard (each domain-filtered and assume-role'd to its shard account), and provision the extra zones/roles across accounts. The last point is the only real constraint, since Terraform cannot `for_each` over providers (so it needs static provider aliases or a per-account provisioning unit). Deferred for now.
 
 **Example FQDNs:**
 
