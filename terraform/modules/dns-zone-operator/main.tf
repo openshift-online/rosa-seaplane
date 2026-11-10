@@ -77,7 +77,7 @@ resource "aws_iam_role_policy" "dns_zone_operator" {
         Effect = "Allow"
         Action = ["route53:ListResourceRecordSets"]
         Resource = concat(
-          ["arn:aws:route53:::hostedzone/${var.regional_hosted_zone_id}"],
+          var.regional_hosted_zone_id != null ? ["arn:aws:route53:::hostedzone/${var.regional_hosted_zone_id}"] : [],
           [for id in var.zone_shard_hosted_zone_ids : "arn:aws:route53:::hostedzone/${id}"]
         )
       }

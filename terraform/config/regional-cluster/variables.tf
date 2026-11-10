@@ -302,6 +302,32 @@ variable "environment_domain" {
   default     = null
 }
 
+variable "dns_shard_account_id" {
+  description = <<-EOT
+    AWS account ID of the per-env DNS shard account that owns the zone shards and
+    the dns-zone-operator role. When set, zone shards and the operator role are
+    created in this account via the aws.dns_shard provider, and MC operators assume
+    the role there. When empty (default), zone shards and the role stay in the
+    regional (RC) account, preserving the pre-shard-account behavior. The account
+    is minted by rosa-seaplane-internal; the ID is resolved from SSM in the RC
+    buildspec. Route53 record writes must be same-account as the zones, which is
+    why the role moves with them.
+  EOT
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.dns_shard_account_id == "" || can(regex("^[0-9]{12}$", var.dns_shard_account_id))
+    error_message = "dns_shard_account_id must be empty or a 12-digit AWS account ID"
+  }
+}
+
+variable "dns_shard_provisioner_role_name" {
+  description = "IAM role name assumed in the DNS shard account to provision zone shards and the dns-zone-operator role. Created by rosa-seaplane-internal account bootstrap. Only used when dns_shard_account_id is set."
+  type        = string
+  default     = "rosa-seaplane-account-admin"
+}
+
 # =============================================================================
 # API Gateway Method Settings Variables
 # =============================================================================

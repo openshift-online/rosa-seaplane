@@ -58,6 +58,46 @@ data "aws_caller_identity" "central" {
   provider = aws.central
 }
 
+# DNS shard account provider for cross-account Route53. Route53 cannot change
+# records cross-account, so the zone shards and the dns-zone-operator role must
+# live together in the shard account. When dns_shard_account_id is set, assume
+# into the shard account; otherwise fall back to the same account/creds the
+# default provider uses (target account for local dev, ambient in pipelines),
+# which keeps zone shards and the role in the RC account exactly as before.
+locals {
+  dns_shard_assume_role_arn = (
+    var.dns_shard_account_id != "" ? "arn:aws:iam::${var.dns_shard_account_id}:role/${var.dns_shard_provisioner_role_name}" :
+    var.target_account_id != "" ? "arn:aws:iam::${var.target_account_id}:role/OrganizationAccountAccessRole" :
+    ""
+  )
+}
+
+provider "aws" {
+  alias             = "dns_shard"
+  region            = var.region
+  use_fips_endpoint = can(regex("^(us|us-gov)-", var.region)) ? true : false
+
+  dynamic "assume_role" {
+    for_each = local.dns_shard_assume_role_arn != "" ? [1] : []
+    content {
+      role_arn     = local.dns_shard_assume_role_arn
+      session_name = "terraform-dns-shard-${var.regional_id}"
+    }
+  }
+
+  default_tags {
+    tags = merge(
+      {
+        app-code      = var.app_code
+        service-phase = var.service_phase
+        cost-center   = var.cost_center
+        environment   = var.environment
+      },
+      var.eph_prefix != "" ? { ephemeral-prefix = var.eph_prefix } : {}
+    )
+  }
+}
+
 # Central account providers for ZOA deployment SSM (/zoa/deployments/*).
 # Primary + replica regions; CLI defaults to primary with automatic replica failover.
 provider "aws" {
@@ -464,9 +504,15 @@ resource "aws_route53_record" "regional_delegation" {
 # Each shard is a separate Route53 HostedZone under the regional zone,
 # providing ~10k records per shard. MC operators (external-dns, cert-manager)
 # create cluster records in shards. seaplane-operator assigns clusters to shards.
+#
+# Zone shards live in the DNS shard account (via aws.dns_shard) when
+# dns_shard_account_id is set, and in the RC account otherwise. The regional
+# zone stays in the RC account; the NS delegation below bridges the two accounts.
 # =============================================================================
 
 resource "aws_route53_zone" "zone_shard" {
+  provider = aws.dns_shard
+
   count = var.environment_domain != null ? var.zone_shard_count : 0
 
   name = "${count.index}.${var.deployment_name}.${var.environment_domain}"
@@ -502,8 +548,15 @@ module "dns_zone_operator" {
   count  = var.environment_domain != null ? 1 : 0
   source = "../../modules/dns-zone-operator"
 
-  regional_id                = var.regional_id
-  regional_hosted_zone_id    = aws_route53_zone.regional[0].zone_id
+  providers = {
+    aws = aws.dns_shard
+  }
+
+  regional_id = var.regional_id
+  # Grant the regional-zone read only when the role is same-account as that zone
+  # (no shard account). Cross-account ListResourceRecordSets is not possible, and
+  # external-dns discovers shards via ListHostedZones on * instead.
+  regional_hosted_zone_id    = var.dns_shard_account_id != "" ? null : aws_route53_zone.regional[0].zone_id
   zone_shard_hosted_zone_ids = aws_route53_zone.zone_shard[*].zone_id
   region_ou_path             = var.region_ou_path
 }

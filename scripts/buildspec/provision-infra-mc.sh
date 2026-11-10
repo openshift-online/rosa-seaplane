@@ -80,7 +80,11 @@ else
     _RC_CONFIG_FILE=$(config_path_for_mode regional)
     _RC_REGIONAL_ID=$(jq -r '.regional_id // "regional"' "$_RC_CONFIG_FILE" 2>/dev/null || echo "regional")
 
-    export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
+    # The dns-zone-operator role lives in the DNS shard account when one exists,
+    # otherwise in the RC account. Resolve the owning account so external-dns and
+    # cert-manager assume the role where the RC actually created it.
+    _resolve_dns_zone_account
+    export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${_DNS_ZONE_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
     export OIDC_WRITER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-writer"
     export OIDC_KEY_READER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-key-reader"
 
