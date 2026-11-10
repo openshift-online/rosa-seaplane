@@ -21,7 +21,7 @@ platformApi:
     name: platform-api
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-api
-      tag: "e6cb96b90c0618d0760c8e8f5ba3bfc248082952@sha256:fcbd03ef68ac4258424e9e4e5fe87bd18bbbe4751e289fd07ba39c023359b633"
+      tag: "f9871570f2207d94f6aa3ecf7ff6c901365f3fcc@sha256:f9114a8e5e0d250f4509e1ca3fb64ce15be8f5e1c306ff28dadef90f85d7bc93"
       pullPolicy: Always
 
     # Application arguments
@@ -137,6 +137,16 @@ platformApi:
           method: POST
           rate: 20
           burst: 30
+
+  # HTTP server limit configuration — values are passed as env vars to the binary.
+  # Zero or absent values fall back to the binary's hardcoded defaults (shown here).
+  limits:
+    maxRequestBodyBytes: 10485760    # 10 MiB — matches AWS API Gateway max payload
+    maxRequestHeaderBytes: 16384     # 16 KiB — sufficient for SigV4 Authorization headers
+    readHeaderTimeoutSeconds: 10     # Slowloris protection; capped at readTimeoutSeconds
+    readTimeoutSeconds: 30
+    writeTimeoutSeconds: 30          # starts after headers are read; includes handler time
+    idleTimeoutSeconds: 60
 
   # Health probe configuration
   probes:

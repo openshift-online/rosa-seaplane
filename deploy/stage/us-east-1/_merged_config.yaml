@@ -32,8 +32,8 @@ git:
 deployment_name: "{{ aws_region }}"
 
 # @doc platform_image Platform container image, built by Konflux from terraform/modules/platform-image/Dockerfile and shared from ECR. Runs the RC/MC CodeBuild projects and the ECS bootstrap, bastion, and log-collection tasks.
-# @used-by platform_image pipeline-provisioner-inputs/regional-cluster.json.j2
 # @used-by platform_image pipeline-provisioner-inputs/management-cluster.json.j2
+# @used-by platform_image pipeline-provisioner-inputs/regional-cluster.json.j2
 platform_image: "669421954122.dkr.ecr.us-east-1.amazonaws.com/rosa-seaplane-ci:73edae04747b6a448843db403fc938060aac4bca"
 
 aws:
@@ -196,8 +196,8 @@ regional_cluster:
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_idle_timeout_seconds: 3600
   # @doc regional_cluster.zoa_boundary_session_stale_creating_seconds Max seconds a session may stay in creating before the worker reaper terminates it (SESSION_STALE_CREATING_SECONDS on zoa-lambda worker).
-  # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_stale_creating_seconds: 900
   # @doc regional_cluster.zoa_boundary_session_max_duration_hours Default/max boundary session length (hours). RC zoa-access only (deadline in Dynamo + ZOA_SESSION_DEADLINE on task).
   # @used-by regional_cluster.zoa_boundary_session_max_duration_hours pipeline-regional-cluster-inputs/terraform.json.j2
@@ -313,6 +313,15 @@ applications:
           # @doc applications.regional-cluster.platformApi.app.args.defaultClusterExpiration Maps cluster_lifecycle.default_expiration into the platform-api --default-cluster-expiration flag.
           # @used-by applications.regional-cluster.platformApi.app.args.defaultClusterExpiration _context
           defaultClusterExpiration: "{{ cluster_lifecycle.default_expiration }}"
+      limits:
+        # @doc applications.regional-cluster.platformApi.limits HTTP server limits passed as env vars to the platform-api binary. Values shown are the binary defaults; set explicitly so environments can override without knowing the binary default.
+        # @used-by applications.regional-cluster.platformApi.limits _context
+        maxRequestBodyBytes: 10485760    # 10 MiB — matches AWS API Gateway max payload
+        maxRequestHeaderBytes: 16384     # 16 KiB
+        readHeaderTimeoutSeconds: 10     # Slowloris protection; capped at readTimeoutSeconds
+        readTimeoutSeconds: 30
+        writeTimeoutSeconds: 30          # starts after headers are read; includes handler time
+        idleTimeoutSeconds: 60
     seaplane:
       # @doc applications.regional-cluster.seaplane.oidcS3Bucket S3 bucket name the Seaplane Operator writes OIDC discovery documents to.
       # @used-by applications.regional-cluster.seaplane.oidcS3Bucket _context
