@@ -580,6 +580,11 @@ module "dns_zone_operator" {
   regional_hosted_zone_id    = var.dns_shard_account_id != "" ? null : aws_route53_zone.regional[0].zone_id
   zone_shard_hosted_zone_ids = aws_route53_zone.zone_shard[*].zone_id
   region_ou_path             = var.region_ou_path
+
+  # When the role is created in the shard account, cap it with the boundary that
+  # account's bootstrap created there. The dns-provisioner can only CreateRole
+  # with this boundary attached, so the ARNs must match.
+  permissions_boundary_arn = var.dns_shard_account_id != "" ? "arn:aws:iam::${var.dns_shard_account_id}:policy/rosa-seaplane-dns-operator-boundary" : null
 }
 
 # =============================================================================

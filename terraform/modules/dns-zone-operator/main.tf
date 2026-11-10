@@ -20,6 +20,10 @@ resource "aws_iam_role" "dns_zone_operator" {
   name        = "${var.regional_id}-dns-zone-operator"
   description = "Cross-account role for MC operators (external-dns, cert-manager) to manage DNS records in zone shards"
 
+  # When created in the DNS shard account, carry the boundary that account's
+  # provisioner enforces on CreateRole. Null in the RC-account fallback.
+  permissions_boundary = var.permissions_boundary_arn
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

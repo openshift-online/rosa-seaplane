@@ -24,6 +24,12 @@ variable "zone_shard_hosted_zone_ids" {
   type        = list(string)
 }
 
+variable "permissions_boundary_arn" {
+  description = "Permissions boundary ARN for the dns-zone-operator role. Set to the shard account's rosa-seaplane-dns-operator-boundary when the role is created there (the dns-provisioner requires it on CreateRole). Null in the RC-account fallback."
+  type        = string
+  default     = null
+}
+
 variable "region_ou_path" {
   description = "AWS Organizations OU path for MC accounts (e.g. o-abc123/r-abc1/ou-abc1-abc12345/). The module appends /* for the IAM trust policy wildcard."
   type        = string
