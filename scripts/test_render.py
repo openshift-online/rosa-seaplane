@@ -2798,249 +2798,58 @@ def _assert_rc_grants(bundle, account, role):
     ]
 
 
-class TestAuthzDelivery:
-    @pytest.mark.parametrize("env,ci,eph_prefix,role", [
-        ("integration", False, "", "rosa-seaplane-account-admin"),
-        ("stage", False, "", "rosa-seaplane-account-admin"),
-        ("ephemeral", False, "", "rosa-seaplane-account-admin"),
-        ("ephemeral", False, "authz-test", "rosa-seaplane-account-admin"),
-        ("ephemeral", True, "", "rosa-seaplane-account-admin"),
-    ])
-    def test_safe_source_defaults(self, tmp_path, monkeypatch, env, ci, eph_prefix, role):
-        monkeypatch.setenv("BUILD_ID", "test-ci" if ci else "")
-        values = _authz_values(tmp_path, env, eph_prefix=eph_prefix)
-        authz = values["platformApi"]["authz"]
-        assert set(authz) == {"config"}
-        bundle = yaml.safe_load(authz["config"])
-        assert bundle["registeredAccounts"] == ["@@AWS_ACCOUNT_ID@@"]
-        _assert_rc_grants(bundle, "@@AWS_ACCOUNT_ID@@", role)
-        _assert_bundle_fields(bundle)
+class TestPlatformAPIChartWrapper:
+    def test_application_source_and_child_values(self, tmp_path):
+        resources, _ = _helm_platform(tmp_path, {})
+        app = _resource(resources, "Application", "platform-api")
+        source = app["spec"]["source"]
+        assert source["repoURL"] == "https://github.com/openshift-online/rosa-seaplane-api.git"
+        assert source["path"] == "platform-api/charts"
+        revision = source["targetRevision"]
+        assert len(revision) == 40 and set(revision) <= set("0123456789abcdef")
+        assert app["spec"]["destination"]["namespace"] == "platform-api"
+        assert app["spec"]["syncPolicy"]["automated"] == {"prune": True, "selfHeal": True}
 
-    @pytest.mark.parametrize("principal,scope", [
-        ("role", "regional"), ("session", "global"),
-        ("deny-all", "regional"),
-    ])
-    def test_bundle_passes_through(self, tmp_path, monkeypatch, principal, scope):
-        monkeypatch.setenv("BUILD_ID", "test-ci")
+        child_values = yaml.safe_load(source["helm"]["values"])
+        wrapper_values = load_yaml(PLATFORM_CHART / "values.yaml")
+        assert child_values["platformApi"] == wrapper_values["platformApi"]
+        assert child_values["global"]["aws_region"] == "us-east-1"
+        assert "seaplane" not in child_values
+
+    def test_environment_values_and_globals_are_forwarded(self, tmp_path):
         content = AUTHZ_BUNDLE
-        if principal == "deny-all":
-            content = "formatVersion: 1\nregisteredAccounts: []\npolicies: []\nattachments: []\n"
-        if scope == "global":
-            content = content.replace("scope: regional\n    region: us-east-1", "scope: global")
-            content = content.replace("iam::012345678901:role/platform/readers",
-                                      "sts::012345678901:assumed-role/readers/session-a")
-        bundle = yaml.safe_load(content)
-        overrides = {"applications": {"regional-cluster": {"platformApi": {
-            "authz": {"config": content},
-        }}}}
-        overrides["aws"] = {"account_id": "987654321098"}
-        values = _authz_values(tmp_path, "ephemeral", overrides, eph_prefix="authz-test")
-        assert values["platformApi"]["authz"] == {"config": content.removesuffix("\n")}
-        resources, _ = _helm_platform(tmp_path, values)
-        config = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
-        assert config == content
-        assert yaml.safe_load(config) == bundle
-        assert yaml.safe_load(config)["registeredAccounts"] == ([] if principal == "deny-all" else ["012345678901"])
-
-    def test_dev_override(self, tmp_path):
-        # The example replaces the whole bundle and names no account; Helm supplies the RC account.
-        overrides = load_yaml(AUTHZ_EXAMPLE / "defaults.yaml")
-        assert load_yaml(AUTHZ_EXAMPLE / "us-east-1.yaml") == {"provision_mcs": {"mc01": {}}}
-        values = _authz_values(tmp_path, "ephemeral", overrides)
-        values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
-        resources, _ = _helm_platform(tmp_path, values)
-        bundle = yaml.safe_load(_resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"])
-        _assert_bundle_fields(bundle)
-        assert bundle["registeredAccounts"] == ["012345678901"]
-        assert [p["id"] for p in bundle["policies"]] == ["rc-all-actions", "dev-read-only"]
-        assert [a["principalARN"] for a in bundle["attachments"]] == [
-            "arn:aws:iam::012345678901:role/rosa-seaplane-account-admin",
-            "arn:aws:iam::012345678901:user/e2e",
-            "arn:aws:iam::012345678901:role/dev-readers",
-        ]
-
-    @pytest.mark.parametrize("rate_enabled", [False, True])
-    def test_mount_inputs_metrics(self, tmp_path, rate_enabled):
-        resources, rendered = _helm_platform(tmp_path, {"platformApi": {
-            "rateLimit": {"enabled": rate_enabled},
-        }})
-        bundle = _resource(resources, "ConfigMap", "authz-config")
-        mounted = yaml.safe_load(bundle["data"]["config.yaml"])
-        assert mounted == {
-            "formatVersion": 1, "registeredAccounts": [], "policies": [], "attachments": [],
-        }
-        deployment = _resource(resources, "Deployment", "platform-api")
-        pod = deployment["spec"]["template"]
-        app = next(c for c in pod["spec"]["containers"] if c["name"] == "platform-api")
-        env = {e["name"]: e.get("value") for e in app["env"]}
-        assert "AUTHZ_RESOLVER" not in env
-        assert env["AUTHZ_CONFIG_FILE"] == "/etc/platform-api/authz/config.yaml"
-        mounts = {m["name"]: m for m in app["volumeMounts"]}
-        assert mounts["authz-config"] == {
-            "name": "authz-config", "mountPath": "/etc/platform-api/authz", "readOnly": True,
-        }
-        volumes = {v["name"]: v for v in pod["spec"]["volumes"]}
-        assert volumes["authz-config"]["configMap"] == {"name": "authz-config", "defaultMode": 0o644}
-        assert "defaultMode: 0644" in rendered
-        annotations = pod["metadata"]["annotations"]
-        # The exact include whitespace varies with Helm versions; the checksum
-        # value must be a SHA-256 digest. test_complete_checksum checks sensitivity.
-        assert re.fullmatch(r"[0-9a-f]{64}", annotations["checksum/authz-config"])
-        assert ("rate-limits" in mounts) == ("rate-limits" in volumes) == rate_enabled
-        assert ("checksum/rate-limits" in annotations) == rate_enabled
-        assert ("RATE_LIMIT_CONFIG_FILE" in env) == rate_enabled
-        if rate_enabled:
-            assert mounts["rate-limits"]["readOnly"] is True
-            assert mounts["rate-limits"]["mountPath"] == "/etc/platform-api/rate-limits"
-            assert env["RATE_LIMIT_CONFIG_FILE"] == "/etc/platform-api/rate-limits/limits.yaml"
-            assert _resource(resources, "ConfigMap", "rate-limits")["data"]["limits.yaml"]
-        assert set(volumes) == {"authz-config"} | ({"rate-limits"} if rate_enabled else set())
-        service = _resource(resources, "Service", "platform-api")
-        monitor = _resource(resources, "ServiceMonitor", "platform-api")
-        port = next(p for p in app["ports"] if p["name"] == "metrics")
-        service_port = next(p for p in service["spec"]["ports"] if p["name"] == "metrics")
-        assert port["containerPort"] == service_port["port"] == 9090
-        assert service_port["targetPort"] == monitor["spec"]["endpoints"][0]["port"] == "metrics"
-        assert monitor["spec"]["endpoints"][0].get("path", "/metrics") == "/metrics"
-        assert monitor["spec"]["selector"]["matchLabels"] == service["metadata"]["labels"]
-        assert monitor["spec"]["namespaceSelector"]["matchNames"] == [service["metadata"]["namespace"]]
-
-    @pytest.mark.parametrize("change", ["registeredAccounts", "policies", "attachments", "namespace"])
-    def test_complete_checksum(self, tmp_path, change):
-        values = {"platformApi": {"authz": {"config": AUTHZ_BUNDLE}}}
-        before, _ = _helm_platform(tmp_path, values)
-        changed = copy.deepcopy(values)
-        if change == "namespace":
-            changed["platformApi"]["namespace"] = "other-platform-api"
-        else:
-            if change == "registeredAccounts":
-                content = AUTHZ_BUNDLE.replace('["012345678901"]', '["012345678901", "999999999999"]')
-            elif change == "policies":
-                content = AUTHZ_BUNDLE.replace('context.region == "us-east-1"', 'context.region == "us-west-2"')
-            else:
-                content = AUTHZ_BUNDLE.replace("role/platform/readers", "role/platform/others")
-            changed["platformApi"]["authz"]["config"] = content
-        after, _ = _helm_platform(tmp_path, changed)
-        def annotations(resources):
-            return _resource(resources, "Deployment", "platform-api")["spec"]["template"]["metadata"]["annotations"]
-        assert annotations(before)["checksum/authz-config"] != annotations(after)["checksum/authz-config"]
-        if change == "namespace":
-            assert annotations(before)["checksum/rate-limits"] != annotations(after)["checksum/rate-limits"]
-        else:
-            assert annotations(before)["checksum/rate-limits"] == annotations(after)["checksum/rate-limits"]
-
-    def test_mandatory_inputs(self, tmp_path):
-        with pytest.raises(subprocess.CalledProcessError) as failure:
-            _helm_platform(tmp_path, {"platformApi": {"authz": {"config": ""}}})
-        assert "platformApi.authz.config is required" in failure.value.stderr
-
-
-class TestRuntimeIdentityDelivery:
-    def test_runtime_complete_bundle(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("BUILD_ID", raising=False)
-        values = _authz_values(tmp_path, "ephemeral", {
-            "aws": {"account_id": "012345678901", "child_admin_role_name": "platform/Provisioner"},
-        }, eph_prefix="authz-test")
-        values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
-        resources, _ = _helm_platform(tmp_path, values)
-        bundle = yaml.safe_load(_resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"])
-        assert bundle["registeredAccounts"] == ["012345678901"]
-        _assert_rc_grants(bundle, "012345678901", "platform/Provisioner")
-        _assert_bundle_fields(bundle)
+        resources, _ = _helm_platform(tmp_path, {
+            "global": {"aws_region": "eu-west-2", "aws_account_id": "012345678901"},
+            "platformApi": {"authz": {"config": content}},
+        })
+        app = _resource(resources, "Application", "platform-api")
+        child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
+        assert child_values["global"]["aws_region"] == "eu-west-2"
+        assert child_values["global"]["aws_account_id"] == "012345678901"
+        assert child_values["platformApi"]["authz"]["config"] == content
 
     @pytest.mark.parametrize("env", ["ephemeral", "integration", "stage"])
-    def test_runtime_delivery(self, tmp_path, env):
+    def test_generated_authorization_bundle_is_forwarded(self, tmp_path, monkeypatch, env):
+        monkeypatch.delenv("BUILD_ID", raising=False)
         values = _authz_values(tmp_path, env)
-        assert set(values["platformApi"]["authz"]) == {"config"}
-        assert "ssm:///" not in values["platformApi"]["authz"]["config"]
-        values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
         resources, _ = _helm_platform(tmp_path, values)
-        config = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
-        assert config == values["platformApi"]["authz"]["config"].replace(
-            "@@AWS_ACCOUNT_ID@@", "012345678901",
-        ).replace("@@AWS_REGION@@", "us-east-1") + "\n"
-        bundle = yaml.safe_load(config)
-        assert bundle["registeredAccounts"] == ["012345678901"]
-        _assert_rc_grants(bundle, "012345678901", "rosa-seaplane-account-admin")
-        _assert_bundle_fields(bundle)
+        app = _resource(resources, "Application", "platform-api")
+        child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
+        assert child_values["platformApi"]["authz"] == values["platformApi"]["authz"]
 
-    @pytest.mark.parametrize("field,invalid", [
-        ("aws_account_id", ""), ("aws_account_id", None),
-        ("aws_account_id", "ssm:///account"), ("aws_account_id", "123"),
-        ("aws_account_id", "1234567890123"), ("aws_account_id", "１２３４５６７８９０１２"),
-        ("aws_account_id", "012345678901\n"), ("aws_account_id", 123456789012),
-        ("aws_account_id", True), ("aws_account_id", ["012345678901"]),
-        ("aws_region", ""), ("aws_region", None), ("aws_region", "bad"),
-        ("aws_region", "US-east-1"), ("aws_region", "us-east-1\n"),
-        ("aws_region", 123), ("aws_region", ["us-east-1"]),
-    ])
-    def test_invalid_identity_fails(self, tmp_path, field, invalid):
-        values = {"platformApi": {"authz": {"config": "# @@AWS_ACCOUNT_ID@@ @@AWS_REGION@@\n"}}}
-        values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
-        values["global"][field] = invalid
-        with pytest.raises(subprocess.CalledProcessError) as failure:
-            _helm_platform(tmp_path, values)
-        assert f"global.{field} must be" in failure.value.stderr
-
-    @pytest.mark.parametrize("marker,globals,expected", [
-        ("@@AWS_ACCOUNT_ID@@", {"aws_account_id": "012345678901", "aws_region": "bad"}, "012345678901"),
-        ("@@AWS_REGION@@", {"aws_account_id": 123, "aws_region": "eu-west-2"}, "eu-west-2"),
-    ])
-    def test_only_used_identity_validated(self, tmp_path, marker, globals, expected):
+    def test_custom_authorization_bundle_is_forwarded(self, tmp_path):
+        content = AUTHZ_BUNDLE
         resources, _ = _helm_platform(tmp_path, {
-            "global": globals, "platformApi": {"authz": {"config": f"# {marker}\n"}},
-        })
-        assert _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"] == f"# {expected}\n"
-
-    def test_preserves_explicit_records(self, tmp_path):
-        bundle = yaml.safe_load(AUTHZ_BUNDLE)
-        content = yaml.safe_dump(bundle, default_style='"')
-        resources, _ = _helm_platform(tmp_path, {
-            "global": {"aws_account_id": "ssm:///account", "aws_region": "invalid"},
             "platformApi": {"authz": {"config": content}},
         })
-        actual = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
-        assert actual == content
-        assert yaml.safe_load(actual) == bundle
+        app = _resource(resources, "Application", "platform-api")
+        child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
+        assert child_values["platformApi"]["authz"]["config"] == content
 
-    @pytest.mark.parametrize("change", ["duplicateAccounts", "duplicatePolicies", "duplicateAttachments", "nullPolicies"])
-    def test_preserves_invalid_records(self, tmp_path, change):
-        bundle = yaml.safe_load(AUTHZ_BUNDLE)
-        if change == "duplicateAccounts":
-            bundle["registeredAccounts"] *= 2
-        elif change == "duplicatePolicies":
-            bundle["policies"] *= 2
-        elif change == "duplicateAttachments":
-            bundle["attachments"] *= 2
-        else:
-            bundle["policies"] = None
-        content = yaml.safe_dump(bundle, default_style='"')
-        resources, _ = _helm_platform(tmp_path, {"platformApi": {"authz": {"config": content}}})
-        assert _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"] == content
-
-    @pytest.mark.parametrize("content", [
-        'formatVersion: 1\nregisteredAccounts: ["@@AWS_ACCOUNT_ID@@"]\nregisteredAccounts: []\n',
-        'formatVersion: 1\npolicies:\n  - id: first\n    id: second\n    ownerAccountID: "@@AWS_ACCOUNT_ID@@"\n',
-        'formatVersion: 1\npolicies: [\n# @@AWS_ACCOUNT_ID@@ @@AWS_REGION@@\n',
-        'formatVersion: 1\n# {{ .Values.global.aws_account_id }}\n# @@AWS_ACCOUNT_ID@@ @@AWS_REGION@@\n',
-    ])
-    def test_preserves_original_syntax(self, tmp_path, content):
-        resources, _ = _helm_platform(tmp_path, {
-            "global": {"aws_account_id": "012345678901", "aws_region": "us-east-1"},
-            "platformApi": {"authz": {"config": content}},
-        })
-        actual = _resource(resources, "ConfigMap", "authz-config")["data"]["config.yaml"]
-        assert actual == content.replace("@@AWS_ACCOUNT_ID@@", "012345678901").replace("@@AWS_REGION@@", "us-east-1")
-
-    def test_account_changes_checksum(self, tmp_path):
-        values = _authz_values(tmp_path, "stage")
-        values["global"] = {"aws_account_id": "012345678901", "aws_region": "us-east-1"}
-        before, _ = _helm_platform(tmp_path, values)
-        values["global"]["aws_account_id"] = "987654321098"
-        after, _ = _helm_platform(tmp_path, values)
-        annotation = lambda resources: _resource(resources, "Deployment", "platform-api")["spec"]["template"]["metadata"]["annotations"]
-        assert annotation(before)["checksum/authz-config"] != annotation(after)["checksum/authz-config"]
-        assert annotation(before)["checksum/rate-limits"] == annotation(after)["checksum/rate-limits"]
+    def test_chart_source_is_component_owned(self):
+        chart = load_yaml(PLATFORM_CHART / "Chart.yaml")
+        assert chart["name"] == "platform-api"
+        assert not list((PLATFORM_CHART / "templates").glob("deployment.yaml"))
 
 
 class TestTargetImageRegistrySSMResolution:

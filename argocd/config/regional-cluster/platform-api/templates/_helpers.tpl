@@ -1,18 +1,12 @@
-{{/*
-Expand the name of the chart.
-*/}}
 {{- define "platform-api.name" -}}
-{{- default .Chart.Name .Values.platformApi.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Create a default fully qualified app name.
-*/}}
 {{- define "platform-api.fullname" -}}
-{{- if .Values.platformApi.fullnameOverride }}
-{{- .Values.platformApi.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
-{{- $name := default .Chart.Name .Values.platformApi.nameOverride }}
+{{- $name := default .Chart.Name .Values.nameOverride }}
 {{- if contains $name .Release.Name }}
 {{- .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -21,16 +15,10 @@ Create a default fully qualified app name.
 {{- end }}
 {{- end }}
 
-{{/*
-Create chart name and version as used by the chart label.
-*/}}
 {{- define "platform-api.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/*
-Common labels
-*/}}
 {{- define "platform-api.labels" -}}
 helm.sh/chart: {{ include "platform-api.chart" . }}
 {{ include "platform-api.selectorLabels" . }}
@@ -40,9 +28,6 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{/*
-Selector labels
-*/}}
 {{- define "platform-api.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "platform-api.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}

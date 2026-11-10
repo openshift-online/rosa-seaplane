@@ -1,0 +1,38 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.seaplane.applicationName }}
+  namespace: {{ .Values.seaplane.namespace }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.seaplane.project }}
+
+  source:
+    repoURL: {{ .Values.seaplane.source.repoURL }}
+    targetRevision: {{ .Values.seaplane.source.targetRevision | quote }}
+    path: {{ .Values.seaplane.source.path }}
+    helm:
+      values: |
+        {{- omit .Values "seaplane" | toYaml | nindent 8 }}
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.seaplane.targetNamespace }}
+
+  syncPolicy:
+    {{- with .Values.seaplane.syncPolicy.automated }}
+    automated:
+      prune: {{ .prune }}
+      selfHeal: {{ .selfHeal }}
+    {{- end }}
+    retry:
+      limit: -1
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
