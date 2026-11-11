@@ -33,19 +33,26 @@
 
 # --- AWS profiles ------------------------------------------------------------
 # rrp-rc (regional), rrp-mc (management), rrp-customer (customer account).
+# The sourced script enables `set -euo pipefail`; preserve the runner
+# shell's options across the source so a setup failure cannot change or
+# exit the runner shell.
+_e2e_hooks_prior_opts="$(set +o)"
 # shellcheck source=ci/setup-aws-profiles.sh
 if [[ -r "${REPO_ROOT}/ci/setup-aws-profiles.sh" ]]; then
-  source "${REPO_ROOT}/ci/setup-aws-profiles.sh"
+  source "${REPO_ROOT}/ci/setup-aws-profiles.sh" \
+    || echo "WARNING: ci/setup-aws-profiles.sh failed — AWS profiles may be incomplete" >&2
 else
   echo "WARNING: ${REPO_ROOT}/ci/setup-aws-profiles.sh not found — AWS profiles not set up" >&2
 fi
+eval "${_e2e_hooks_prior_opts}"
 
 export AWS_PROFILE="${AWS_PROFILE:-rrp-rc}"
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 
 # Print the signing principal (not credentials) to diagnose grant mismatches.
 echo "Regional API caller (${AWS_PROFILE}):"
-aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json
+aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json \
+  || echo "WARNING: could not resolve signing principal — check AWS profiles/credentials" >&2
 
 # --- Account IDs -------------------------------------------------------------
 if [[ -z "${E2E_ACCOUNT_ID:-}" ]]; then
@@ -108,6 +115,9 @@ fi
 # forwarding via E2E_SKIP_ALERTMANAGER_FORWARD.
 export _E2E_HOOKS_AM_STARTED=false
 if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
+  # Note: the -n check means standing environments (CLUSTER_PREFIX="") skip
+  # the tunnel — intentional, inherited from ci/e2e-tests.sh: standing envs
+  # expose their own Alertmanager; only ephemeral (prefixed) envs need it.
   if [[ -z "${ALERTMANAGER_URL:-}" && -z "${E2E_ALERTMANAGER_URL:-}" && -n "${CLUSTER_PREFIX:-}" ]]; then
     echo "=== Alertmanager tunnel for silence e2e specs ==="
     # shellcheck source=ci/alertmanager-forward.sh
@@ -125,7 +135,11 @@ fi
 # so per-suite pre-cleanup dumps and the final dump never overwrite each other.
 # Logs stay in S3 (S3_ONLY) because they may contain sensitive data that
 # cannot be reliably redacted; the S3 URIs are printed for manual retrieval.
-export E2E_DUMP_ENV="S3_ONLY=true ${REPO_ROOT}/scripts/dev/dump-env.sh"
+# `env` prefixes the assignment so the command works after word-splitting in
+# consumers that do not re-parse it (after-suites.sh expands ${E2E_DUMP_ENV}
+# directly; the legacy PRE_CLEANUP_HOOK consumer re-parses via bash -c, where
+# both forms work).
+export E2E_DUMP_ENV="env S3_ONLY=true ${REPO_ROOT}/scripts/dev/dump-env.sh"
 # Back-compat alias: suites captured by the old flow read PRE_CLEANUP_HOOK.
 export PRE_CLEANUP_HOOK="${E2E_DUMP_ENV}"
 
