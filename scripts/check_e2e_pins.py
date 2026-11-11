@@ -13,12 +13,19 @@ Rules (see the registry header for the full contract):
      ArgoCD env-values layer wins).
   P2 newest-pin-wins: a bumped pin must descend from its previous value
      (single line of history) and sibling pins of the suite must be
-     unchanged in the same change.
-  P3 pins are full 40-char SHAs (or @sha256:<digest>); short/branch pins
-     fail unless the registry entry sets `enforce: false` (warning).
+     unchanged in the same change — except pins sharing a
+     `bump_together: true` group (e.g. zoa's lambda/runner/boundary
+     images, which are built from one commit and bumped together).
+  P3 pins are full 40-char SHAs, optionally followed by
+     `@sha256:<digest>` (Konflux form); short/branch pins fail unless
+     the registry entry sets `enforce: false` (warning).
 
 Usage:
   uv run scripts/check_e2e_pins.py [--registry PATH] [--skip-ancestry]
+
+--skip-ancestry is the documented offline mode: it skips the P2 ancestry
+check AND the P2 change detection (which needs origin/main to diff
+against).
 """
 
 import argparse
@@ -34,9 +41,9 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REGISTRY = REPO_ROOT / "ci/e2e-hooks/suite-repos.yaml"
+REGISTRY_FILE_REL = "ci/e2e-hooks/suite-repos.yaml"
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-DIGEST_RE = re.compile(r"^@?sha256:[0-9a-f]{64}$")
 SHA_DIGEST_RE = re.compile(r"^[0-9a-f]{40}@sha256:[0-9a-f]{64}$")
 
 
@@ -59,6 +66,35 @@ def run(cmd: list[str], cwd: Path | None = None, check: bool = True) -> str:
             f"command failed: {' '.join(cmd)}\n{proc.stdout}\n{proc.stderr}"
         )
     return proc.stdout.strip()
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that rejects duplicate mapping keys."""
+
+
+def _no_dup_keys(loader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            raise yaml.constructor.ConstructorError(
+                None, None, f"duplicate key {key!r} in mapping", key_node.start_mark
+            )
+        mapping[key] = loader.construct_object(value_node, deep=deep)
+    return mapping
+
+
+_UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _no_dup_keys
+)
+
+
+def load_registry(path: Path) -> dict[str, Any]:
+    """Load the pin registry with a duplicate-key-rejecting loader, so a
+    duplicated `suites` key or a later `enforce: false` cannot silently
+    shadow earlier entries."""
+    with open(path) as f:
+        return yaml.load(f, Loader=_UniqueKeyLoader) or {}
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -92,13 +128,15 @@ def argocd_env_layers(env_dir: Path) -> list[Path]:
     return sorted(p for p in env_dir.glob("argocd-values-*.yaml") if p.is_file())
 
 
+def extract_sha(value: str) -> str | None:
+    """Extract the 40-char commit SHA, stripping any @sha256:<digest> suffix."""
+    sha = value.split("@")[0].strip()
+    return sha if FULL_SHA_RE.match(sha) else None
+
+
 def resolve_pin_value(pin: dict[str, Any], env_dir: Path | None) -> Any:
     """P1: resolve a pin the way the deployment does for one env/region."""
-    if "ref" in pin:
-        return pin["ref"]
     source = pin["source"]
-    if "ref" in pin:
-        return pin["ref"]
     if "file" in source:
         base = load_yaml(REPO_ROOT / source["file"])
         value = dig(base, source["key"])
@@ -129,15 +167,17 @@ def resolve_config_pin(pin: dict[str, Any], env_dir: Path | None) -> Any:
 
 
 def check_pin_format(value: Any, pin: dict, suite: str, enforce: bool) -> list[str]:
-    """P3: full SHA / digest. Returns list of error messages (empty = pass)."""
+    """P3: full SHA, optionally with @sha256:<digest>. A digest-only value
+    is rejected: it cannot identify the suite checkout commit."""
     name = pin["name"]
     if not isinstance(value, str) or not value.strip():
         return [f"{suite}/{name}: pin value is empty or not a string ({value!r})"]
     v = value.strip()
-    if FULL_SHA_RE.match(v) or DIGEST_RE.match(v) or SHA_DIGEST_RE.match(v):
+    if FULL_SHA_RE.match(v) or SHA_DIGEST_RE.match(v):
         return []
     msg = (
-        f"{suite}/{name}: pin {v!r} is not a full 40-char SHA or @sha256:<digest>"
+        f"{suite}/{name}: pin {v!r} is not a full 40-char SHA "
+        f"(optionally SHA@sha256:<digest>)"
     )
     if enforce:
         return [msg]
@@ -148,11 +188,8 @@ def check_pin_format(value: Any, pin: dict, suite: str, enforce: bool) -> list[s
 def git_merge_base_with_default() -> str | None:
     """Base commit to diff against: merge-base with the default branch."""
     default = "origin/main"
-    try:
-        if run(["git", "rev-parse", "--verify", default], check=False):
-            return run(["git", "merge-base", "HEAD", default])
-    except Exception:
-        pass
+    if run(["git", "rev-parse", "--verify", default], check=False):
+        return run(["git", "merge-base", "HEAD", default])
     return None
 
 
@@ -162,17 +199,28 @@ def changed_files(base: str) -> set[str]:
 
 
 def pin_changed(pin: dict, changed: set[str]) -> bool:
-    source = pin.get("source", {})
+    """Has anything that feeds this pin changed between base and HEAD?
+
+    For source-file pins: the source file (or, for ArgoCD values, an env
+    overlay that can change the effective value). For inline refs: the
+    registry file itself, since that is where the value lives.
+    """
     if "ref" in pin:
-        return False  # inline refs live in the registry itself; diff not tracked here
+        return REGISTRY_FILE_REL in changed
+    source = pin.get("source", {})
+    if source.get("file", "").startswith("argocd/"):
+        # Any env overlay layer can change the effective value.
+        if any(p.startswith("deploy/") and "argocd-values-" in p for p in changed):
+            return True
     return source.get("file", "") in changed
 
 
 def is_ancestor(repo_url: str, old: str, new: str, cache: dict[str, Path]) -> bool:
     """P2: is `new` a descendant of `old` in the suite repo's history?"""
-    if not (FULL_SHA_RE.match(old) and FULL_SHA_RE.match(new)):
-        # Cannot establish ancestry for non-SHA pins (waived or digest pins).
-        warn(f"ancestry not checkable for {old[:12]} -> {new[:12]} (non-SHA pin)")
+    old_sha, new_sha = extract_sha(old), extract_sha(new)
+    if not (old_sha and new_sha):
+        # Cannot establish ancestry for non-SHA pins (waived pins).
+        warn(f"ancestry not checkable for {old!r} -> {new!r} (non-SHA pin)")
         return True
     if repo_url not in cache:
         tmp = Path(tempfile.mkdtemp(prefix="pin-clone-"))
@@ -180,9 +228,9 @@ def is_ancestor(repo_url: str, old: str, new: str, cache: dict[str, Path]) -> bo
              repo_url, str(tmp)])
         cache[repo_url] = tmp
     repo = cache[repo_url]
-    run(["git", "fetch", "--quiet", "origin", old, new], cwd=repo, check=False)
+    run(["git", "fetch", "--quiet", "origin", old_sha, new_sha], cwd=repo, check=False)
     proc = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", old, new], cwd=repo
+        ["git", "merge-base", "--is-ancestor", old_sha, new_sha], cwd=repo
     )
     return proc.returncode == 0
 
@@ -193,11 +241,16 @@ def main() -> int:
     parser.add_argument(
         "--skip-ancestry",
         action="store_true",
-        help="skip the P2 ancestry check (offline / no suite repo access)",
+        help="offline mode: skip the P2 ancestry check and change detection "
+             "(which need origin/main and suite repo access)",
     )
     args = parser.parse_args()
 
-    registry = load_yaml(args.registry)
+    try:
+        registry = load_registry(args.registry)
+    except yaml.YAMLError as exc:
+        fail(f"registry has invalid YAML (duplicate keys are rejected): {exc}")
+        return 1
     suites: dict[str, Any] = registry.get("suites") or {}
     if not suites:
         fail("registry has no suites")
@@ -215,10 +268,16 @@ def main() -> int:
 
     errors: list[str] = []
     clone_cache: dict[str, Path] = {}
+
     base = git_merge_base_with_default()
+    if base is None and not args.skip_ancestry:
+        fail("cannot determine the P2 comparison base: origin/main is not "
+             "available. Run 'git fetch origin main', or pass --skip-ancestry "
+             "for the documented offline mode.")
+        return 1
     changed = changed_files(base) if base else set()
     if base is None:
-        warn("no origin/main to diff against — P2 change detection skipped")
+        warn("offline mode — P2 change detection skipped")
 
     for suite, cfg in sorted(suites.items()):
         pins: list[dict] = cfg.get("pins") or []
@@ -245,43 +304,60 @@ def main() -> int:
                     check_pin_format(value, pin, f"{suite}[{label}]", enforce)
                 )
 
-        # P2: bumped pins (value changed vs base) must descend from their
-        # previous value, and all other pins of the suite must be unchanged.
-        if base is not None:
-            bumped = []
-            for p in pins:
-                if not pin_changed(p, changed):
-                    continue
-                old_val = previous_pin_value(p, base)
+        # P2: bumped pins must descend from their previous value; sibling
+        # pins must be unchanged — except within a bump_together group.
+        if base is None:
+            continue
+        bumped: dict[str, dict] = {}
+        for p in pins:
+            if not pin_changed(p, changed):
+                continue
+            old_val = previous_pin_value(p, base)
+            # Compare against EVERY environment's effective value: an env
+            # overlay can pin a different SHA than the first env dir.
+            targets = [None] if "ref" in p else env_dirs
+            for env_dir in targets:
                 try:
-                    new_val = resolve_config_pin(p, None if "ref" in p else env_dirs[0])
+                    new_val = resolve_config_pin(p, env_dir)
                 except (KeyError, FileNotFoundError):
-                    bumped.append(p)  # pin is new or unresolvable at HEAD — flag it
+                    bumped[p["name"]] = {"pin": p, "old": old_val, "new": None}
                     continue
                 if old_val != new_val:
-                    bumped.append(p)
-            for pin in bumped:
-                old = previous_pin_value(pin, base)
-                new = resolve_config_pin(pin, None if "ref" in pin else env_dirs[0])
-                if old == new:
-                    continue  # file touched but pin value unchanged
-                if args.skip_ancestry:
-                    warn(f"{suite}/{pin['name']}: ancestry check skipped")
-                elif not is_ancestor(cfg["repo"], str(old), str(new), clone_cache):
-                    errors.append(
-                        f"{suite}/{pin['name']}: pin bump {old} -> {new} is not a "
-                        f"descendant (diverging history — newest-pin-wins violated)"
-                    )
-                unchanged = [p["name"] for p in pins if p not in bumped]
-                if len(bumped) > 1:
-                    errors.append(
-                        f"{suite}: multiple pins changed together "
-                        f"({', '.join(p['name'] for p in bumped)}); only the "
-                        f"newest pin may move per change"
-                    )
-                elif unchanged:
-                    ok(f"{suite}/{pin['name']} bumped; siblings unchanged: "
-                       f"{', '.join(unchanged)}")
+                    bumped[p["name"]] = {"pin": p, "old": old_val, "new": new_val}
+        if not bumped:
+            continue
+
+        # Group check: all bumped pins must share one bump_together group,
+        # or be a single pin.
+        groups = {p.get("bump_together") for p in
+                  (b["pin"] for b in bumped.values())}
+        if len(bumped) > 1 and (None in groups or len(groups) > 1):
+            errors.append(
+                f"{suite}: multiple pins changed together "
+                f"({', '.join(bumped)}); only the newest pin may move per "
+                f"change (unless the pins share a bump_together group)"
+            )
+            continue
+
+        for name, b in bumped.items():
+            old, new = b["old"], b["new"]
+            if new is None:
+                errors.append(f"{suite}/{name}: pin unresolvable at HEAD")
+                continue
+            if old is None:
+                errors.append(f"{suite}/{name}: new pin added ({new})")
+                continue
+            if args.skip_ancestry:
+                warn(f"{suite}/{name}: ancestry check skipped")
+            elif not is_ancestor(cfg["repo"], str(old), str(new), clone_cache):
+                errors.append(
+                    f"{suite}/{name}: pin bump {old} -> {new} is not a "
+                    f"descendant (diverging history — newest-pin-wins violated)"
+                )
+        unchanged = [p["name"] for p in pins if p["name"] not in bumped]
+        if unchanged:
+            ok(f"{suite}: bumped {', '.join(bumped)}; unchanged: "
+               f"{', '.join(unchanged)}")
 
     for path in clone_cache.values():
         shutil.rmtree(path, ignore_errors=True)
@@ -297,7 +373,7 @@ def main() -> int:
 
 
 def previous_pin_value(pin: dict, base: str) -> Any:
-    """Resolve a pin's value at the base commit."""
+    """Resolve a pin's value at the base commit (from its source file)."""
     source = pin.get("source", {})
     if "ref" in pin:
         return pin["ref"]
@@ -305,7 +381,8 @@ def previous_pin_value(pin: dict, base: str) -> Any:
         content = run(["git", "show", f"{base}:{source['file']}"])
         data = yaml.safe_load(content) or {}
         return dig(data, source["key"])
-    except Exception:
+    except (KeyError, RuntimeError, yaml.YAMLError) as exc:
+        warn(f"cannot resolve previous value for {pin.get('name', '?')}: {exc}")
         return None
 
 

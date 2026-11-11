@@ -15,7 +15,10 @@
 #      (env layer wins).
 #   P2 newest-pin-wins: a pin may only be bumped to a commit that is a
 #      descendant of the previous value (single line of history), and every
-#      other pin of the same suite must be unchanged in the same change.
+#      other pin of the same suite must be unchanged in the same change —
+#      except pins sharing a `bump_together: <group>` value (e.g. zoa's
+#      lambda/runner/boundary images, built from one commit and bumped
+#      together).
 #   P3 full 40-char SHAs (optionally @sha256:<digest>). Short tags and branch
 #      names fail the check — unless an entry sets `enforce: false`, which
 #      reports a warning instead. Use temporarily for legacy pins and remove
@@ -47,8 +50,12 @@ suites:
   zoa:
     repo: https://github.com/openshift-online/rosa-seaplane-zoa.git
     pins:
+      # The three zoa images are built from one commit and bumped together;
+      # bump_together lets the P2 rule accept the coordinated update (the
+      # commit ancestry check still applies to each image tag).
       - name: zoa-lambda-image-tag
         doc: ZOA Lambda image tag (all three zoa images are bumped together).
+        bump_together: zoa-images
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_lambda_image_tag
@@ -58,12 +65,14 @@ suites:
         enforce: false
       - name: zoa-runner-image-tag
         doc: ZOA Runner image tag.
+        bump_together: zoa-images
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_runner_image_tag
         enforce: false # TODO: same as zoa-lambda-image-tag
       - name: zoa-boundary-image-tag
         doc: ZOA Boundary (ECS) image tag.
+        bump_together: zoa-images
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_boundary_image_tag
