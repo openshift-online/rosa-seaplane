@@ -14,7 +14,7 @@ locals {
   deployment_ssm_value = jsonencode({
     access_url       = aws_lambda_function_url.access.function_url
     invoker_role_arn = aws_iam_role.invoker.arn
-    region           = data.aws_region.current.name
+    region           = data.aws_region.current.region
     account_id       = data.aws_caller_identity.current.account_id
     deployment_name  = var.deployment_name
   })

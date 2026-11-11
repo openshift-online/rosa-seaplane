@@ -16,7 +16,7 @@ data "external" "bedrock_agreement_exists" {
   query = {
     check    = "agreement"
     model_id = each.value.model_id
-    region   = data.aws_region.current.name
+    region   = data.aws_region.current.region
   }
 }
 

@@ -108,7 +108,7 @@ resource "aws_kms_key_policy" "zoa" {
         Sid    = "AllowCloudWatchLogsBoundaryExec"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -121,12 +121,12 @@ resource "aws_kms_key_policy" "zoa" {
         Condition = {
           ArnLike = {
             "kms:EncryptionContext:aws:logs:arn" = [
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary",
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary:*",
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary/ssm-sessions",
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary/ssm-sessions:*",
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.regional_id}-zoa-access",
-              "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.regional_id}-zoa-access:*",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary:*",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary/ssm-sessions",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/ecs/${var.regional_id}/zoa-boundary/ssm-sessions:*",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.regional_id}-zoa-access",
+              "arn:aws:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.regional_id}-zoa-access:*",
             ]
           }
         }
@@ -135,7 +135,7 @@ resource "aws_kms_key_policy" "zoa" {
         Sid    = "AllowCrossAccountCloudWatchLogsBoundaryExec"
         Effect = "Allow"
         Principal = {
-          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+          Service = "logs.${data.aws_region.current.region}.amazonaws.com"
         }
         Action = [
           "kms:Encrypt",
@@ -148,10 +148,10 @@ resource "aws_kms_key_policy" "zoa" {
         Condition = {
           ArnLike = {
             "kms:EncryptionContext:aws:logs:arn" = [
-              "arn:aws:logs:${data.aws_region.current.name}:*:log-group:/ecs/*/zoa-boundary",
-              "arn:aws:logs:${data.aws_region.current.name}:*:log-group:/ecs/*/zoa-boundary:*",
-              "arn:aws:logs:${data.aws_region.current.name}:*:log-group:/ecs/*/zoa-boundary/ssm-sessions",
-              "arn:aws:logs:${data.aws_region.current.name}:*:log-group:/ecs/*/zoa-boundary/ssm-sessions:*",
+              "arn:aws:logs:${data.aws_region.current.region}:*:log-group:/ecs/*/zoa-boundary",
+              "arn:aws:logs:${data.aws_region.current.region}:*:log-group:/ecs/*/zoa-boundary:*",
+              "arn:aws:logs:${data.aws_region.current.region}:*:log-group:/ecs/*/zoa-boundary/ssm-sessions",
+              "arn:aws:logs:${data.aws_region.current.region}:*:log-group:/ecs/*/zoa-boundary/ssm-sessions:*",
             ]
           }
         }
