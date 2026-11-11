@@ -8,13 +8,14 @@ Each environment gets a unique ID that prefixes all provisioned resources, keepi
 
 The following tools must be in `PATH` for all ephemeral environment commands:
 
-| Tool              | Purpose                                     |
-| ----------------- | ------------------------------------------- |
-| `git`             | Repository operations                       |
-| `python3`         | Config rendering                            |
-| `uv`              | Python script runner (SAML credentials)     |
-| `fzf`             | Interactive selection menus                 |
-| `podman`/`docker` | Running the ephemeral environment container |
+| Tool                | Purpose                                                   |
+| ------------------- | --------------------------------------------------------- |
+| `git`               | Repository operations                                     |
+| `python3`           | Config rendering                                          |
+| `uv`                | Python script runner (SAML credentials)                   |
+| `rh-aws-saml-login` | AWS SAML authentication (see [SAML Access](#saml-access)) |
+| `fzf`               | Interactive selection menus                               |
+| `podman`/`docker`   | Running the ephemeral environment container               |
 
 Port forwarding additionally requires `aws` and `lsof`.
 
@@ -56,6 +57,27 @@ the control account replaces `central`, and the HCP account is used as the e2e c
 ```
 
 Alternatively, set `RRP_AWS_PROFILES_PRESET=1` to skip the built-in credential setup entirely and manage your own AWS profiles (profiles must be named `rrp-ephemeral-{central,rc,mc,customer}` for ephemeral or `rrp-int-{rc,mc,customer}` for integration).
+
+### SAML Access
+
+The ephemeral provisioning script authenticates to the eph-dev control account via
+SAML using the `rosa-hyperfleet-eph-dev-admin` role. Before running
+`make ephemeral-provision`, ensure you have:
+
+1. **`rh-aws-saml-login` installed** — used by the credential process to obtain
+   temporary AWS credentials.
+2. **SAML access to the eph-dev control account** — your Red Hat SSO must include
+   the `rosa-hyperfleet-eph-dev-admin` role for the control account listed in
+   `../rosa-seaplane-internal/infra/accounts/eph-dev/terragrunt-accounts.json`
+   (the `control_account_id` field). Request access through your team lead or
+   the internal onboarding process in `rosa-seaplane-internal`.
+
+> **Troubleshooting:** If `make ephemeral-provision` fails with
+> `SAML Assertion doesn't contain the requested Role and Metadata in the attributes`,
+> your SAML session does not include the required role for the current eph-dev control
+> account. This commonly happens when the eph-dev accounts are rotated — request access
+> to the new control account ID and role, then re-run `rh-aws-saml-login` before
+> provisioning.
 
 ## Provision
 
