@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fail if a wrapper chart's Chart.lock is missing, stale vs Chart.yaml, or
-# missing a vendored charts/<name>-<version>.tgz for any locked dependency.
+# Fail if a wrapper chart's Chart.lock is missing, stale vs Chart.yaml
+# (name, version, and repository), missing a vendored
+# charts/<name>-<version>.tgz, or has extra archives that are not locked.
 # Offline / hermetic — does not fetch.
 set -euo pipefail
 
@@ -27,10 +28,10 @@ if [[ -z "$chart_files" ]]; then
 	exit 1
 fi
 
-# Pipe delimiter: older yq (CI is v4.44) treats "\t" as the two characters
-# backslash+t, so IFS tab never splits name from version.
+# Pipe delimiter: CI yq v4.44 treats "\t" as the two characters backslash+t.
+# Include repository so a Chart.yaml repo change cannot keep a stale lock.
 dep_ids() {
-	"$yq_bin" -r '.dependencies[]? | .name + "|" + (.version | tostring)' "$1" | sort
+	"$yq_bin" -r '.dependencies[]? | .name + "|" + (.version | tostring) + "|" + .repository' "$1" | sort
 }
 
 fail=0
@@ -58,14 +59,27 @@ while IFS= read -r chart; do
 		echo "$lock_deps" | sed 's/^/    /'
 		fail=1
 	fi
-	while IFS='|' read -r name version; do
+
+	expected=""
+	while IFS='|' read -r name version _repository; do
 		[[ -n "$name" ]] || continue
 		archive="$dir/charts/${name}-${version}.tgz"
+		expected="${expected}${name}-${version}.tgz"$'\n'
 		if [[ ! -f "$archive" ]]; then
 			echo "missing $archive"
 			fail=1
 		fi
 	done <<<"$lock_deps"
+
+	shopt -s nullglob
+	for archive in "$dir"/charts/*.tgz; do
+		base="$(basename "$archive")"
+		if ! grep -Fxq -- "$base" <<<"$expected"; then
+			echo "unexpected archive $archive (not in Chart.lock)"
+			fail=1
+		fi
+	done
+	shopt -u nullglob
 done <<<"$chart_files"
 
 if ((fail)); then
