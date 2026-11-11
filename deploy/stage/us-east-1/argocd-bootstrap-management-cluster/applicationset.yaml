@@ -183,7 +183,7 @@ spec:
     spec:
       sources:
       - repoURL: 'https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync'
-        targetRevision: 'f34824f'
+        targetRevision: 'bd7891a'
         path: helm
         helm:
           valueFiles:

@@ -1,41 +1,10 @@
-# ecr-creds-sync Helm Chart Values
-# Runs one controller per Management Cluster. It watches HostedCluster objects
-# and writes a refreshed ECR authorization token as the pull-secret for each
-# HCP namespace, using EKS Pod Identity for credential-free authentication.
+# ecr-creds-sync environment overrides for rosa-seaplane.
+# Chart defaults (image, resources, etc.) live in the canonical values.yaml in
+# the rosa-seaplane-ecr-creds-sync repository. Only environment-specific
+# overrides belong here.
 
 ecrCredsSync:
-  # enabled controls whether the controller and its RBAC are deployed.
-  # Set via management_cluster_defaults.enable_ecr_creds_sync in config.
+  # enabled is the only env-specific override — all other values are inherited
+  # from the chart defaults or supplied at runtime via ArgoCD cluster annotations
+  # (ecrRepository, awsRegion, sourceSecrets).
   enabled: false
-
-  # Container image configuration
-  image:
-    repository: quay.io/openshift-online/rosa-seaplane-ecr-creds-sync
-    tag: "latest"
-    pullPolicy: IfNotPresent
-
-  # ECR repository URI used to obtain the authorization token.
-  # Format: <account>.dkr.ecr.<region>.amazonaws.com/<repository>
-  ecrRepository: ""
-
-  # AWS region of the ECR registry.
-  awsRegion: ""
-
-  # How often the ECR authorization token is refreshed (ECR tokens are valid
-  # for 12 hours; default refresh of 2h provides a comfortable safety margin).
-  refreshAfter: "2h"
-
-  # Comma-separated list of Secret names in each HCP namespace to merge into
-  # the pull-secret before writing ECR credentials. Set to the name used by
-  # ECR_MIRROR_BASE_SECRET_NAME on the seaplane-operator (e.g. base-pull-secret)
-  # so ESO and ecr-creds-sync do not overwrite each other.
-  sourceSecrets: ""
-
-  # Resources for the controller container.
-  resources:
-    requests:
-      cpu: 50m
-      memory: 64Mi
-    limits:
-      cpu: 200m
-      memory: 128Mi
