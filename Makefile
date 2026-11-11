@@ -145,8 +145,8 @@ helm-lint: ## Lint all Helm charts
 	fi
 	@echo "✅ Helm lint complete"
 
-check-helm-locks: ## Verify Chart.lock and vendored charts/*.tgz for Helm deps
-	@./ci/check-helm-locks.sh
+check-helm-locks: $(YQ) ## Verify Chart.lock matches Chart.yaml and vendored tgz exist
+	@YQ="$(YQ)" ./ci/check-helm-locks.sh
 
 check-rendered-files: ## Verify deploy/ is up to date with config.yaml
 	@echo "🔍 Rendering deploy/ from config.yaml..."
