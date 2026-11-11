@@ -50,6 +50,20 @@ sigv4ProxyLogs:
 vector:
   role: Agent
 
+  # Red Hat OpenShift Logging Vector (ViaQ) on the existing helm.vector.dev chart.
+  # Catalog: registry.redhat.io/openshift-logging/vector-rhel9:v6.4.6
+  # Binary is Vector 0.47.0; chart 0.52.0 still supplies --config-dir /etc/vector/.
+  # The RH image has CMD ["/usr/bin/vector"] and no ENTRYPOINT. Chart args replace
+  # CMD, so command must be set or the container tries to exec --config-dir.
+  image:
+    repository: registry.redhat.io/openshift-logging/vector-rhel9
+    tag: v6.4.6
+    sha: 23ac528608b2c270a53c11ed77f6e5b0d9ead8ebf4ad061b29518ec878ca2877
+    pullSecrets:
+      - name: pull-secret
+  command:
+    - /usr/bin/vector
+
   priorityClassName: system-node-critical
 
   podSecurityContext:
