@@ -13,9 +13,9 @@ bastion_task*.json
 tfplan
 **/tfplan
 
-# Helm
-charts/
-Chart.lock
+# Helm: Chart.lock and argocd/**/charts/*.tgz are committed so ArgoCD
+# does not re-fetch subcharts at sync. Ignore unpackaged output at repo root.
+/charts/
 
 # Maestro agent certificates (sensitive - never commit)
 .maestro-certs/

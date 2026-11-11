@@ -18,3 +18,7 @@ echo "=== Running promtool rule tests ==="
 echo ""
 echo "=== Running submodule fetch-recursion check ==="
 ./ci/check-submodule-fetch-config.sh
+
+echo ""
+echo "=== Running Helm lock / vendored tgz check ==="
+./ci/check-helm-locks.sh
