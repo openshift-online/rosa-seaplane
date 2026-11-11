@@ -27,8 +27,10 @@ if [[ -z "$chart_files" ]]; then
 	exit 1
 fi
 
+# Pipe delimiter: older yq (CI is v4.44) treats "\t" as the two characters
+# backslash+t, so IFS tab never splits name from version.
 dep_ids() {
-	"$yq_bin" -r '.dependencies[]? | .name + "\t" + (.version | tostring)' "$1" | sort
+	"$yq_bin" -r '.dependencies[]? | .name + "|" + (.version | tostring)' "$1" | sort
 }
 
 fail=0
@@ -56,7 +58,7 @@ while IFS= read -r chart; do
 		echo "$lock_deps" | sed 's/^/    /'
 		fail=1
 	fi
-	while IFS=$'\t' read -r name version; do
+	while IFS='|' read -r name version; do
 		[[ -n "$name" ]] || continue
 		archive="$dir/charts/${name}-${version}.tgz"
 		if [[ ! -f "$archive" ]]; then
