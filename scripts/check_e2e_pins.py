@@ -275,6 +275,11 @@ def main() -> int:
              "available. Run 'git fetch origin main', or pass --skip-ancestry "
              "for the documented offline mode.")
         return 1
+    if args.skip_ancestry:
+        # Offline mode: skip the WHOLE P2 block (change detection AND
+        # ancestry), not just the ancestry part — otherwise the group check
+        # can produce spurious failures the caller asked to skip.
+        base = None
     changed = changed_files(base) if base else set()
     if base is None:
         warn("offline mode — P2 change detection skipped")
@@ -306,23 +311,45 @@ def main() -> int:
 
         # P2: bumped pins must descend from their previous value; sibling
         # pins must be unchanged — except within a bump_together group.
+        # The old/new comparison is symmetric (same resolution pipeline at
+        # base and HEAD), and ONE bumped environment is enough to flag a
+        # pin: record it and stop, so an env that matches the old value
+        # cannot silently erase a bump detected earlier.
         if base is None:
             continue
         bumped: dict[str, dict] = {}
         for p in pins:
             if not pin_changed(p, changed):
                 continue
-            old_val = previous_pin_value(p, base)
-            # Compare against EVERY environment's effective value: an env
-            # overlay can pin a different SHA than the first env dir.
-            targets = [None] if "ref" in p else env_dirs
-            for env_dir in targets:
+            if "ref" in p:
+                old_val = previous_pin_value(p, base)
                 try:
-                    new_val = resolve_config_pin(p, env_dir)
+                    new_val = resolve_config_pin(p, None)
                 except (KeyError, FileNotFoundError):
-                    bumped[p["name"]] = {"pin": p, "old": old_val, "new": None}
-                    continue
+                    new_val = None
                 if old_val != new_val:
+                    bumped[p["name"]] = {"pin": p, "old": old_val, "new": new_val}
+                continue
+            if p["source"]["file"].startswith("config/"):
+                for env_dir in env_dirs:
+                    old_val = previous_pin_value(p, base, env_dir)
+                    try:
+                        new_val = resolve_config_pin(p, env_dir)
+                    except (KeyError, FileNotFoundError):
+                        new_val = None
+                    if old_val != new_val:
+                        bumped[p["name"]] = {"pin": p, "old": old_val, "new": new_val}
+                        break  # one bumped env is enough — later envs cannot erase it
+            else:
+                # ArgoCD pins: raw-to-raw comparison (base file vs HEAD file,
+                # no overlay asymmetry); ancestry uses the resolved new value.
+                old_val = previous_pin_value(p, base)
+                try:
+                    new_raw = current_raw_pin_value(p)
+                    new_val = resolve_config_pin(p, env_dirs[0])
+                except (KeyError, FileNotFoundError, RuntimeError):
+                    new_raw, new_val = None, None
+                if old_val != new_raw:
                     bumped[p["name"]] = {"pin": p, "old": old_val, "new": new_val}
         if not bumped:
             continue
@@ -372,12 +399,31 @@ def main() -> int:
     return 0
 
 
-def previous_pin_value(pin: dict, base: str) -> Any:
-    """Resolve a pin's value at the base commit (from its source file)."""
+def current_raw_pin_value(pin: dict) -> Any:
+    """Resolve a pin's raw source-file value at HEAD (no env overlays) —
+    the symmetric counterpart to previous_pin_value for ArgoCD pins."""
+    source = pin["source"]
+    content = run(["git", "show", f"HEAD:{source['file']}"])
+    data = yaml.safe_load(content) or {}
+    return dig(data, source["key"])
+
+
+def previous_pin_value(pin: dict, base: str, env_dir: Path | None = None) -> Any:
+    """Resolve a pin's value at the base commit, through the SAME
+    resolution pipeline as the new value, so the P2 comparison is symmetric:
+    - config/ pins: rendered merged config at base (per env)
+    - argocd/ pins: raw values file at base (compared raw-to-raw at HEAD)
+    - inline refs: the ref itself
+    """
     source = pin.get("source", {})
     if "ref" in pin:
         return pin["ref"]
     try:
+        if env_dir is not None and source["file"].startswith("config/"):
+            merged_path = str(env_dir / "_merged_config.yaml")
+            content = run(["git", "show", f"{base}:{merged_path}"])
+            data = yaml.safe_load(content) or {}
+            return dig(data, source["key"])
         content = run(["git", "show", f"{base}:{source['file']}"])
         data = yaml.safe_load(content) or {}
         return dig(data, source["key"])
