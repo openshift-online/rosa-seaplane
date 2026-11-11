@@ -27,6 +27,7 @@
   "sre_prometheus_oidc_client_id": "",
   "sre_thanos_oidc_client_id": "",
   "environment_domain": "eph-dev0.rosa.devshift.org",
+  "dns_shard0_account_id": "ssm:///infra/us-east-1/dns00/account_id",
   "regional_id": "regional",
   "eph_prefix": "",
   "seaplane_db_instance_class": "db.t4g.medium",

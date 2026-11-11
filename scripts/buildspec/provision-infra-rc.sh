@@ -157,6 +157,28 @@ if [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
     export TF_VAR_environment_hosted_zone_id="${ENVIRONMENT_HOSTED_ZONE_ID}"
 fi
 
+# DNS shard account ID. dns.shard0_account_id (per env) is an
+# ssm:///infra/<region>/dns00/account_id reference resolved here to a 12-digit
+# ID, so the aws.dns_shard0 provider creates the zone shards and dns-zone-operator
+# role in the DNS shard account. The param lives in the RC account (written by
+# account-config), so resolve it with RC-account creds like ou-path above. A
+# set-but-unresolvable reference is fatal: the shard account is minted by
+# rosa-seaplane-internal and must exist first.
+_DNS_SHARD0_ACCOUNT_ID=$(jq -r '.dns_shard0_account_id // ""' "${DEPLOY_CONFIG_FILE}")
+if [[ "${_DNS_SHARD0_ACCOUNT_ID}" =~ ^ssm:// ]]; then
+    _DNS_SHARD0_SSM_PARAM="${_DNS_SHARD0_ACCOUNT_ID#ssm://}"
+    if ! _DNS_SHARD0_ACCOUNT_ID=$(ssm_get_param_with_fallback "${TARGET_REGION}" "${_DNS_SHARD0_SSM_PARAM}") || [ -z "${_DNS_SHARD0_ACCOUNT_ID}" ]; then
+        echo "ERROR: DNS shard account SSM parameter ${_DNS_SHARD0_SSM_PARAM} not found in the RC account (region ${TARGET_REGION})" >&2
+        echo "The DNS shard account is minted by rosa-seaplane-internal (dns_zone_shards in env.hcl); apply its account-config (writes this param) before the RC." >&2
+        exit 1
+    fi
+fi
+if [ -n "${_DNS_SHARD0_ACCOUNT_ID}" ] && [[ ! "${_DNS_SHARD0_ACCOUNT_ID}" =~ ^[0-9]{12}$ ]]; then
+    echo "ERROR: resolved dns_shard0_account_id '${_DNS_SHARD0_ACCOUNT_ID}' is not a 12-digit AWS account ID" >&2
+    exit 1
+fi
+export TF_VAR_dns_shard0_account_id="${_DNS_SHARD0_ACCOUNT_ID}"
+
 export ENVIRONMENT="${ENVIRONMENT:-staging}"
 
 # Determine terraform action

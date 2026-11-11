@@ -13,14 +13,15 @@ variable "regional_id" {
   type        = string
 }
 
-variable "regional_hosted_zone_id" {
-  description = "Route53 hosted zone ID for the regional (parent) zone. Grants read access so external-dns can discover zone shards."
-  type        = string
-}
-
 variable "zone_shard_hosted_zone_ids" {
   description = "Route53 hosted zone IDs for zone shards that operators can manage"
   type        = list(string)
+}
+
+variable "permissions_boundary_arn" {
+  description = "Permissions boundary ARN applied to the dns-zone-operator role. The dns-provisioner requires this boundary on CreateRole."
+  type        = string
+  default     = null
 }
 
 variable "region_ou_path" {

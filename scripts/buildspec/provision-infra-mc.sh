@@ -80,7 +80,9 @@ else
     _RC_CONFIG_FILE=$(config_path_for_mode regional)
     _RC_REGIONAL_ID=$(jq -r '.regional_id // "regional"' "$_RC_CONFIG_FILE" 2>/dev/null || echo "regional")
 
-    export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
+    # DNS_ZONE_OPERATOR_ROLE_ARN is read from the RC terraform output below
+    # (alongside the ZOA role ARNs), since the RC creates that role. OIDC roles are
+    # in the RC account, so derive them directly.
     export OIDC_WRITER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-writer"
     export OIDC_KEY_READER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-key-reader"
 
@@ -123,6 +125,7 @@ else
         zoa_data_access_role_arn
         zoa_access_lambda_role_arn
         zoa_lambda_ecr_url
+        dns_zone_operator_role_arn
     )
 
     # Wait up to 45 minutes (90 attempts * 30s) for all required RC outputs.
@@ -167,12 +170,16 @@ else
     TF_VAR_zoa_lambda_ecr_url=$(tf_read_output "$_RC_TF_DIR" zoa_lambda_ecr_url)
     export TF_VAR_zoa_lambda_ecr_url
 
+    # DNS zone-operator role ARN - read from RC output (the RC creates the role).
+    DNS_ZONE_OPERATOR_ROLE_ARN=$(tf_read_output "$_RC_TF_DIR" dns_zone_operator_role_arn '^arn:')
+    export DNS_ZONE_OPERATOR_ROLE_ARN
+
     require_nonempty_vars "MC RC dependency" \
         TF_VAR_oidc_cloudfront_domain TF_VAR_oidc_bucket_name \
         TF_VAR_oidc_bucket_arn TF_VAR_oidc_bucket_region \
         DNS_ZONE_OPERATOR_ROLE_ARN OIDC_WRITER_ROLE_ARN OIDC_KEY_READER_ROLE_ARN
-    validate_arn_account "DNS_ZONE_OPERATOR_ROLE_ARN" \
-        "${DNS_ZONE_OPERATOR_ROLE_ARN}" "${RESOLVED_REGIONAL_ACCOUNT_ID}"
+    # DNS_ZONE_OPERATOR_ROLE_ARN comes straight from the RC output (tf_read_output
+    # already enforced ^arn:), so no account reconstruction check is needed.
     validate_arn_account "OIDC_WRITER_ROLE_ARN" \
         "${OIDC_WRITER_ROLE_ARN}" "${RESOLVED_REGIONAL_ACCOUNT_ID}"
     validate_arn_account "OIDC_KEY_READER_ROLE_ARN" \

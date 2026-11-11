@@ -20,6 +20,9 @@ resource "aws_iam_role" "dns_zone_operator" {
   name        = "${var.regional_id}-dns-zone-operator"
   description = "Cross-account role for MC operators (external-dns, cert-manager) to manage DNS records in zone shards"
 
+  # Carry the boundary the shard account's provisioner enforces on CreateRole.
+  permissions_boundary = var.permissions_boundary_arn
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -74,12 +77,9 @@ resource "aws_iam_role_policy" "dns_zone_operator" {
         Resource = "*"
       },
       {
-        Effect = "Allow"
-        Action = ["route53:ListResourceRecordSets"]
-        Resource = concat(
-          ["arn:aws:route53:::hostedzone/${var.regional_hosted_zone_id}"],
-          [for id in var.zone_shard_hosted_zone_ids : "arn:aws:route53:::hostedzone/${id}"]
-        )
+        Effect   = "Allow"
+        Action   = ["route53:ListResourceRecordSets"]
+        Resource = [for id in var.zone_shard_hosted_zone_ids : "arn:aws:route53:::hostedzone/${id}"]
       }
     ]
   })

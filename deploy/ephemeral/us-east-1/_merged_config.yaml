@@ -66,6 +66,9 @@ dns:
   # @used-by dns.domain pipeline-provisioner-inputs/terraform.json.j2
   # @used-by dns.domain pipeline-regional-cluster-inputs/terraform.json.j2
   domain: "{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org"
+  # @doc dns.shard0_account_id Account that owns the Route53 zone shards and the dns-zone-operator role. Required for environments with DNS (environment_domain set). Set to ssm:///infra/<region>/dns00/account_id; the DNS shard account is minted by rosa-seaplane-internal. The RC buildspec resolves it to a 12-digit ID and passes it as TF_VAR_dns_shard0_account_id.
+  # @used-by dns.shard0_account_id pipeline-regional-cluster-inputs/terraform.json.j2
+  shard0_account_id: "ssm:///infra/{{ aws_region }}/dns00/account_id"
 
 cluster_naming:
   # @doc cluster_naming.rc_pattern Pattern used to derive the Regional Cluster ID, which also determines CodeBuild/CodePipeline names and the RC Terraform state key. Placeholders: {prefix} (name_prefix or eph_prefix). Changing this for an existing environment changes resource identities and state lookup; migrate those names and state deliberately.

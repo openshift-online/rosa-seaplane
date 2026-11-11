@@ -9,6 +9,10 @@ aws:
 
 dns:
   domain: int0.rosa.devshift.org
+  # Zone shards and the dns-zone-operator role live in the dedicated DNS shard
+  # account (minted by rosa-seaplane-internal via dns_zones in env.hcl). Requires
+  # the account and its /infra/<region>/dns00/account_id SSM param to exist.
+  shard0_account_id: "ssm:///infra/{{ aws_region }}/dns00/account_id"
 
 regional_cluster:
   seaplane_db_deletion_protection: false

@@ -75,7 +75,20 @@ if [[ ! "$RHOBS_API_URL" =~ ^https:// ]]; then
     exit 1
 fi
 
-export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
+# DNS_ZONE_OPERATOR_ROLE_ARN comes from the RC terraform output (the RC creates
+# the role, in the DNS shard account when configured), read with RC creds like
+# rhobs_api_url above. OIDC key reader is in the RC account, so derive it.
+DNS_ZONE_OPERATOR_ROLE_ARN=$(
+    AWS_ACCESS_KEY_ID=$(echo "$_rc_creds" | awk '{print $1}') \
+    AWS_SECRET_ACCESS_KEY=$(echo "$_rc_creds" | awk '{print $2}') \
+    AWS_SESSION_TOKEN=$(echo "$_rc_creds" | awk '{print $3}') \
+    terraform -chdir="$_RC_TF_DIR" output -raw dns_zone_operator_role_arn 2>/dev/null || echo ""
+)
+export DNS_ZONE_OPERATOR_ROLE_ARN
+if [[ ! "$DNS_ZONE_OPERATOR_ROLE_ARN" =~ ^arn: ]]; then
+    echo "ERROR: RC dns_zone_operator_role_arn output missing or invalid: ${DNS_ZONE_OPERATOR_ROLE_ARN}" >&2
+    exit 1
+fi
 export OIDC_KEY_READER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-key-reader"
 
 print_provision_param_summary "MC ArgoCD bootstrap" \

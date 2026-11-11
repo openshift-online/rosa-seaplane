@@ -201,6 +201,11 @@ output "regional_name_servers" {
 }
 
 
+output "dns_zone_operator_role_arn" {
+  description = "ARN of the dns-zone-operator role the MC operators (external-dns, cert-manager) assume for Route53 access. Created in the DNS shard account when configured, else the RC account. Consumed by the MC buildspec (same pattern as the zoa_* role ARNs)."
+  value       = var.environment_domain != null ? module.dns_zone_operator[0].role_arn : null
+}
+
 output "api_domain_name" {
   description = "Custom domain name for the API (e.g. api.us-east-1.int0.rosa.devshift.net)"
   value       = module.api_gateway.api_domain_name

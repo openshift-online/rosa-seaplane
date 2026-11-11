@@ -38,6 +38,16 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
     Version = "2012-10-17"
     Statement = concat([
       {
+        # Assume the least-privilege DNS shard provisioner to create zone shards
+        # and the dns-zone-operator role. Account is wildcarded by design: the role
+        # name is fixed and the target's trust policy (OU + pipeline principal)
+        # gates which accounts can actually be assumed into.
+        Sid      = "AssumeDnsShardProvisioner"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = "arn:aws:iam::*:role/rosa-seaplane-dns-provisioner"
+      },
+      {
         Effect = "Allow"
         Action = ["logs:CreateLogGroup"]
         Resource = [
