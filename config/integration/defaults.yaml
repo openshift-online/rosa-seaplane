@@ -17,6 +17,7 @@ dns:
 regional_cluster:
   seaplane_db_deletion_protection: false
   zoa_dynamodb_deletion_protection: false
+  enable_ephemeral_authz_tables: true
   enable_bastion: true
   enable_cloudtrail: true
   enable_api_custom_domain: true

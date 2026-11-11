@@ -107,14 +107,14 @@ worker_node_ami:
 worker_node_root_volume_size: 50
 
 regional_cluster:
-  # @doc regional_cluster.authz_tables Same-account regional authz table names, <deployment_name>-authz-*. Retained tables come from separate authz-storage state with these names unless enable_ephemeral_authz_tables. Null leaves API IAM disabled and fails apply.
+  # @doc regional_cluster.authz_tables Same-account regional authz table names, <deployment_name>-authz-*. Retained tables come from separate authz-storage state with these names unless enable_ephemeral_authz_tables. Null leaves API IAM disabled; Helm rejects it.
   # @used-by regional_cluster.authz_tables _context
   # @used-by regional_cluster.authz_tables pipeline-regional-cluster-inputs/terraform.json.j2
   authz_tables:
     policies: "{{ deployment_name }}-authz-policies"
     global: "{{ deployment_name }}-authz-global"
     regional: "{{ deployment_name }}-authz-regional"
-  # @doc regional_cluster.enable_ephemeral_authz_tables RC terraform creates authz_tables without retention, destroyed with the RC. Ephemeral environments only.
+  # @doc regional_cluster.enable_ephemeral_authz_tables RC terraform creates authz_tables without retention, destroyed with the RC. Non-production only; CI reseeds grants.
   # @used-by regional_cluster.enable_ephemeral_authz_tables pipeline-regional-cluster-inputs/terraform.json.j2
   enable_ephemeral_authz_tables: true
   # @doc regional_cluster.enable_bastion Enable bastion host for regional cluster access.

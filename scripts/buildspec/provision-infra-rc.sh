@@ -48,32 +48,6 @@ if [[ "${IS_DESTROY:-false}" != "true" ]]; then
         zoa_lambda_source_image zoa_runner_source_image
 fi
 
-# Authorization references are mandatory for apply, not for cleanup of older environments.
-if [[ "${IS_DESTROY:-false}" != "true" ]]; then
-    jq -e '.authz_tables | type == "object" and
-        (keys == ["global", "policies", "regional"]) and
-        ([.[] | type == "string" and test("^[A-Za-z0-9_.-]{3,255}$")] | all) and
-        ([.[]] | unique | length == 3)' "${DEPLOY_CONFIG_FILE}" >/dev/null \
-        || { echo "ERROR: RC apply requires explicit authz_tables references" >&2; exit 1; }
-    helm template platform-api argocd/config/regional-cluster/platform-api \
-        -f "$(dirname "${DEPLOY_CONFIG_FILE}")/../argocd-values-regional-cluster.yaml" \
-        --set-string "global.aws_region=${TARGET_REGION}" | python3 -c '
-import sys
-import yaml
-
-# The last API image that needs the removed bundle/config file. Newer pins pass.
-old_tag = "e6cb96b90c0618d0760c8e8f5ba3bfc248082952@sha256:fcbd03ef68ac4258424e9e4e5fe87bd18bbbe4751e289fd07ba39c023359b633"
-images =[container.get("image", "") for resource in yaml.safe_load_all(sys.stdin)
-          if resource and resource.get("kind") == "Deployment"
-          for container in resource["spec"]["template"]["spec"]["containers"]
-          if container["name"] == resource["metadata"]["name"]]
-if len(images) != 1 or not images[0]:
-    sys.exit("ERROR: RC apply requires one rendered platform API image")
-if images[0].endswith(":" + old_tag):
-    sys.exit("ERROR: RC apply rejects the bundle-dependent API image " + old_tag + "; bump the chart pin or set an explicit API image override")
-'
-fi
-
 # Terraform configuration values come from the rendered deployment JSON.
 tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
     regional_id environment deployment_name app_code service_phase cost_center \

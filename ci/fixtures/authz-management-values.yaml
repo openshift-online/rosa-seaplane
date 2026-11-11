@@ -1,7 +1,0 @@
-# Synthetic inputs for local tests and lint only. Never use for deployment.
-platformApi:
-  authz:
-    tables:
-      policies: synthetic-policies
-      global: synthetic-global
-      regional: synthetic-regional
