@@ -19,8 +19,9 @@ contracts for permission and API behavior.
 4. Provision `terraform/config/authz-storage` under separate retained state with
    `aws_region` and `table_names` keys `policies`, `global`, and `regional`.
    Keep the backend key stable across RC replacement and outside RC/MC destroy.
-   Ephemeral environments skip this step: `regional_cluster.enable_ephemeral_authz_tables`
-   makes the RC create unretained `<deployment_name>-authz-*` tables, destroyed with it.
+   Integration, stage, and ephemeral environments skip this step:
+   `regional_cluster.enable_ephemeral_authz_tables` makes the RC create unretained
+   `<deployment_name>-authz-*` tables, destroyed with it. CI reseeds their grants.
 5. Set these source values in `config/<environment>/defaults.yaml` or the region
    override. For ephemeral environments, use `.ephemeral-env/defaults.yaml`.
    - `regional_cluster.authz_tables` only if the provisioned tables differ from the
@@ -41,10 +42,6 @@ contracts for permission and API behavior.
 
 The API chart fails on missing table names. The API validates them at startup.
 
-RC apply requires explicit table references, a successful Helm render, and an
-API image newer than the last bundle-dependent tag. That check does not prove
-compatibility. These checks do not block environment destruction.
-
 ## Storage and runtime identity
 
 The storage root creates three ordinary regional tables with string `pk`/`sk`
@@ -62,18 +59,25 @@ The wrapper forwards `regional_cluster.authz_tables` to the API chart
 (rosa-seaplane-api `seaplane-api/charts`), which sets `AUTHZ_{POLICY,GLOBAL,REGIONAL}_TABLE`. Env changes roll the Deployment. ServiceMonitor scrapes
 port 9090 at `/metrics`.
 
-## Enroll resource accounts separately
+## Enroll AWS accounts
 
-With RC credentials, enroll both the RC and each customer resource account:
+Every AWS account that calls the API must be enrolled, including the RC's own
+account, which the e2e suites call from. With RC credentials, enroll an account:
 
 ```sh
 awscurl --service execute-api -X POST -H 'Content-Type: application/json' \
   -d '{"accountId":"<approved-12-digit-account-id>"}' "$API_URL/api/v0/accounts"
+```
+
+Unenroll it:
+
+```sh
 awscurl --service execute-api -X DELETE \
   "$API_URL/api/v0/accounts/<approved-12-digit-account-id>"
 ```
 
-Both return 204 idempotently. Enrollment grants no permissions. Ephemeral wrappers
+Both return 204 idempotently. Enrollment grants no permissions.
+Enrolling an account is separate from registering a ManagementCluster. Ephemeral wrappers
 also provide `ephemeral-post-account-shell` and `ephemeral-delete-account-shell`.
 ManagementClusters register separately through `MANAGEMENT_CLUSTERS`, delivered
 as `global.management_clusters`; the RC pipeline waits for the API.
@@ -100,7 +104,7 @@ aws dynamodb query --table-name us-east-1-authz-policies \
   --key-condition-expression pk=:pk --expression-attribute-values '{":pk":{"S":"ACCOUNT#<account-id>"}}'
 ```
 
-A personal account needs `rosa-seaplane-account-admin`, or any identity with
+A developer account needs `rosa-seaplane-account-admin`, or any identity with
 DynamoDB write access to the RC account's tables, to seed its own grants the same
 way. A broken grant is repaired the same way: delete or overwrite its rows
 directly.
@@ -109,7 +113,7 @@ directly.
 
 ```sh
 ci/run-unit-tests.sh
-make helm-lint terraform-validate
+make check-rendered-files helm-lint terraform-validate
 ```
 
 Local tests do not establish deployment readiness. Verify gateway isolation,

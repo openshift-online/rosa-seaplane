@@ -211,17 +211,23 @@ go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
 # Enrollment never supplies resource permissions. Seed grants before any lifecycle or cleanup.
-_customer_account=$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)
-if [[ ! "${_customer_account}" =~ ^[0-9]{12}$ || "${E2E_CUSTOMER_ACCOUNT_ID:-${_customer_account}}" != "${_customer_account}" ]]; then
-  echo "ERROR: E2E_CUSTOMER_ACCOUNT_ID must match the actual rrp-customer account" >&2
-  exit 1
-fi
 _rc_account=$(aws sts get-caller-identity --profile rrp-rc --query Account --output text)
 if [[ ! "${_rc_account}" =~ ^[0-9]{12}$ || "${E2E_ACCOUNT_ID:-${_rc_account}}" != "${_rc_account}" ]]; then
   echo "ERROR: E2E_ACCOUNT_ID must match the actual rrp-rc account" >&2
   exit 1
 fi
-export E2E_CUSTOMER_ACCOUNT_ID="${_customer_account}" E2E_ACCOUNT_ID="${_rc_account}"
+export E2E_ACCOUNT_ID="${_rc_account}"
+_accounts=("${_rc_account}")
+# The customer profile is optional; without it HCP suites are skipped below.
+if aws configure export-credentials --profile rrp-customer --format process &>/dev/null; then
+  _customer_account=$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)
+  if [[ ! "${_customer_account}" =~ ^[0-9]{12}$ || "${E2E_CUSTOMER_ACCOUNT_ID:-${_customer_account}}" != "${_customer_account}" ]]; then
+    echo "ERROR: E2E_CUSTOMER_ACCOUNT_ID must match the actual rrp-customer account" >&2
+    exit 1
+  fi
+  export E2E_CUSTOMER_ACCOUNT_ID="${_customer_account}"
+  _accounts+=("${_customer_account}")
+fi
 
 # Writes an account's first grants straight into the authz tables, in the API storage
 # contract format: the account-admin role may manage authz and run every resource action
@@ -243,7 +249,7 @@ seed_authz_grants() {
       | put($pt; $key; "POLICY#\($id)"; $policyRev; {ID: $id, OwnerAccountID: $a, Content: $content, Revision: $policyRev, Kind: "custom"}),
         put($gt; $key; "ATTACHMENT#\($id)"; $attachmentRev; $attachment),
         put($gt; "\($key)#ROLE#aws/\($a)/\($role)"; "ATTACHMENT#\($id)"; $attachmentRev; $attachment))
-    | {TransactItems: .}' --args $(for _ in 1 2 3 4; do cat /proc/sys/kernel/random/uuid; done))
+    | {TransactItems: .}' --args $(python3 -c 'import uuid; [print(uuid.uuid4()) for _ in range(4)]'))
   if ! output=$(AWS_PROFILE=rrp-rc aws dynamodb transact-write-items --cli-input-json "${transaction}" 2>&1); then
     [[ "${output}" == *ConditionalCheckFailed* ]] || { echo "ERROR: seeding authz grants for ${account}: ${output}" >&2; return 1; }
     echo "Authz grants for ${account} already seeded"
@@ -252,12 +258,12 @@ seed_authz_grants() {
 
 # Tables are <deployment_name>-authz-*; deployment_name equals the region outside ephemeral.
 _authz_prefix="${ZOA_DEPLOYMENT_NAME:-${AWS_DEFAULT_REGION}}"
-for _account in "${_rc_account}" "${_customer_account}"; do
+for _account in "${_accounts[@]}"; do
   AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
     -X POST -H "Content-Type: application/json" \
     -d "{\"accountId\":\"${_account}\"}" "${BASE_URL}/api/v0/accounts"
 done
-for _account in "${_rc_account}" "${_customer_account}"; do
+for _account in "${_accounts[@]}"; do
   seed_authz_grants "${_account}" "${_authz_prefix}"
 done
 

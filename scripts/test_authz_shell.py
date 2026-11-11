@@ -23,6 +23,7 @@ class ShellTests(unittest.TestCase):
         """Run the CI enrollment and seeding block with fake aws/awscurl that log every call."""
         log = Path(directory) / "calls"
         script = f"""aws() {{
+  if [[ "$1" == configure ]]; then [[ -z "${{NO_CUSTOMER:-}}" ]]; return; fi
   if [[ "$1" == sts ]]; then if [[ "$*" == *rrp-customer* ]]; then echo 222222222222; else echo 111111111111; fi; return; fi
   [[ "$1 $2 $3" == "dynamodb transact-write-items --cli-input-json" ]] || {{ echo "unexpected aws $*" >&2; return 1; }}
   printf 'seed %s %s\\n' "$AWS_PROFILE" "$(jq -c . <<<"$4")" >> "$LOG"
@@ -47,6 +48,14 @@ awscurl() {{ printf 'enroll %s\\n' "$*" >> "$LOG"; }}
                     _, profile, body = call.split(" ", 2)
                     self.assertEqual(profile, "rrp-rc")
                     self.assert_seed(json.loads(body)["TransactItems"], account, prefix)
+
+    def test_ci_skips_missing_customer_profile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, calls = self.run_ci(directory, NO_CUSTOMER="1")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('{"accountId":"111111111111"}', calls[0])
+            self.assertTrue(calls[1].startswith("seed rrp-rc "))
+            self.assertEqual(calls[2:], ["suite"])
 
     def assert_seed(self, items, account, prefix):
         """Rows must match the API storage contract exactly (see the API raw-seed contract test)."""

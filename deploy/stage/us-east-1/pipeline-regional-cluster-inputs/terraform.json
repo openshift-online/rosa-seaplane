@@ -8,7 +8,7 @@
   "image_registry_account_id": "ssm:///infra/image-registry/account_id",
   "region": "us-east-1",
   "authz_tables": {"global": "us-east-1-authz-global", "policies": "us-east-1-authz-policies", "regional": "us-east-1-authz-regional"},
-  "enable_ephemeral_authz_tables": false,
+  "enable_ephemeral_authz_tables": true,
   "deployment_name": "us-east-1",
   "alias": "regional-us-east-1",
   "enable_bastion": true,

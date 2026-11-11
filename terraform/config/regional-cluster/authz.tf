@@ -17,7 +17,7 @@ variable "authz_tables" {
 }
 
 variable "enable_ephemeral_authz_tables" {
-  description = "Create authz_tables in this RC state, destroyed with the RC. Ephemeral environments only; others use retained authz-storage."
+  description = "Create authz_tables in this RC state, destroyed with the RC. Non-production only; production uses retained authz-storage."
   type        = bool
   default     = false
   validation {
@@ -26,7 +26,7 @@ variable "enable_ephemeral_authz_tables" {
   }
 }
 
-# Ephemeral environments own disposable tables so teardown leaves nothing behind.
+# Non-production RCs own disposable tables so teardown leaves nothing behind.
 module "ephemeral_authz_tables" {
   count            = var.enable_ephemeral_authz_tables ? 1 : 0
   source           = "../../modules/authz-tables"
