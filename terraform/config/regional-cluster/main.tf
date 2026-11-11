@@ -60,15 +60,10 @@ data "aws_caller_identity" "central" {
 
 # Provider for the DNS shard account. Route53 record changes cannot cross
 # accounts, so the zone shards and the dns-zone-operator role are created in the
-# shard account by assuming a role there: the least-privilege dns-provisioner role
-# in the pipeline (central creds, which the shard account trusts), or
-# OrganizationAccountAccessRole for local dev.
+# shard account by assuming its least-privilege dns-provisioner role (the shard
+# account trusts the pipeline principals and the control admin).
 locals {
-  dns_shard0_assume_role_arn = (
-    var.dns_shard0_account_id == "" ? "" :
-    var.central_aws_profile != "" ? "arn:aws:iam::${var.dns_shard0_account_id}:role/${var.dns_shard_provisioner_role_name}" :
-    "arn:aws:iam::${var.dns_shard0_account_id}:role/OrganizationAccountAccessRole"
-  )
+  dns_shard0_assume_role_arn = var.dns_shard0_account_id != "" ? "arn:aws:iam::${var.dns_shard0_account_id}:role/${var.dns_shard_provisioner_role_name}" : ""
 }
 
 provider "aws" {
