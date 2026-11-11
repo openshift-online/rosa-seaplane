@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Fail if a wrapper chart's Chart.lock is missing, stale vs Chart.yaml
 # (name, version, and repository), missing a vendored
-# charts/<name>-<version>.tgz, or has extra archives that are not locked.
-# Offline / hermetic — does not fetch.
+# charts/<name>-<version>.tgz, or has extra archives / unpacked subcharts
+# that are not locked. Offline / hermetic — does not fetch.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,6 +35,32 @@ dep_ids() {
 }
 
 fail=0
+
+# charts/ may only contain locked <name>-<version>.tgz. Helm also loads
+# unpacked directories, so leftover dirs are undeclared subcharts.
+reject_unexpected() {
+	local dir="$1"
+	local expected="$2"
+	local path base
+	shopt -s nullglob
+	for path in "$dir"/charts/*; do
+		base="$(basename "$path")"
+		if [[ -d "$path" ]]; then
+			echo "unexpected unpacked subchart $path (vendor the tgz only)"
+			fail=1
+		elif [[ "$base" == *.tgz ]]; then
+			if ! grep -Fxq -- "$base" <<<"$expected"; then
+				echo "unexpected archive $path (not in Chart.lock)"
+				fail=1
+			fi
+		else
+			echo "unexpected file $path (charts/ may only contain locked tgz)"
+			fail=1
+		fi
+	done
+	shopt -u nullglob
+}
+
 while IFS= read -r chart; do
 	[[ -n "$chart" ]] || continue
 	dir="$(dirname "$chart")"
@@ -43,6 +69,18 @@ while IFS= read -r chart; do
 	esac
 	yaml_deps="$(dep_ids "$chart")"
 	if [[ -z "$yaml_deps" ]]; then
+		# Last dependency removed: still reject leftover lock + charts/.
+		if [[ -f "$dir/Chart.lock" ]]; then
+			lock_deps="$(dep_ids "$dir/Chart.lock")"
+			if [[ -n "$lock_deps" ]]; then
+				echo "Chart.lock is stale vs Chart.yaml: $dir"
+				echo "  Chart.yaml has no dependencies"
+				echo "  Chart.lock:"
+				echo "$lock_deps" | sed 's/^/    /'
+				fail=1
+			fi
+		fi
+		reject_unexpected "$dir" ""
 		continue
 	fi
 	if [[ ! -f "$dir/Chart.lock" ]]; then
@@ -71,15 +109,7 @@ while IFS= read -r chart; do
 		fi
 	done <<<"$lock_deps"
 
-	shopt -s nullglob
-	for archive in "$dir"/charts/*.tgz; do
-		base="$(basename "$archive")"
-		if ! grep -Fxq -- "$base" <<<"$expected"; then
-			echo "unexpected archive $archive (not in Chart.lock)"
-			fail=1
-		fi
-	done
-	shopt -u nullglob
+	reject_unexpected "$dir" "$expected"
 done <<<"$chart_files"
 
 if ((fail)); then
