@@ -1,0 +1,83 @@
+# =============================================================================
+# E2E suite pin registry — single source of truth for "which commit of each
+# suite repo is deployed".
+#
+# Consumed by:
+#   - scripts/check_e2e_pins.py (ci/check-e2e-pins.sh) — presubmit enforcing
+#     the pin rules below
+#   - the rosa-hyperfleet-e2e-env step (ROSAENG-75288) — resolves suite repo
+#     checkouts for the parallel e2e runner
+#
+# Pin rules (enforced by check-e2e-pins):
+#   P1 resolved like the deployment: config keys are read from the rendered
+#      deploy/<env>/<region>/_merged_config.yaml; ArgoCD values are the base
+#      values.yaml overlaid by deploy/<env>/<region>/argocd-values-*.yaml
+#      (env layer wins).
+#   P2 newest-pin-wins: a pin may only be bumped to a commit that is a
+#      descendant of the previous value (single line of history), and every
+#      other pin of the same suite must be unchanged in the same change.
+#   P3 full 40-char SHAs (optionally @sha256:<digest>). Short tags and branch
+#      names fail the check — unless an entry sets `enforce: false`, which
+#      reports a warning instead. Use temporarily for legacy pins and remove
+#      as soon as they are re-pinned.
+# =============================================================================
+
+suites:
+  api:
+    repo: https://github.com/openshift-online/rosa-seaplane-api.git
+    pins:
+      - name: platform-api-image-tag
+        doc: Container image tag of the platform-api deployment (SHA or
+          SHA@sha256:<digest> form, as produced by Konflux).
+        source:
+          file: argocd/config/regional-cluster/platform-api/values.yaml
+          key: platformApi.app.image.tag
+      - name: seaplane-operator-chart-revision
+        doc: ArgoCD Application targetRevision of the seaplane-operator chart.
+        source:
+          file: argocd/config/regional-cluster/hyperfleet/values.yaml
+          key: seaplane.source.targetRevision
+      - name: seaplane-operator-image-tag
+        doc: Container image tag of the seaplane-operator deployment (SHA or
+          SHA@sha256:<digest> form, as produced by Konflux).
+        source:
+          file: argocd/config/regional-cluster/hyperfleet/values.yaml
+          key: seaplane.helmValues.image.tag
+
+  zoa:
+    repo: https://github.com/openshift-online/rosa-seaplane-zoa.git
+    pins:
+      - name: zoa-lambda-image-tag
+        doc: ZOA Lambda image tag (all three zoa images are bumped together).
+        source:
+          file: config/defaults.yaml
+          key: regional_cluster.zoa_lambda_image_tag
+        # TODO: "43aeef8" is a short Konflux build tag that is not a git
+        # commit prefix — re-pin with a full-SHA-tagged build and remove
+        # enforce: false.
+        enforce: false
+      - name: zoa-runner-image-tag
+        doc: ZOA Runner image tag.
+        source:
+          file: config/defaults.yaml
+          key: regional_cluster.zoa_runner_image_tag
+        enforce: false # TODO: same as zoa-lambda-image-tag
+      - name: zoa-boundary-image-tag
+        doc: ZOA Boundary (ECS) image tag.
+        source:
+          file: config/defaults.yaml
+          key: regional_cluster.zoa_boundary_image_tag
+        enforce: false # TODO: same as zoa-lambda-image-tag
+
+  rosa-cli:
+    repo: https://github.com/openshift/rosa.git
+    pins:
+      - name: rosa-cli-ref
+        doc: >
+          Ref of the rosa repo the e2e suite builds its CLI from. Legacy
+          value lives in ci/e2e-tests.sh (ROSA_REPO_BRANCH); the registry
+          value wins once the new e2e flow consumes it.
+        ref: seaplane-v2
+        # TODO: pin by full SHA once the new runner consumes this registry
+        # (ROSAENG-75288/75289); the branch pin is legacy.
+        enforce: false
