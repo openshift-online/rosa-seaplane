@@ -186,10 +186,15 @@ def check_pin_format(value: Any, pin: dict, suite: str, enforce: bool) -> list[s
 
 
 def git_merge_base_with_default() -> str | None:
-    """Base commit to diff against: merge-base with the default branch."""
-    default = "origin/main"
-    if run(["git", "rev-parse", "--verify", default], check=False):
-        return run(["git", "merge-base", "HEAD", default])
+    """Base commit to diff against: merge-base with the default branch.
+
+    Prefers origin/main; falls back to the local main branch for CI
+    checkouts (e.g. ci-operator's src container) that may not carry the
+    remote-tracking ref.
+    """
+    for ref in ("origin/main", "main"):
+        if run(["git", "rev-parse", "--verify", ref], check=False):
+            return run(["git", "merge-base", "HEAD", ref])
     return None
 
 
