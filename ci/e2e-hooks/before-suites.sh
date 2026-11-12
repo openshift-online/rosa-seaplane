@@ -24,7 +24,10 @@
 #     E2E_DUMP_ENV, PRE_CLEANUP_HOOK (env-dump command for suites/back-compat)
 #   State for after-suites.sh (exported, runner-shell local):
 #     _E2E_HOOKS_AM_STARTED     "true" when this hook started the tunnel
-#     _E2E_HOOKS_ALLOWLISTED    "true" when the customer account was allowlisted
+#     E2E_CUSTOMER_ALLOWLISTED  "true"/"false" — suites that need the customer
+#                              account fail fast on false instead of failing
+#                              later with an unclear error
+#     _E2E_HOOKS_ALLOWLISTED    "true" when the customer account was allowlisted (legacy alias)
 #
 # Follow-up (not yet implemented): generic cluster access exports
 # (E2E_RC_KUBECONFIG, E2E_MC_KUBECONFIG, E2E_PORT_FORWARD). Kubeconfigs carry
@@ -72,6 +75,7 @@ export E2E_ACCOUNT_ID
 # Customer credentials are optional: suites that need them (rosa-cli, sdk)
 # degrade gracefully when absent. Subprocesses use credential_process
 # auto-refresh, avoiding the 15-minute STS TTL cliff.
+export E2E_CUSTOMER_ALLOWLISTED=false
 export _E2E_HOOKS_ALLOWLISTED=false
 if aws configure export-credentials --profile rrp-customer --format process &>/dev/null; then
   export CUSTOMER_AWS_PROFILE="rrp-customer"
@@ -92,6 +96,7 @@ if aws configure export-credentials --profile rrp-customer --format process &>/d
       -X POST -H "Content-Type: application/json" \
       -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
       "${BASE_URL}/api/v0/accounts"; then
+      export E2E_CUSTOMER_ALLOWLISTED=true
       export _E2E_HOOKS_ALLOWLISTED=true
     else
       echo "ERROR: allowlisting customer account failed — environment not ready" >&2
@@ -148,10 +153,17 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
       # no-op there.
       _e2e_hooks_prior_exit_trap_cmd="${_AM_PRIOR_EXIT_TRAP:-}"
       _e2e_hooks_am_exit() {
+        # Preserve the runner's exit status: the cleanup and the prior trap
+        # must not clobber $? (a failing cleanup or `|| true` would turn an
+        # exit 7 into 0 for the prior trap and the script's final status).
+        local rc=$?
         cleanup_alertmanager_forward || true
         if [[ -n "${_e2e_hooks_prior_exit_trap_cmd}" ]]; then
+          (exit "${rc}") # restore $? for the prior trap
           eval "${_e2e_hooks_prior_exit_trap_cmd}"
         fi
+        (exit "${rc}") # and for the shell's final exit status
+        return 0
       }
       trap '_e2e_hooks_am_exit' EXIT
       echo "Silence e2e specs enabled (E2E_ALERTMANAGER_URL=${E2E_ALERTMANAGER_URL})"
