@@ -16,12 +16,14 @@ E2E_PIN_ARGS=""
 # escape hatch).
 if [[ -n "${PULL_NUMBER:-}" && -n "${REPO_OWNER:-}" && -n "${REPO_NAME:-}" ]]; then
   # Prow injects these vars; use the GitHub API (unauthenticated —
-  # public repo, label list is small).
+  # public repo, label list is small). Print one label per line and
+  # match the COMPLETE line (grep -Fx): hyphens are not special, so a
+  # label like "do-not-skip-pin-ancestry" cannot enable the bypass.
   labels=$(curl -fsSL \
     "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/issues/${PULL_NUMBER}/labels" \
-    2>/dev/null | python3 -c "import json,sys; print(' '.join(l['name'] for l in json.load(sys.stdin)))" \
+    2>/dev/null | python3 -c "import json,sys; print('\n'.join(l['name'] for l in json.load(sys.stdin)))" \
     2>/dev/null || true)
-  if echo "$labels" | grep -qw "skip-pin-ancestry"; then
+  if echo "${labels}" | grep -Fxq "skip-pin-ancestry"; then
     echo "⚠️  skip-pin-ancestry label detected — skipping P2 ancestry check"
     E2E_PIN_ARGS="--skip-ancestry"
   fi
