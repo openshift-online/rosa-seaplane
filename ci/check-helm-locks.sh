@@ -36,6 +36,7 @@ dep_ids() {
 
 fail=0
 chart_fail=0
+chart_skip=0
 
 mark_failure() {
 	fail=1
@@ -45,6 +46,8 @@ mark_failure() {
 report_chart() {
 	if ((chart_fail)); then
 		printf 'FAIL: %s\n' "$1"
+	elif ((chart_skip)); then
+		printf 'OK: %s (inline chart; Chart.lock not required)\n' "$1"
 	else
 		printf 'OK: %s\n' "$1"
 	fi
@@ -78,13 +81,18 @@ reject_unexpected() {
 while IFS= read -r chart; do
 	[[ -n "$chart" ]] || continue
 	dir="$(dirname "$chart")"
+	display_chart="${chart#"$root"/}"
 	case "$dir" in
-	*/upstream | */jetstack-chart | */cert-manager/upstream) continue ;;
+	*/upstream | */jetstack-chart | */cert-manager/upstream)
+		printf 'SKIP: %s (upstream/submodule chart source)\n' "$display_chart"
+		continue
+		;;
 	esac
 	chart_fail=0
-	display_chart="${chart#"$root"/}"
+	chart_skip=0
 	yaml_deps="$(dep_ids "$chart")"
 	if [[ -z "$yaml_deps" ]]; then
+		chart_skip=1
 		# Last dependency removed: still reject leftover lock + charts/.
 		if [[ -f "$dir/Chart.lock" ]]; then
 			lock_deps="$(dep_ids "$dir/Chart.lock")"
