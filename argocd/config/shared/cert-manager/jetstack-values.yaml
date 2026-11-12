@@ -1,4 +1,4 @@
-# Values for the Jetstack chart (git submodule upstream @ v1.19.2).
+# Values for the OpenShift cert-manager chart (submodule @ v1.19.6).
 # Container command is not a chart value; see patches/.
 
 crds:
@@ -17,7 +17,7 @@ global:
     - name: pull-secret
 
 # Red Hat ships controller, webhook, and cainjector in one image (no ENTRYPOINT).
-# Pin the 1.19 stream to stay aligned with chart v1.19.2. Digest overrides tag.
+# Pin the 1.19 stream to the RH image that matches chart v1.19.6. Digest overrides tag.
 # Catalog: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9:v1.19.6-1
 image:
   repository: registry.redhat.io/cert-manager/jetstack-cert-manager-rhel9
