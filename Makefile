@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-submodule-fetch-config check-helm-locks pre-push render
+.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint helm-deps check-rendered-files promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-submodule-fetch-config check-helm-locks pre-push render
 
 # =============================================================================
 # Local tool management
@@ -147,6 +147,12 @@ helm-lint: ## Lint all Helm charts
 
 check-helm-locks: $(YQ) ## Verify Chart.lock matches Chart.yaml and vendored tgz exist
 	@YQ="$(YQ)" ./ci/check-helm-locks.sh
+
+# Needs network. After bumping a dependency version in Chart.yaml:
+#   make helm-deps CHART=argocd/config/shared/argocd
+# then commit Chart.lock and charts/*.tgz. MintMaker is not wired to this yet.
+helm-deps: $(YQ) ## Refresh Chart.lock and vendored tgz from Chart.yaml
+	@YQ="$(YQ)" ./ci/update-helm-locks.sh
 
 check-rendered-files: ## Verify deploy/ is up to date with config.yaml
 	@echo "🔍 Rendering deploy/ from config.yaml..."

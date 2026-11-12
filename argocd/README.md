@@ -82,6 +82,14 @@ argocd/config/regional-cluster/my-rc-app/
 
 The ApplicationSet will automatically discover and deploy new charts. Run `./scripts/render.py` to generate the required configuration files.
 
+Wrapper charts with `dependencies:` vendor `Chart.lock` and `charts/<name>-<version>.tgz` so ArgoCD does not re-fetch at sync. After changing a dependency version in `Chart.yaml`:
+
+```bash
+make helm-deps CHART=argocd/config/shared/argocd   # or make helm-deps for every wrapper
+```
+
+Commit the lock and tgz. `make check-helm-locks` (also in `make pre-push`) fails if they drift. Cert-manager is a git submodule, not this Helm lock.
+
 ## How It Works
 
 ArgoCD uses a **Matrix Generator** pattern combining a Git Generator (discovers Helm charts) with a Cluster Generator (reads cluster identity). Charts are sourced from either a pinned commit hash or the current git revision, while rendered values always come from the latest revision.

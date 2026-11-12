@@ -113,7 +113,7 @@ while IFS= read -r chart; do
 done <<<"$chart_files"
 
 if ((fail)); then
-	echo "Helm deps must be vendored (matching Chart.lock + charts/<name>-<version>.tgz). Run: helm dependency update <chart>"
+	echo "Helm deps must be vendored (matching Chart.lock + charts/<name>-<version>.tgz). Run: make helm-deps"
 	exit 1
 fi
 echo "Helm Chart.lock matches Chart.yaml and vendored tgz are present."
