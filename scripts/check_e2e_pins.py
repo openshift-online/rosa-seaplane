@@ -443,7 +443,11 @@ def previous_pin_value(pin: dict, base: str, env_dir: Path | None = None) -> Any
         return pin["ref"]
     try:
         if env_dir is not None and source["file"].startswith("config/"):
-            merged_path = str(env_dir / "_merged_config.yaml")
+            # git resolves paths after BASE: inside the commit tree, so the
+            # path must be repository-relative POSIX — env_dir is absolute
+            # (derived from REPO_ROOT) and would never match.
+            merged_path = env_dir.relative_to(REPO_ROOT).as_posix() \
+                + "/_merged_config.yaml"
             content = run(["git", "show", f"{base}:{merged_path}"])
             data = yaml.safe_load(content) or {}
             return dig(data, source["key"])
