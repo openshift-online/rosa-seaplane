@@ -96,8 +96,9 @@ region). Rows follow the API storage contract. For each account,
 - `e2e-all-actions`: every resource action except on `authz-deny-probe` tagged
   resources, so the monitoring suite can test denial.
 
-Fixed IDs and `attribute_not_exists` make reruns a no-op. Changing a seeded grant
-means deleting it through the management API first. Inspect the rows:
+Each policy and each attachment is a separate conditional write with a fixed ID,
+so a rerun skips existing records and recreates deleted ones. Changing a seeded
+grant means deleting it through the management API first. Inspect the rows:
 
 ```sh
 aws dynamodb query --table-name us-east-1-authz-policies \

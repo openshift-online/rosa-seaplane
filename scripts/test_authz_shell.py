@@ -43,19 +43,28 @@ awscurl() {{ printf 'enroll %s\\n' "$*" >> "$LOG"; }}
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn('{"accountId":"111111111111"}', calls[0])
                 self.assertIn('{"accountId":"222222222222"}', calls[1])
-                self.assertEqual(calls[4], "suite")
-                for call, account in zip(calls[2:4], ("111111111111", "222222222222")):
-                    _, profile, body = call.split(" ", 2)
-                    self.assertEqual(profile, "rrp-rc")
-                    self.assert_seed(json.loads(body)["TransactItems"], account, prefix)
+                self.assertEqual(calls[10], "suite")
+                for index, account in enumerate(("111111111111", "222222222222")):
+                    self.assert_seed(self.seed_transactions(calls[2 + 4 * index:6 + 4 * index]), account, prefix)
 
     def test_ci_skips_missing_customer_profile(self):
         with tempfile.TemporaryDirectory() as directory:
             result, calls = self.run_ci(directory, NO_CUSTOMER="1")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('{"accountId":"111111111111"}', calls[0])
-            self.assertTrue(calls[1].startswith("seed rrp-rc "))
-            self.assertEqual(calls[2:], ["suite"])
+            self.assert_seed(self.seed_transactions(calls[1:5]), "111111111111", "us-east-1")
+            self.assertEqual(calls[5:], ["suite"])
+
+    def seed_transactions(self, calls):
+        """Return one account's seed rows, checking each record is its own rrp-rc transaction."""
+        transactions = []
+        for call in calls:
+            kind, profile, body = call.split(" ", 2)
+            self.assertEqual((kind, profile), ("seed", "rrp-rc"))
+            transactions.append(json.loads(body)["TransactItems"])
+        # A policy, then its attachment's management and lookup rows, per grant.
+        self.assertEqual([len(items) for items in transactions], [1, 2, 1, 2])
+        return [item for items in transactions for item in items]
 
     def assert_seed(self, items, account, prefix):
         """Rows must match the API storage contract exactly (see the API raw-seed contract test)."""
@@ -100,6 +109,17 @@ awscurl() {{ printf 'enroll %s\\n' "$*" >> "$LOG"; }}
                     self.assertIn("already seeded", result.stdout)
                 else:
                     self.assertIn("AccessDeniedException", result.stderr)
+
+    def test_ci_seeding_repairs_partial_grants(self):
+        """An existing record must not stop the account's other records from being written."""
+        transact = ('if [[ "$4" == *POLICY#e2e-policy-admin* ]]; then '
+                    "echo 'TransactionCanceledException: [ConditionalCheckFailed]' >&2; return 255; fi")
+        with tempfile.TemporaryDirectory() as directory:
+            result, calls = self.run_ci(directory, transact=transact)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(sum(call.startswith("seed ") for call in calls), 8)
+            self.assertEqual(result.stdout.count("POLICY#e2e-policy-admin for"), 2)
+            self.assertEqual(calls[-1], "suite")
 
     def test_ci_rejects_customer_account_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
