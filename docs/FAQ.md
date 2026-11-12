@@ -1,3 +1,7 @@
+### Why is Argo CD not using `argocd-rhel9`?
+
+OpenShift GitOps 1.21 still ships Argo CD **3.4.3**. The wrapper chart (`argo-cd` 10.11.6) ships **v3.5.6**. That is not a tag swap. See [Argo CD Red Hat images](argocd-redhat-images.md).
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

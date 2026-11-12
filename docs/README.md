@@ -61,6 +61,7 @@ Detailed architecture and rationale for key technical decisions:
 | [Adding Alerting Rules](adding-alerting-rules.md)                    | Platform alerting and recording rules          |
 | [Platform API Authorization](platform-api-authorization.md)          | Configure Cedar authorization for Platform API |
 | [Konflux onboarding](konflux-onboarding.md)                          | Onboard Seaplane images to Konflux CI/CD       |
+| [Argo CD Red Hat images](argocd-redhat-images.md)                    | Why GitOps argocd-rhel9 is not pinned yet      |
 
 ### Reference
 

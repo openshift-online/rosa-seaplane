@@ -1,5 +1,9 @@
 # Direct ArgoCD configuration
-# This section will be passed to the upstream ArgoCD chart
+# This section will be passed to the upstream ArgoCD chart.
+#
+# ROSAENG-67992: do not pin registry.redhat.io/openshift-gitops-1/argocd-rhel9.
+# Chart 10.11.6 is Argo CD v3.5.6; newest GitOps operand is Argo CD 3.4.3.
+# See docs/argocd-redhat-images.md. GitOps operator is not installed on EKS.
 argo-cd:
   # High Availability configuration
   ha:
