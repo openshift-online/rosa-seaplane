@@ -20,7 +20,8 @@
   "zoa_lambda_worker_concurrency": {{ regional_cluster.zoa_lambda_worker_concurrency | tojson }},
   "zoa_deployment_name": {{ deployment_name | tojson }},
   "worker_node_ami_id": {% if worker_node_ami %}{{ worker_node_ami.id | tojson }}{% else %}""{% endif %},
-  "worker_node_root_volume_size": {{ worker_node_root_volume_size | default(50) | tojson }}
+  "worker_node_root_volume_size": {{ worker_node_root_volume_size | default(50) | tojson }},
+  "hcp_slot_count": {{ management_cluster_defaults.hcp_slot_count | tojson }}
 {%- if eph_prefix | default('', true) %},
   "eph_prefix": {{ eph_prefix | tojson }}
 {%- endif %}

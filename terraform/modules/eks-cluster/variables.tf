@@ -36,6 +36,12 @@ variable "private_subnet_ids" {
   type        = list(string)
 }
 
+variable "control_plane_subnet_ids" {
+  description = "Subnet IDs for the EKS control plane network interfaces. Empty uses private_subnet_ids."
+  type        = list(string)
+  default     = []
+}
+
 variable "cluster_security_group_id" {
   description = "Pre-created security group ID for EKS cluster control plane"
   type        = string
@@ -68,3 +74,13 @@ variable "worker_node_root_volume_size" {
   default     = 50
 }
 
+
+# =============================================================================
+# Hosted control plane (HCP) slots (management clusters only)
+# =============================================================================
+
+variable "hcp_slot_subnet_arns" {
+  description = "Subnet ARNs of each HCP slot, keyed by slot number (vpc module output). Each slot gets its own node role and instance profile, scoped to its subnets. Empty (default) creates none."
+  type        = map(list(string))
+  default     = {}
+}

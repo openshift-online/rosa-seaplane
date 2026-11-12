@@ -1,0 +1,130 @@
+{{- $clusterName := required "global.cluster_name must be set via ApplicationSet valuesObject" .Values.global.cluster_name -}}
+{{- $cfg := .Values.hcpSlots -}}
+{{- /* Slots are numbered from 1, matching Terraform and the Seaplane Operator. */}}
+{{- range $i := until (int $cfg.count) }}
+{{- $slot := printf "%02d" (add $i 1) }}
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: hcp-slot-{{ $slot }}
+  annotations:
+    # Karpenter CRD may not exist yet when ArgoCD dry-runs this resource
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  # Karpenter alias doesn't support FIPS variants: https://github.com/aws/karpenter-provider-aws/issues/8198
+  amiFamily: {{ if $cfg.ami }}{{ $cfg.ami.family }}{{ else }}Bottlerocket{{ end }}
+  amiSelectorTerms:
+    {{- if $cfg.ami }}
+    - id: {{ $cfg.ami.id }}
+    {{- else }}
+    - name: bottlerocket-aws-k8s-1.34-fips-x86_64-*
+    {{- end }}
+  # Per-slot node role (Terraform): its CNI permissions only work on this
+  # slot's subnets and network interfaces.
+  instanceProfile: {{ $clusterName }}-hcp-slot-{{ $slot }}-node
+  # Only this slot's subnets, one per AZ, behind the slot's NACL.
+  subnetSelectorTerms:
+    - tags:
+        seaplane.io/management-cluster: {{ $clusterName }}
+        seaplane.io/hcp-slot: {{ $slot | quote }}
+  securityGroupSelectorTerms:
+    - tags:
+        aws:eks:cluster-name: {{ $clusterName }}
+  # Hop limit 1 keeps pods without host networking away from the node's credentials.
+  metadataOptions:
+    httpTokens: required
+    httpPutResponseHopLimit: 1
+  {{- if $cfg.ami }}
+  # Same as the platform EC2NodeClass (shared/eks-nodepool), which explains both:
+  # the BIFROST-1420 catalog image policy workaround (the OLM catalogs run in
+  # control plane namespaces) and the explicit root device for a pinned AMI.
+  userData: |
+    MIME-Version: 1.0
+    Content-Type: multipart/mixed; boundary="//"
+
+    --//
+    Content-Type: text/x-shellscript
+
+    #!/usr/bin/env bash
+    set -euo pipefail
+    python3 - <<'PY'
+    import json
+    p = "/etc/containers/policy.json"
+    d = json.load(open(p))
+    d.setdefault("transports", {}).setdefault("docker", {})
+    for r in ("registry.redhat.io/redhat/certified-operator-index",
+              "registry.redhat.io/redhat/community-operator-index",
+              "registry.redhat.io/redhat/redhat-marketplace-index"):
+        d["transports"]["docker"][r] = [{"type": "insecureAcceptAnything"}]
+    json.dump(d, open(p, "w"), indent=2)
+    PY
+    systemctl restart crio 2>/dev/null || true
+    --//--
+  blockDeviceMappings:
+    - deviceName: /dev/sda1
+      rootVolume: true
+      ebs:
+        volumeSize: {{ $cfg.rootVolumeSize | default "50Gi" }}
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+  {{- end }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: hcp-slot-{{ $slot }}
+  annotations:
+    # Karpenter CRD may not exist yet when ArgoCD dry-runs this resource
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  template:
+    metadata:
+      labels:
+        hypershift.openshift.io/control-plane: "true"
+        seaplane.io/hcp-slot: {{ $slot | quote }}
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: hcp-slot-{{ $slot }}
+      # Only control plane pods tolerate this; platform pods stay off.
+      taints:
+        - key: hypershift.openshift.io/control-plane
+          value: "true"
+          effect: NoSchedule
+      expireAfter: {{ $cfg.expireAfter }}
+      requirements:
+        # Karpenter sets this label on launch from the value the pending pods
+        # select (the HCP namespace), so the router NLB can target only the
+        # HCP's nodes and a new HCP in this slot never uses a previous one's nodes.
+        - key: hypershift.openshift.io/cluster
+          operator: Exists
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values:
+            - {{ $cfg.capacityType }}
+        - key: kubernetes.io/arch
+          operator: In
+          values:
+            - {{ $cfg.arch }}
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            {{- range $family := $cfg.instanceFamilies }}
+            {{- range $size := $cfg.instanceSizes }}
+            - {{ $family }}.{{ $size }}
+            {{- end }}
+            {{- end }}
+  limits:
+    cpu: {{ $cfg.limits.cpu | quote }}
+    memory: {{ $cfg.limits.memory }}
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: {{ $cfg.disruption.consolidateAfter }}
+    budgets:
+      # One node at a time, for any reason (including underutilized repacking,
+      # which moves etcd members — so never more than one slot node at once).
+      - nodes: "1"
+---
+{{- end }}

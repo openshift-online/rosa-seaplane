@@ -12,6 +12,9 @@ spec:
         group: karpenter.k8s.aws
         kind: EC2NodeClass
         name: workloads
+      {{- with .Values.eksNodePool.expireAfter }}
+      expireAfter: {{ . }}
+      {{- end }}
       requirements:
         - key: karpenter.sh/capacity-type
           operator: In

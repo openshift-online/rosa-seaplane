@@ -76,3 +76,5 @@ applications:
 management_cluster_defaults:
   enable_bastion: true
   node_instance_families: ["m8i-flex", "m7i-flex"]
+  # A few HCP slots keep ephemeral provisioning fast and quota-light.
+  hcp_slot_count: 4

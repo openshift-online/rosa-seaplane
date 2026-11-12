@@ -1,0 +1,56 @@
+# HCP slots: one EC2NodeClass per hosted control plane slot and one NodePool per slot, named
+# hcp-slot-<NN>. A slot's subnets, NACL and node IAM role are created by Terraform
+# (terraform/modules/hcp-slots); the seaplane-operator assigns one
+# HostedCluster per slot and selects the slot in the HostedCluster's
+# nodeSelector. The slot count must match Terraform's.
+
+hcpSlots:
+  # Number of slots. 0 renders nothing.
+  count: 0
+
+  instanceFamilies:
+    - m8i
+    - m7i
+  # Small HCPs fit on large nodes; 8xlarge fits a kube-apiserver or etcd pod at
+  # its maxAllowed (hypershift chart, controlPlaneAutoscaling) next to the
+  # DaemonSets. Keep the largest size in step with those maxAllowed values.
+  instanceSizes:
+    - large
+    - xlarge
+    - 2xlarge
+    - 4xlarge
+    - 8xlarge
+  capacityType: on-demand
+  arch: amd64
+
+  # Pin a specific AMI ({family, id}); null uses the Bottlerocket FIPS name
+  # selector, like the platform NodePool (shared/eks-nodepool).
+  ami: null
+  rootVolumeSize: 50Gi
+
+  # Per slot: what the control plane needs at its maxAllowed (three
+  # kube-apiserver and three etcd replicas at 14 CPU / 56Gi, room for the other
+  # workloads and the capacity buffer) plus one replacement node, so it never
+  # waits on the limit, while a runaway recommendation still can't run up a
+  # slot's node count or IPs. Karpenter counts node capacity, not requests.
+  limits:
+    cpu: "160"
+    memory: 640Gi
+
+  # Nodes are replaced after this lifetime.
+  expireAfter: 504h
+
+  disruption:
+    # Empty or underutilized nodes are consolidated after they've been in that
+    # state this long. Underutilized repacking moves etcd members, but the
+    # budget below caps it at one slot node at a time.
+    consolidateAfter: 15m
+
+  # Pods in a slotted control plane namespace must select their own cluster and
+  # the namespace's slot (templates/10-guardrail.yaml).
+  guardrail:
+    validationActions:
+      - Deny
+
+global:
+  cluster_name: ""

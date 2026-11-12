@@ -1,0 +1,10 @@
+apiVersion: v2
+name: hcp-slots
+description: Per-slot Karpenter EC2NodeClasses and NodePools that give every hosted control plane its own nodes and subnets
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - karpenter
+  - hypershift
+  - isolation
