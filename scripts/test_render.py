@@ -2804,7 +2804,7 @@ class TestPlatformAPIChartWrapper:
         app = _resource(resources, "Application", "platform-api")
         source = app["spec"]["source"]
         assert source["repoURL"] == "https://github.com/openshift-online/rosa-seaplane-api.git"
-        assert source["path"] == "platform-api/charts"
+        assert source["path"] == "seaplane-api/charts"
         revision = source["targetRevision"]
         assert len(revision) == 40 and set(revision) <= set("0123456789abcdef")
         assert app["spec"]["destination"]["namespace"] == "platform-api"
