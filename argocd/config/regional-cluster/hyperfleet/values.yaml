@@ -9,7 +9,7 @@ seaplane:
 
   source:
     repoURL: https://github.com/openshift-online/rosa-seaplane-api.git
-    targetRevision: f59b0034c13cf39d506e2ead73ebd0b5cd42cd1e
+    targetRevision: aa468081b3e0148fccfb173dbf94a973da572ecf
     path: seaplane-operator/charts
 
   syncPolicy:
@@ -20,7 +20,7 @@ seaplane:
   helmValues:
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-operator
-      tag: "e6cb96b90c0618d0760c8e8f5ba3bfc248082952@sha256:ecbc10e6618c4bc40ee0b641f99c7cab34977f272dd1ce246e7f96620034fb00"
+      tag: "aa468081b3e0148fccfb173dbf94a973da572ecf@sha256:339a450cf31ec048ebf61312ce102ae9cdbbb35552a183c911be70e590eda9f4"
       pullPolicy: Always
 
     replicaCount: 2
