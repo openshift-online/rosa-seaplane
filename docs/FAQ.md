@@ -1,3 +1,7 @@
+### Why does cert-manager use kustomize command patches?
+
+The operand chart is [`openshift/cert-manager`](https://github.com/openshift/cert-manager) @ **v1.19.6**, matching `jetstack-cert-manager-rhel9:v1.19.6-1`. That chart is still the upstream templates (args, no command). The RH image has no ENTRYPOINT, so kustomize sets `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

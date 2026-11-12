@@ -1,5 +1,5 @@
 apiVersion: v2
 name: cert-manager
-description: ClusterIssuer and pull-secret for Jetstack cert-manager
+description: ClusterIssuer and pull-secret for OpenShift cert-manager
 type: application
 version: 0.1.0

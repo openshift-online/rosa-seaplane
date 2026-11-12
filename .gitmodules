@@ -1,6 +1,6 @@
 [submodule "argocd/config/management-cluster/cert-manager/upstream"]
 	path = argocd/config/shared/cert-manager/upstream
-	url = https://github.com/cert-manager/cert-manager.git
+	url = https://github.com/openshift/cert-manager.git
 	shallow = true
 	# Required for Prow CI: without it, a PR that moves the pinned commit fails
 	# clonerefs' checkout. See "Checkout and Submodules" in ci/README.md, and

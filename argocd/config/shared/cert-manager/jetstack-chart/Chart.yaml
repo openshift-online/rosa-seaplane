@@ -17,9 +17,9 @@ maintainers:
     email: cert-manager-maintainers@googlegroups.com
     url: https://cert-manager.io
 sources:
-  - https://github.com/cert-manager/cert-manager
+  - https://github.com/openshift/cert-manager
 kubeVersion: ">= 1.22.0-0"
 # The submodule ships Chart.template.yaml (version v0.0.0). This file is the
-# packaged metadata for tag v1.19.2 so helmCharts can inflate the git tree.
-version: v1.19.2
-appVersion: v1.19.2
+# packaged metadata for tag v1.19.6 so helmCharts can inflate the git tree.
+version: v1.19.6
+appVersion: v1.19.6
