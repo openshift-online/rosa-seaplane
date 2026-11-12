@@ -95,7 +95,7 @@ terraform-init:
 	@echo "🔧 Initializing Terraform configurations..."
 	@echo "$(TERRAFORM_ROOT_DIRS)" | tr ' ' '\n' | xargs -P 1 -I{} sh -c ' \
 		echo "   Initializing $$1"; \
-		if ! terraform -chdir=$$1 init -backend=false; then \
+		if ! terraform -chdir=$$1 init -backend=false -upgrade; then \
 			echo "   ❌ Init failed in $$1"; \
 			exit 1; \
 		fi \
