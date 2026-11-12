@@ -2,6 +2,10 @@
 
 The operand chart is [`openshift/cert-manager`](https://github.com/openshift/cert-manager) @ **v1.19.6**, matching `jetstack-cert-manager-rhel9:v1.19.6-1`. That chart is still the upstream templates (args, no command). The RH image has no ENTRYPOINT, so kustomize sets `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
 
+### Why is Argo CD on GitOps images with argo-helm 10.9.6?
+
+There is no GitOps Helm chart for EKS. GitOps **1.22** is Argo CD **3.5.3**; argo-helm **10.9.6** is that `appVersion`. Chart 10.11.6 is **v3.5.6** and is not a tag swap. Redis stays community (`redis-ha`). See [Argo CD Red Hat images](argocd-redhat-images.md).
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

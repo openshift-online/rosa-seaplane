@@ -135,6 +135,16 @@ resource "aws_ecs_task_definition" "bootstrap" {
             # Create argocd namespace
             kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
+            # registry.redhat.io pull secret before Helm installs Argo CD images.
+            aws ssm get-parameter --name /infra/pull-secret --with-decryption \
+              --query Parameter.Value --output text > /tmp/dockerconfigjson
+            kubectl create secret generic pull-secret \
+              --namespace argocd \
+              --type=kubernetes.io/dockerconfigjson \
+              --from-file=.dockerconfigjson=/tmp/dockerconfigjson \
+              --dry-run=client -o yaml | kubectl apply -f -
+            rm -f /tmp/dockerconfigjson
+
             # Fetch chart dependencies (charts/ is gitignored)
             helm repo add argo https://argoproj.github.io/argo-helm
             helm dependency build "$REPO_DIR/argocd/config/shared/argocd"
