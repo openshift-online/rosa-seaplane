@@ -47,7 +47,7 @@ report_chart() {
 	if ((chart_fail)); then
 		printf 'FAIL: %s\n' "$1"
 	elif ((chart_skip)); then
-		printf 'OK: %s (inline chart; Chart.lock not required)\n' "$1"
+		printf 'SKIP: %s (inline chart; Chart.lock not required)\n' "$1"
 	else
 		printf 'OK: %s\n' "$1"
 	fi
