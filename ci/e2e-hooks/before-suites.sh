@@ -18,7 +18,7 @@
 #     SHARED_DIR       ephemeral provisioning shared dir (terraform outputs)
 #     CLUSTER_PREFIX   optional; computed here for ephemeral runs when unset
 #   Outputs (exported for suites):
-#     AWS_PROFILE / AWS_DEFAULT_REGION
+#     RC_AWS_PROFILE, AWS_DEFAULT_REGION
 #     E2E_ACCOUNT_ID, CUSTOMER_AWS_PROFILE, E2E_CUSTOMER_ACCOUNT_ID (optional)
 #     E2E_ALERTMANAGER_URL (when the tunnel is up)
 #     E2E_DUMP_ENV, PRE_CLEANUP_HOOK (env-dump command for suites/back-compat)
@@ -52,17 +52,19 @@ fi
 eval "${_e2e_hooks_prior_opts}"
 ${_e2e_hooks_had_errexit} && set -e || true
 
-export AWS_PROFILE="${AWS_PROFILE:-rrp-rc}"
+# Export named profiles for suites; do NOT set AWS_PROFILE globally — each
+# suite's run script sets it explicitly for the credentials it needs.
+export RC_AWS_PROFILE="${RC_AWS_PROFILE:-rrp-rc}"
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
 
 # Print the signing principal (not credentials) to diagnose grant mismatches.
-echo "Regional API caller (${AWS_PROFILE}):"
-aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json \
+echo "Regional API caller (${RC_AWS_PROFILE}):"
+AWS_PROFILE="${RC_AWS_PROFILE}" aws sts get-caller-identity --query '{Account:Account,Arn:Arn}' --output json \
   || echo "WARNING: could not resolve signing principal — check AWS profiles/credentials" >&2
 
 # --- Account IDs -------------------------------------------------------------
 if [[ -z "${E2E_ACCOUNT_ID:-}" ]]; then
-  E2E_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)" || true
+  E2E_ACCOUNT_ID="$(AWS_PROFILE="${RC_AWS_PROFILE}" aws sts get-caller-identity --query Account --output text)" || true
   [[ -n "${E2E_ACCOUNT_ID:-}" ]] && echo "Regional account ID: ${E2E_ACCOUNT_ID}"
 fi
 export E2E_ACCOUNT_ID
@@ -86,13 +88,14 @@ if aws configure export-credentials --profile rrp-customer --format process &>/d
   # concurrent suites never race the registration.
   if [[ -n "${E2E_CUSTOMER_ACCOUNT_ID:-}" && -n "${BASE_URL:-}" ]]; then
     echo "Allowlisting customer account ${E2E_CUSTOMER_ACCOUNT_ID:0:8}..."
-    if AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
+    if AWS_PROFILE="${RC_AWS_PROFILE}" awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
       -X POST -H "Content-Type: application/json" \
       -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
       "${BASE_URL}/api/v0/accounts"; then
       export _E2E_HOOKS_ALLOWLISTED=true
     else
-      echo "WARNING: allowlisting customer account failed — suites requiring it will fail" >&2
+      echo "ERROR: allowlisting customer account failed — environment not ready" >&2
+      return 1
     fi
   fi
 else
