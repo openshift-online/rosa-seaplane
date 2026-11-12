@@ -12,10 +12,12 @@ Rules (see the registry header for the full contract):
   P1 pins are resolved like the deployment (rendered merged config +
      ArgoCD env-values layer wins).
   P2 newest-pin-wins: a bumped pin must descend from its previous value
-     (single line of history) and sibling pins of the suite must be
-     unchanged in the same change — except pins sharing a
-     `bump_together: true` group (e.g. zoa's lambda/runner/boundary
-     images, which are built from one commit and bumped together).
+     (single line of history).  Multiple pins of the same suite may
+     bump together (they share a repo, so ancestry is per-pin).  Pins
+     with an explicit `bump_together: <group>` MUST move together: if
+     one member of the group bumps, all members must bump in the same
+     change (e.g. zoa's lambda/runner/boundary images, built from one
+     commit).
   P3 pins are full 40-char SHAs, optionally followed by
      `@sha256:<digest>` (Konflux form); short/branch pins fail unless
      the registry entry sets `enforce: false` (warning).
@@ -29,6 +31,7 @@ against).
 """
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -188,10 +191,15 @@ def check_pin_format(value: Any, pin: dict, suite: str, enforce: bool) -> list[s
 def git_merge_base_with_default() -> str | None:
     """Base commit to diff against: merge-base with the default branch.
 
-    Prefers origin/main; falls back to the local main branch for CI
-    checkouts (e.g. ci-operator's src container) that may not carry the
-    remote-tracking ref.
+    In Prow's clonerefs environment, origin/main is not available — the
+    PULL_BASE_SHA env var carries the PR's base commit.  When set, use it
+    directly (via merge-base so the result is the common ancestor, same
+    as the local-dev path).  Fall back to origin/main for local
+    development.
     """
+    base_sha = os.environ.get("PULL_BASE_SHA")
+    if base_sha:
+        return run(["git", "merge-base", "HEAD", base_sha])
     for ref in ("origin/main", "main"):
         if run(["git", "rev-parse", "--verify", ref], check=False):
             return run(["git", "merge-base", "HEAD", ref])
@@ -359,17 +367,27 @@ def main() -> int:
         if not bumped:
             continue
 
-        # Group check: all bumped pins must share one bump_together group,
-        # or be a single pin.
-        groups = {p.get("bump_together") for p in
-                  (b["pin"] for b in bumped.values())}
-        if len(bumped) > 1 and (None in groups or len(groups) > 1):
-            errors.append(
-                f"{suite}: multiple pins changed together "
-                f"({', '.join(bumped)}); only the newest pin may move per "
-                f"change (unless the pins share a bump_together group)"
-            )
-            continue
+        # Group check: multiple pins of the SAME suite may bump together —
+        # they share a suite repo, so ancestry is checked per pin anyway.
+        # Pins with an explicit bump_together group are additionally
+        # validated: all bumped pins within a group must move together,
+        # i.e. if one member of a group is bumped, all members must be.
+        # (The ancestry check below still applies to each pin individually.)
+        bump_groups = {p.get("bump_together") for p in
+                       (b["pin"] for b in bumped.values())
+                       if p.get("bump_together") is not None}
+        for grp in bump_groups:
+            group_members = [p["name"] for p in pins if p.get("bump_together") == grp]
+            bumped_members = [n for n in group_members if n in bumped]
+            if len(bumped_members) != len(group_members):
+                missing = [n for n in group_members if n not in bumped]
+                errors.append(
+                    f"{suite}: bump_together group '{grp}' requires all "
+                    f"members to move together, but only "
+                    f"{', '.join(bumped_members)} changed (missing: "
+                    f"{', '.join(missing)})"
+                )
+                continue
 
         for name, b in bumped.items():
             old, new = b["old"], b["new"]

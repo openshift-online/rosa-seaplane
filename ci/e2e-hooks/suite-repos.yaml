@@ -14,11 +14,12 @@
 #      values.yaml overlaid by deploy/<env>/<region>/argocd-values-*.yaml
 #      (env layer wins).
 #   P2 newest-pin-wins: a pin may only be bumped to a commit that is a
-#      descendant of the previous value (single line of history), and every
-#      other pin of the same suite must be unchanged in the same change —
-#      except pins sharing a `bump_together: <group>` value (e.g. zoa's
-#      lambda/runner/boundary images, built from one commit and bumped
-#      together).
+#      descendant of the previous value (single line of history).
+#      Multiple pins of the same suite may bump together (they share a
+#      repo, so ancestry is checked per pin).  Pins with an explicit
+#      `bump_together: <group>` MUST move together: if one member bumps,
+#      all members must bump in the same change (e.g. zoa's
+#      lambda/runner/boundary images, built from one commit).
 #   P3 full 40-char SHAs (optionally @sha256:<digest>). Short tags and branch
 #      names fail the check — unless an entry sets `enforce: false`, which
 #      reports a warning instead. Use temporarily for legacy pins and remove
@@ -78,15 +79,8 @@ suites:
           key: regional_cluster.zoa_boundary_image_tag
         enforce: false # TODO: same as zoa-lambda-image-tag
 
-  rosa-cli:
-    repo: https://github.com/openshift/rosa.git
-    pins:
-      - name: rosa-cli-ref
-        doc: >
-          Ref of the rosa repo the e2e suite builds its CLI from. Legacy
-          value lives in ci/e2e-tests.sh (ROSA_REPO_BRANCH); the registry
-          value wins once the new e2e flow consumes it.
-        ref: seaplane-v2
-        # TODO: pin by full SHA once the new runner consumes this registry
-        # (ROSAENG-75288/75289); the branch pin is legacy.
-        enforce: false
+  # rosa-cli is intentionally NOT registered here: it is a test tool,
+  # not a deployed component, and its checkout branch (seaplane-v2) is
+  # not a SHA — ancestry and format checks are meaningless.  The suite
+  # gets its repo/branch from ROSA_REPO_BRANCH set in the entry point
+  # script or via E2E_SUITE_ENV.

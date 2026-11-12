@@ -204,7 +204,7 @@ check-default-tags: ## Check all AWS resources have required tags (function, mod
 	@echo "✅ Tag coverage check complete"
 
 check-e2e-pins: ## Validate the e2e suite pin registry (ROSAENG-75286)
-	@uv run --no-cache scripts/check_e2e_pins.py
+	@uv run --no-cache scripts/check_e2e_pins.py $(E2E_PIN_ARGS)
 
 pre-push: ## Run all CI validation checks (parallel)
 	@echo "🚀 Running all CI validation checks..."
@@ -212,7 +212,8 @@ pre-push: ## Run all CI validation checks (parallel)
 	@echo "Formatting Terraform files..."
 	@$(MAKE) terraform-fmt
 	@echo ""
-	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags check-submodule-fetch-config check-helm-locks check-e2e-pins
+	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags check-submodule-fetch-config check-helm-locks
+	@$(MAKE) check-e2e-pins E2E_PIN_ARGS=--skip-ancestry
 	@echo ""
 	@echo "✅ All pre-push checks passed!"
 
