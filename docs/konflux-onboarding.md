@@ -68,18 +68,27 @@ Run `build-manifests.sh` in `konflux-release-data/tenants-config` before opening
 
 ## Prow and Konflux responsibilities
 
-| Concern                                 | Owner                                                |
-| --------------------------------------- | ---------------------------------------------------- |
-| Image build + attestation               | Konflux                                              |
-| `gomod` / Dockerfile / Tekton dep bumps | MintMaker (`renovate.json` in each onboarded repo)   |
-| Lint, verify, unit, integration, e2e    | Prow                                                 |
-| Required checks before merge            | Konflux on-PR (when path triggers apply) + Prow jobs |
+| Concern                              | Owner                                                         |
+| ------------------------------------ | ------------------------------------------------------------- |
+| Image build + attestation            | Konflux                                                       |
+| Dependency version bumps             | MintMaker (global config; per-repo `renovate.json` overrides) |
+| Lint, verify, unit, integration, e2e | Prow                                                          |
+| Required checks before merge         | Konflux on-PR (when path triggers apply) + Prow jobs          |
 
 Konflux can only attest images **it** built. Released images must come from Konflux push pipelines, not from ci-operator `images:` alone.
 
 ## Dependency PRs (MintMaker)
 
-Each onboarded app repo uses a root `renovate.json` for MintMaker (see [`rosa-seaplane-api`](https://github.com/openshift-online/rosa-seaplane-api/blob/main/renovate.json) for an example):
+MintMaker applies a [global Renovate config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json) even without a repo `renovate.json`. Default managers include `helmv3`, `helm-values`, `terraform`, `github-actions`, and `git-submodules`. Do **not** copy an app-repo `renovate.json` onto this repo: those files set `enabledManagers` to `dockerfile` / `gomod` / `tekton` only and would stop Helm bumps.
+
+This repo's root `renovate.json` only tightens cooldown (it does not pin `enabledManagers`):
+
+- Wait **7 days** after a release before opening a bump PR (`minimumReleaseAge`, `internalChecksFilter: strict`)
+- Wait **14 days** for majors
+- Datasources without a publish timestamp still update (`timestamp-optional`) so Helm charts are not stuck when the chart index has no timestamp
+- Dependabot version updates are not used; MintMaker owns Actions, Terraform, and Helm bumps
+
+Onboarded **app** repos use a root `renovate.json` for MintMaker (see [`rosa-seaplane-api`](https://github.com/openshift-online/rosa-seaplane-api/blob/main/renovate.json) for an example):
 
 - **gomod**, **dockerfile**, **tekton** managers enabled
 - Patch/minor/digest updates: automerge when Prow + Konflux pass
