@@ -1,7 +1,7 @@
 # platform-api Argo CD wrapper chart
 
-This chart creates the `platform-api` Argo CD Application. The application
-loads its deployment chart from `platform-api/charts` in
+This chart creates the `seaplane-api` Argo CD Application. The application
+loads its deployment chart from `seaplane-api/charts` in
 [`rosa-seaplane-api`](https://github.com/openshift-online/rosa-seaplane-api),
 so the chart is maintained alongside the API it deploys.
 

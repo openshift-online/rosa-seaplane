@@ -2801,7 +2801,8 @@ def _assert_rc_grants(bundle, account, role):
 class TestPlatformAPIChartWrapper:
     def test_application_source_and_child_values(self, tmp_path):
         resources, _ = _helm_platform(tmp_path, {})
-        app = _resource(resources, "Application", "platform-api")
+        app = _resource(resources, "Application", "seaplane-api")
+        assert app["metadata"]["name"] == "seaplane-api"
         source = app["spec"]["source"]
         assert source["repoURL"] == "https://github.com/openshift-online/rosa-seaplane-api.git"
         assert source["path"] == "seaplane-api/charts"
@@ -2813,6 +2814,12 @@ class TestPlatformAPIChartWrapper:
         child_values = yaml.safe_load(source["helm"]["values"])
         wrapper_values = load_yaml(PLATFORM_CHART / "values.yaml")
         assert child_values["platformApi"] == wrapper_values["platformApi"]
+        assert child_values["platformApi"]["probes"]["readiness"] == {
+            "initialDelaySeconds": 5,
+            "periodSeconds": 5,
+            "timeoutSeconds": 3,
+            "failureThreshold": 3,
+        }
         assert child_values["global"]["aws_region"] == "us-east-1"
         assert "seaplane" not in child_values
 
@@ -2822,7 +2829,7 @@ class TestPlatformAPIChartWrapper:
             "global": {"aws_region": "eu-west-2", "aws_account_id": "012345678901"},
             "platformApi": {"authz": {"config": content}},
         })
-        app = _resource(resources, "Application", "platform-api")
+        app = _resource(resources, "Application", "seaplane-api")
         child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
         assert child_values["global"]["aws_region"] == "eu-west-2"
         assert child_values["global"]["aws_account_id"] == "012345678901"
@@ -2833,7 +2840,7 @@ class TestPlatformAPIChartWrapper:
         monkeypatch.delenv("BUILD_ID", raising=False)
         values = _authz_values(tmp_path, env)
         resources, _ = _helm_platform(tmp_path, values)
-        app = _resource(resources, "Application", "platform-api")
+        app = _resource(resources, "Application", "seaplane-api")
         child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
         assert child_values["platformApi"]["authz"] == values["platformApi"]["authz"]
 
@@ -2842,7 +2849,7 @@ class TestPlatformAPIChartWrapper:
         resources, _ = _helm_platform(tmp_path, {
             "platformApi": {"authz": {"config": content}},
         })
-        app = _resource(resources, "Application", "platform-api")
+        app = _resource(resources, "Application", "seaplane-api")
         child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
         assert child_values["platformApi"]["authz"]["config"] == content
 

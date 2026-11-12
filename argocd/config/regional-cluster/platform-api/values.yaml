@@ -155,9 +155,14 @@ platformApi:
       periodSeconds: 10
       timeoutSeconds: 5
       failureThreshold: 3
+    readiness:
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+      failureThreshold: 3
 
 seaplane:
-  applicationName: platform-api
+  applicationName: seaplane-api
   namespace: argocd
   targetNamespace: platform-api
   project: default
@@ -171,8 +176,3 @@ seaplane:
     automated:
       prune: true
       selfHeal: true
-    readiness:
-      initialDelaySeconds: 5
-      periodSeconds: 5
-      timeoutSeconds: 3
-      failureThreshold: 3
