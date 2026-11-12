@@ -1,5 +1,11 @@
 # Direct ArgoCD configuration
-# This section will be passed to the upstream ArgoCD chart
+# This section will be passed to the upstream ArgoCD chart.
+#
+# ROSAENG-67992: pin GitOps 1.22 images onto argo-helm 10.9.6 (appVersion v3.5.3).
+# GitOps 1.22 ships Argo CD 3.5.3 / Dex 2.45.1. Chart 10.11.6 is v3.5.6 — do not
+# bump past 10.9.6 until a GitOps operand matches that appVersion. GitOps
+# operator is not installed on EKS. Redis stays community (redis-ha).
+# Images: RHSA-2026:94584 (GitOps 1.22.3). See docs/argocd-redhat-images.md.
 argo-cd:
   # High Availability configuration
   ha:
@@ -7,6 +13,12 @@ argo-cd:
 
   global:
     priorityClassName: system-cluster-critical
+    imagePullSecrets:
+      - name: pull-secret
+    # Chart concatenates repository:tag. Digest from RHSA-2026:94584 (amd64).
+    image:
+      repository: registry.redhat.io/openshift-gitops-1/argocd-rhel9
+      tag: v1.22.3@sha256:a4492e603ffa70327ac27094723819e55f2b2b038338eea8eac2e7c2f425a420
 
   # Server configuration
   server:
@@ -119,8 +131,11 @@ argo-cd:
       serviceMonitor:
         enabled: true
 
-  # Dex configuration
+  # Dex configuration. GitOps 1.22 ships Dex 2.45.1 (matches chart 10.9.6).
   dex:
+    image:
+      repository: registry.redhat.io/openshift-gitops-1/dex-rhel9
+      tag: v1.22.3@sha256:a6d9927bb83c40da1e1ddec30ac41e15c9c4ea98228d05e57468a4d5bd590d1b
     resources:
       limits:
         cpu: 250m
