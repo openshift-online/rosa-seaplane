@@ -129,6 +129,13 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
   # expose their own Alertmanager; only ephemeral (prefixed) envs need it.
   if [[ -z "${ALERTMANAGER_URL:-}" && -z "${E2E_ALERTMANAGER_URL:-}" && -n "${CLUSTER_PREFIX:-}" ]]; then
     echo "=== Alertmanager tunnel for silence e2e specs ==="
+    # The helper enables set -euo pipefail when sourced: save and restore
+    # the runner shell's options around the whole tunnel-setup block (with
+    # errexit handled separately — command substitutions do not inherit it),
+    # so a setup failure cannot change or exit the runner shell.
+    _e2e_hooks_am_prior_opts="$(set +o)"
+    _e2e_hooks_am_had_errexit=false
+    [[ $- == *e* ]] && _e2e_hooks_am_had_errexit=true
     # shellcheck source=ci/alertmanager-forward.sh
     if source "${REPO_ROOT}/ci/alertmanager-forward.sh" && start_alertmanager_forward; then
       export _E2E_HOOKS_AM_STARTED=true
@@ -151,6 +158,8 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
     else
       echo "WARNING: Alertmanager tunnel failed — silence-installing/silence-ready specs will skip" >&2
     fi
+    eval "${_e2e_hooks_am_prior_opts}"
+    ${_e2e_hooks_am_had_errexit} && set -e || true
   fi
 fi
 
