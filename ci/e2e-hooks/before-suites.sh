@@ -37,6 +37,11 @@
 # shell's options across the source so a setup failure cannot change or
 # exit the runner shell.
 _e2e_hooks_prior_opts="$(set +o)"
+# Command substitutions do not inherit errexit, so $(set +o) records it as
+# OFF even when the caller runs with -e. Capture it separately and restore
+# it after the other options, or the hook would disable the caller's -e.
+_e2e_hooks_had_errexit=false
+[[ $- == *e* ]] && _e2e_hooks_had_errexit=true
 # shellcheck source=ci/setup-aws-profiles.sh
 if [[ -r "${REPO_ROOT}/ci/setup-aws-profiles.sh" ]]; then
   source "${REPO_ROOT}/ci/setup-aws-profiles.sh" \
@@ -45,6 +50,7 @@ else
   echo "WARNING: ${REPO_ROOT}/ci/setup-aws-profiles.sh not found — AWS profiles not set up" >&2
 fi
 eval "${_e2e_hooks_prior_opts}"
+${_e2e_hooks_had_errexit} && set -e || true
 
 export AWS_PROFILE="${AWS_PROFILE:-rrp-rc}"
 export AWS_DEFAULT_REGION="${AWS_REGION:-us-east-1}"
@@ -123,6 +129,21 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
     # shellcheck source=ci/alertmanager-forward.sh
     if source "${REPO_ROOT}/ci/alertmanager-forward.sh" && start_alertmanager_forward; then
       export _E2E_HOOKS_AM_STARTED=true
+      # The helper installed its own EXIT trap (_am_run_exit_traps), which
+      # replaces the runner's. Take ownership back: keep the tunnel cleanup
+      # for early exits, but through a hook-owned function that also runs the
+      # trap content the runner had before (the helper captured it in
+      # _AM_PRIOR_EXIT_TRAP). after-suites.sh stops the tunnel explicitly on
+      # the normal path; the cleanup is idempotent, so the EXIT run is a
+      # no-op there.
+      _e2e_hooks_prior_exit_trap_cmd="${_AM_PRIOR_EXIT_TRAP:-}"
+      _e2e_hooks_am_exit() {
+        cleanup_alertmanager_forward || true
+        if [[ -n "${_e2e_hooks_prior_exit_trap_cmd}" ]]; then
+          eval "${_e2e_hooks_prior_exit_trap_cmd}"
+        fi
+      }
+      trap '_e2e_hooks_am_exit' EXIT
       echo "Silence e2e specs enabled (E2E_ALERTMANAGER_URL=${E2E_ALERTMANAGER_URL})"
     else
       echo "WARNING: Alertmanager tunnel failed — silence-installing/silence-ready specs will skip" >&2
