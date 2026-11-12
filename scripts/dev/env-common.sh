@@ -169,7 +169,10 @@ load_accounts_stage() {
 # Sets: AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE, _aws_config_dir
 # Caller should write profile heredoc to $AWS_CONFIG_FILE after calling this.
 init_aws_config() {
+    # Sanitize inherited AWS env vars so they can't override the generated profile.
     unset AWS_PROFILE AWS_DEFAULT_PROFILE
+    unset AWS_REGION AWS_DEFAULT_REGION
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
     _aws_config_dir=$(mktemp -d)
     export AWS_CONFIG_FILE="$_aws_config_dir/config"
