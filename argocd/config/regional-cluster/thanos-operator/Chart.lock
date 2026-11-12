@@ -1,0 +1,6 @@
+dependencies:
+- name: thanos-operator
+  repository: oci://quay.io/bsmit/rhobs-thanos-operator-chart
+  version: 0.1.0
+digest: sha256:f1c6bbcdde0e00b4abe7b4213136efcf7722e3595383659e9b52d745c77c7cd0
+generated: "2026-11-11T18:49:23.470449+05:30"
