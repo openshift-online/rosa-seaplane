@@ -21,6 +21,8 @@
 #   import_if_needed         Idempotent terraform import
 #   tf_state_value           Read attribute from terraform state
 #   tf_import_summary        Print import summary, fail if errors
+#   state_rm_if_present      Detach a resource from state before destroy
+#   tf_state_rm_summary      Print detach summary, fail if any detach failed
 
 set -euo pipefail
 
@@ -576,6 +578,73 @@ tf_import_summary() {
     echo "Import summary: imported=${_TF_IMPORT_COUNT} skipped=${_TF_IMPORT_SKIPPED} not-found=${_TF_IMPORT_NOT_FOUND} failed=${_TF_IMPORT_FAILED}"
     if [ "${_TF_IMPORT_FAILED}" -gt 0 ]; then
         echo "ERROR: ${_TF_IMPORT_FAILED} import(s) failed — aborting before apply" >&2
+        exit 1
+    fi
+}
+
+# ── Terraform State Detach (pre-destroy) ─────────────────────────────────────
+#
+# Mirror image of the import pre-step. A `removed` block relinquishes ownership
+# of a resource on apply, but `terraform destroy` ignores it and destroys the
+# resource anyway, so a state that is torn down before it has applied a
+# handover would still delete what it no longer owns. Detaching the address
+# from state first makes that teardown safe.
+
+_TF_STATE_RM_COUNT=0
+_TF_STATE_RM_ABSENT=0
+_TF_STATE_RM_FAILED=0
+
+# Remove a resource from Terraform state if it is managed there.
+# Usage: state_rm_if_present <terraform-address>
+#
+# A state read that fails, or a removal that leaves the address managed, is a
+# failure rather than a silent pass: it must never degrade into destroying a
+# resource other environments depend on.
+state_rm_if_present() {
+    local ADDR="$1"
+    local MANAGED
+
+    if ! MANAGED=$(terraform state list 2>&1); then
+        echo "  [FAILED] cannot read Terraform state while detaching $ADDR" >&2
+        echo "    Error: $MANAGED" >&2
+        ((_TF_STATE_RM_FAILED++)) || true
+        return 1
+    fi
+
+    if ! grep -Fxq -- "$ADDR" <<<"$MANAGED"; then
+        echo "  [absent] $ADDR"
+        ((_TF_STATE_RM_ABSENT++)) || true
+        return 0
+    fi
+
+    local RM_STDERR
+    RM_STDERR=$(mktemp)
+    if ! terraform state rm "$ADDR" >/dev/null 2>"$RM_STDERR"; then
+        echo "  [FAILED] terraform state rm $ADDR" >&2
+        echo "    Error: $(cat "$RM_STDERR")" >&2
+        rm -f "$RM_STDERR"
+        ((_TF_STATE_RM_FAILED++)) || true
+        return 1
+    fi
+    rm -f "$RM_STDERR"
+
+    if ! MANAGED=$(terraform state list 2>&1) || grep -Fxq -- "$ADDR" <<<"$MANAGED"; then
+        echo "  [FAILED] $ADDR is still managed after 'terraform state rm'" >&2
+        ((_TF_STATE_RM_FAILED++)) || true
+        return 1
+    fi
+
+    echo "  [detached] $ADDR"
+    ((_TF_STATE_RM_COUNT++)) || true
+    return 0
+}
+
+# Print detach summary. Exits non-zero if any detach failed, which aborts the
+# pipeline before `terraform destroy` runs.
+tf_state_rm_summary() {
+    echo "State detach summary: detached=${_TF_STATE_RM_COUNT} absent=${_TF_STATE_RM_ABSENT} failed=${_TF_STATE_RM_FAILED}"
+    if [ "${_TF_STATE_RM_FAILED}" -gt 0 ]; then
+        echo "ERROR: ${_TF_STATE_RM_FAILED} shared resource(s) still managed — aborting before destroy" >&2
         exit 1
     fi
 }

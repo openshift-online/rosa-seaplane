@@ -93,7 +93,22 @@ presets:
         - property: Name
           type: contains
           value: "ResourceExplorerRole"
+        # API Gateway access logging roles. AWS keeps one logging role per
+        # account and region for every REST API in the account, so this role
+        # is account-level infrastructure that no cluster state owns and that
+        # must survive between a cluster teardown and the next deploy. The
+        # glob also covers the per-cluster roles left behind by the ownership
+        # handover, which the live account setting may still reference.
+        # See docs/design/api-gateway-account-ownership.md.
+        - property: Name
+          type: glob
+          value: "*api-gateway-cloudwatch"
       IAMRolePolicyAttachment:
+        # Attachments carry no tags of their own, so the API Gateway access
+        # logging roles are matched by name here as well.
+        - property: RoleName
+          type: glob
+          value: "*api-gateway-cloudwatch"
         - property: RoleName
           value: "OrganizationAccountAccessRole"
         - property: RoleName

@@ -22,6 +22,25 @@ variable "regional_id" {
   type        = string
 }
 
+variable "cloudwatch_role_name" {
+  description = <<-EOT
+    Name of the IAM role API Gateway assumes to deliver access logs. This module does not
+    create it: AWS stores one logging role per account and region, shared by every REST API
+    in the account, so it is provisioned once per AWS account and region outside this
+    repository and read here only by an advisory diagnostic (evaluated on plan and apply). Nothing in this
+    repository writes the account setting, so this value cannot turn logging on or off —
+    changing it only changes which role name that diagnostic looks up. It is deliberately
+    the same name in every account and must not contain regional_id.
+  EOT
+  type        = string
+  default     = "rosa-seaplane-api-gateway-cloudwatch"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_+=,.@-]{1,64}$", var.cloudwatch_role_name))
+    error_message = "cloudwatch_role_name must be a valid IAM role name (max 64 characters)."
+  }
+}
+
 variable "node_security_group_id" {
   description = "EKS node/pod security group ID - ALB needs to send traffic to pods via this SG"
   type        = string
