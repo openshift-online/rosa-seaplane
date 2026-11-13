@@ -47,19 +47,23 @@ sequenceDiagram
     actor User as CLI / Terraform user
     participant GW as API Gateway (AWS_IAM)
     participant PA as Platform API
+    participant DB as seaplane-db (cluster state)
     participant PFC as Preflight controller
     participant CUST as Customer account
 
     User->>GW: SigV4-signed create-cluster request
     Note over GW: SigV4 identifies the caller ARN
     GW->>PA: forward request + identity headers
+    PA->>DB: persist desired cluster state
     PA-->>User: 200 Accepted (not yet preflighted)
+    PFC->>DB: reconcile loop observes the new cluster
     PFC->>CUST: ASYNC AssumeRole (Installer Role) + run checks
     Note over PFC: account ID derived from the caller / target ARN
     alt checks pass
-        PFC->>PFC: Condition satisfied, provisioning continues
+        PFC->>DB: Condition satisfied, provisioning continues
     else checks fail
-        PFC-->>User: Condition unmet, provisioning pauses + failure reason
+        PFC->>DB: Condition unmet + failure reason, provisioning pauses
+        PFC-->>User: failure surfaced via the cluster Condition
         Note over User: remediate (e.g. raise quota) and resync, or delete
     end
 ```
