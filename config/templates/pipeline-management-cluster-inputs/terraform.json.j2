@@ -27,5 +27,6 @@
 {%- endif %}
 {%- if mc.enable_bastion is defined %},
   "enable_bastion": {{ mc.enable_bastion | tojson }}{% elif management_cluster_defaults.enable_bastion %},
-  "enable_bastion": {{ management_cluster_defaults.enable_bastion | tojson }}{% endif %}
+  "enable_bastion": {{ management_cluster_defaults.enable_bastion | tojson }}{% endif %}{%- if management_cluster_defaults.enable_ecr_creds_sync %},
+  "enable_ecr_creds_sync": {{ management_cluster_defaults.enable_ecr_creds_sync | tojson }}{% endif %}
 }

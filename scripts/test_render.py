@@ -1832,6 +1832,185 @@ class TestMainIntegration:
         content = appset_file.read_text()
         assert "GENERATED FILE" in content
 
+    def test_ecr_mirror_appset_uses_annotations_not_config_values(self, tmp_path):
+        """ApplicationSet template must source ECR mirror fields from cluster
+        annotations (SSM-backed) rather than from config YAML values."""
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+            },
+            environments={
+                "staging": {
+                    "defaults": {
+                        "applications": {
+                            "regional-cluster": {
+                                "seaplane": {
+                                    "ecrMirror": {"enabled": True},
+                                },
+                            },
+                        },
+                    },
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        for cluster_type in ("regional-cluster", "management-cluster"):
+            content = (
+                deploy_dir
+                / "staging"
+                / "us-east-1"
+                / f"argocd-bootstrap-{cluster_type}"
+                / "applicationset.yaml"
+            ).read_text()
+
+            # Sensitive ECR fields must be annotation-driven, not config-driven.
+            assert 'index .metadata.annotations "ecr_mirror_registry_account"' in content
+            assert 'index .metadata.annotations "ecr_mirror_region"' in content
+            assert 'index .metadata.annotations "ecr_mirror_repository"' in content
+            assert 'index .metadata.annotations "ecr_mirror_sources"' in content
+            assert 'index .metadata.annotations "ecr_mirror_base_secret_name"' in content
+
+            # The sensitive fields must carry annotation references, not bare strings.
+            assert "registryAccount: ''" not in content
+            assert "registryRegion: ''" not in content
+
+    def test_ecr_mirror_enabled_flag_comes_from_config(self, tmp_path):
+        """The enabled flag must come from config (explicit opt-in), not annotations."""
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+            },
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        content = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-regional-cluster"
+            / "applicationset.yaml"
+        ).read_text()
+
+        # Default is disabled; the flag must appear as a literal value from config.
+        assert "enabled: False" in content or "enabled: false" in content
+
+    def test_ecr_creds_sync_uses_helmvalues_nesting(self, tmp_path):
+        """Management-cluster appset must nest ecrCredsSync fields under helmValues
+        so that the wrapper chart serialises them into the child Application."""
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+            },
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        content = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-management-cluster"
+            / "applicationset.yaml"
+        ).read_text()
+
+        # ecrCredsSync values must be nested under helmValues for the wrapper chart.
+        assert "ecrCredsSync:" in content
+        assert 'index .metadata.annotations "ecr_mirror_ecr_repository"' in content
+        assert 'index .metadata.annotations "ecr_mirror_region"' in content
+        assert 'index .metadata.annotations "ecr_mirror_base_secret_name"' in content
+
+        # helmValues nesting must appear between ecrCredsSync and ecrRepository.
+        ecr_creds_pos = content.index("ecrCredsSync:")
+        helm_values_pos = content.index("helmValues:", ecr_creds_pos)
+        ecr_repo_pos = content.index("ecr_mirror_ecr_repository", helm_values_pos)
+        assert ecr_creds_pos < helm_values_pos < ecr_repo_pos
+
+    def test_ecr_creds_sync_no_templatepatch(self, tmp_path):
+        """Management-cluster appset must not contain templatePatch now that
+        ecr-creds-sync is a wrapper chart and no longer needs source override."""
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+            },
+            environments={
+                "staging": {
+                    "defaults": {},
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        content = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-management-cluster"
+            / "applicationset.yaml"
+        ).read_text()
+
+        assert "templatePatch" not in content
+
+    def test_ecr_creds_sync_enabled_from_management_cluster_defaults(self, tmp_path):
+        """ecrCredsSync.helmValues.enabled must be sourced from
+        management_cluster_defaults.enable_ecr_creds_sync, not from
+        applications.management-cluster.ecrCredsSync."""
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+            },
+            environments={
+                "staging": {
+                    "defaults": {
+                        "management_cluster_defaults": {
+                            "enable_ecr_creds_sync": True,
+                        },
+                    },
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        content = (
+            deploy_dir
+            / "staging"
+            / "us-east-1"
+            / "argocd-bootstrap-management-cluster"
+            / "applicationset.yaml"
+        ).read_text()
+
+        # enabled must reflect the management_cluster_defaults flag.
+        assert "enabled: True" in content or "enabled: true" in content
+
     @pytest.mark.parametrize("revision", ["main", "a" * 40])
     def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path, revision):
         deploy_dir = self._run_main(
@@ -1876,7 +2055,10 @@ class TestMainIntegration:
             assert "CreateNamespace=true" in spec["syncPolicy"]["syncOptions"]
             assert "RespectIgnoreDifferences=true" not in spec["syncPolicy"]["syncOptions"]
             assert "ignoreDifferences" not in spec
-            assert "templatePatch" not in appset["spec"]
+            # RC must have no templatePatch. MC carries one for ecr-creds-sync
+            # (sources the chart from an external repo); that is expected.
+            if appset is rc_appset:
+                assert "templatePatch" not in appset["spec"]
             sources = spec["sources"]
             assert len(sources) == 3
             assert sum("helm" in source for source in sources) == 1

@@ -58,6 +58,12 @@ variable "enable_bastion" {
   default     = false
 }
 
+variable "enable_ecr_creds_sync" {
+  description = "Enable the ecr-creds-sync Pod Identity role and association. Required when zero-egress ECR mirroring is active so the controller can call ecr:GetAuthorizationToken."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Management Cluster Configuration Variables
 # =============================================================================

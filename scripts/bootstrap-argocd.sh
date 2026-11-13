@@ -136,6 +136,12 @@ OVERRIDES_JSON=$(jq -nc \
   --arg sre_alb_dns_name "$SRE_ALB_DNS_NAME" \
   --arg sre_domain "$SRE_DOMAIN" \
   --arg redis_endpoint "$REDIS_ENDPOINT" \
+  --arg ecr_mirror_registry_account "${ECR_MIRROR_REGISTRY_ACCOUNT:-}" \
+  --arg ecr_mirror_region "${ECR_MIRROR_REGION:-}" \
+  --arg ecr_mirror_repository "${ECR_MIRROR_REPOSITORY:-}" \
+  --arg ecr_mirror_sources "${ECR_MIRROR_SOURCES:-}" \
+  --arg ecr_mirror_base_secret_name "${ECR_MIRROR_BASE_SECRET_NAME:-}" \
+  --arg ecr_mirror_ecr_repository "${ECR_MIRROR_ECR_REPOSITORY:-}" \
   '{
     containerOverrides: [{
       name: "bootstrap",
@@ -166,7 +172,13 @@ OVERRIDES_JSON=$(jq -nc \
         {name: "SRE_THANOS_TARGET_GROUP_ARN", value: $sre_thanos_target_group_arn},
         {name: "SRE_ALB_DNS_NAME", value: $sre_alb_dns_name},
         {name: "SRE_DOMAIN", value: $sre_domain},
-        {name: "REDIS_ENDPOINT", value: $redis_endpoint}
+        {name: "REDIS_ENDPOINT", value: $redis_endpoint},
+        {name: "ECR_MIRROR_REGISTRY_ACCOUNT", value: $ecr_mirror_registry_account},
+        {name: "ECR_MIRROR_REGION", value: $ecr_mirror_region},
+        {name: "ECR_MIRROR_REPOSITORY", value: $ecr_mirror_repository},
+        {name: "ECR_MIRROR_SOURCES", value: $ecr_mirror_sources},
+        {name: "ECR_MIRROR_BASE_SECRET_NAME", value: $ecr_mirror_base_secret_name},
+        {name: "ECR_MIRROR_ECR_REPOSITORY", value: $ecr_mirror_ecr_repository}
       ]
     }]
   }')

@@ -166,8 +166,10 @@ get_central_ssm_parameter() {
             --region "${TARGET_REGION}"
 }
 
-# Resolve the private image registry account from the currently active target
-# account. Provision the parameter in each RC/MC account in TARGET_REGION.
+# Resolve the platform operator image registry account from the currently active
+# target account. This covers the ECR registry holding platform operator images
+# — not OCP release images, which are handled by resolve_ecr_mirror_config_from_target.
+# Exports IMAGE_REGISTRY_ACCOUNT_ID.
 resolve_image_registry_account_id_from_target() {
     local parameter_reference="$1"
     local parameter_name="/infra/image-registry/account_id"
@@ -195,6 +197,34 @@ resolve_image_registry_account_id_from_target() {
 
     IMAGE_REGISTRY_ACCOUNT_ID="$account_id"
     export IMAGE_REGISTRY_ACCOUNT_ID
+}
+
+# Read OCP image mirror configuration from SSM in the currently-active target
+# account. This covers the ECR registry used to mirror OCP release images to
+# zero-egress environments — not platform operator images, which are handled by
+# resolve_image_registry_account_id_from_target. Must be called after
+# use_mc_account so the AWS credentials scope to the RC account where the
+# parameters live. Exports ECR_MIRROR_REGISTRY_ACCOUNT, ECR_MIRROR_REGION,
+# ECR_MIRROR_REPOSITORY, ECR_MIRROR_SOURCES, ECR_MIRROR_BASE_SECRET_NAME, and
+# ECR_MIRROR_ECR_REPOSITORY (full URI derived from the first three). All are
+# empty strings when the SSM parameters are absent (mirror disabled).
+resolve_ecr_mirror_config_from_target() {
+    local prefix="/infra/image-registry"
+    local ssm_args=(--with-decryption --query 'Parameter.Value' --output text --region "${TARGET_REGION}")
+
+    ECR_MIRROR_REGISTRY_ACCOUNT=$(aws ssm get-parameter --name "${prefix}/account_id"       "${ssm_args[@]}" 2>/dev/null || echo "")
+    ECR_MIRROR_REGION=$(          aws ssm get-parameter --name "${prefix}/region"            "${ssm_args[@]}" 2>/dev/null || echo "${TARGET_REGION}")
+    ECR_MIRROR_REPOSITORY=$(      aws ssm get-parameter --name "${prefix}/repository"        "${ssm_args[@]}" 2>/dev/null || echo "")
+    ECR_MIRROR_SOURCES=$(         aws ssm get-parameter --name "${prefix}/sources"           "${ssm_args[@]}" 2>/dev/null || echo "")
+    ECR_MIRROR_BASE_SECRET_NAME=$(aws ssm get-parameter --name "${prefix}/base-secret-name" "${ssm_args[@]}" 2>/dev/null || echo "")
+
+    ECR_MIRROR_ECR_REPOSITORY=""
+    if [[ -n "${ECR_MIRROR_REGISTRY_ACCOUNT}" && -n "${ECR_MIRROR_REPOSITORY}" ]]; then
+        ECR_MIRROR_ECR_REPOSITORY="${ECR_MIRROR_REGISTRY_ACCOUNT}.dkr.ecr.${ECR_MIRROR_REGION}.amazonaws.com/${ECR_MIRROR_REPOSITORY}"
+    fi
+
+    export ECR_MIRROR_REGISTRY_ACCOUNT ECR_MIRROR_REGION ECR_MIRROR_REPOSITORY \
+           ECR_MIRROR_SOURCES ECR_MIRROR_BASE_SECRET_NAME ECR_MIRROR_ECR_REPOSITORY
 }
 
 _resolve_rc_account() {

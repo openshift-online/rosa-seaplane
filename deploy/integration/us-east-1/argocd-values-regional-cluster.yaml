@@ -28,6 +28,8 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
+  ecrMirror:
+    enabled: false
   oidcS3Bucket: PLACEHOLDER-overridden-by-terraform-output
 pagerduty:
   enabled: false
