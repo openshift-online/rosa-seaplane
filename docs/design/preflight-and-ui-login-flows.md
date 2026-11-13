@@ -8,7 +8,7 @@ ROSA V2 (Seaplane) retains the ROSA V1 **installer-role** model for customer-acc
 
 1. **Discovery for the UI**: fetch customer resources (VPCs, subnets, and so on) **synchronously** so the cluster-creation UI can populate its forms.
 2. **Preflight checks**: validate the customer account **asynchronously** via a controller, reproducing the V1 check coverage, before provisioning proceeds.
-3. **Unmanaged OIDC signing key**: read the RSA private key the customer stores in their Secrets Manager for a self-managed (unmanaged) OIDC cluster. V2 will not perform synchronous checks at registration, and will instead bubble up the failure via the cluster Condition.
+3. **Unmanaged OIDC signing key**: read the RSA private key the customer stores in their Secrets Manager for a self-managed (unmanaged) OIDC cluster. V2 will not perform synchronous cross-account checks at registration, and will instead bubble up the failure via the cluster Condition.
 
 CLI/Terraform/CAPA clients authenticate with **SigV4** through the existing `AWS_IAM`-mode API Gateway. The UI authenticates with an **RH Token** through a second, custom-authorizer API Gateway that resolves the token to a customer-linked ARN, then presents the backend with the **same identity header names** the `AWS_IAM` gateway produces (populated from the authorizer response rather than the native IAM identity; see Architecture).
 
