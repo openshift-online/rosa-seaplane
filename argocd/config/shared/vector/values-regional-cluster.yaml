@@ -1,0 +1,5 @@
+vector:
+  customConfig:
+    sinks:
+      loki:
+        endpoint: "http://loki-distributor.loki.svc:3100"

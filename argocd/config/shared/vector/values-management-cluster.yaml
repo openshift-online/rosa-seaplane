@@ -1,0 +1,33 @@
+sigv4ProxyLogs:
+  image:
+    repository: public.ecr.aws/aws-observability/aws-sigv4-proxy
+    tag: "1.13"
+    pullPolicy: IfNotPresent
+  port: 8006
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+vector:
+  customConfig:
+    sinks:
+      loki:
+        endpoint: "http://sigv4-proxy-logs.vector.svc:8006"
+        path: "/prod/loki/api/v1/push"

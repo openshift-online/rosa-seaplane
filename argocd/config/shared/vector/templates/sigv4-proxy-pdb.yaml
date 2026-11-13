@@ -1,3 +1,4 @@
+{{- if eq .Values.global.cluster_type "management-cluster" }}
 {{- if gt (int (.Values.sigv4ProxyLogs.replicas | default 2)) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -12,4 +13,5 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: sigv4-proxy-logs
+{{- end }}
 {{- end }}
