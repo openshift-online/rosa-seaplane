@@ -24,3 +24,8 @@ ecrCredsSync:
     ecrRepository: ""
     awsRegion: ""
     sourceSecrets: ""
+
+  image:
+    repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-ecr-creds-sync
+    tag: "f34824f"
+    pullPolicy: IfNotPresent
