@@ -8,8 +8,16 @@ set -euo pipefail
 
 _AM_CLEANUP_REGISTERED=false
 _AM_PRIOR_EXIT_TRAP=""
+_AM_CLEANED=false
 
 cleanup_alertmanager_forward() {
+  # Idempotent: after-suites.sh stops the tunnel explicitly; the EXIT trap
+  # (registered for early exits) then runs again — the guard prevents a
+  # repeated remote port-forward kill.
+  if [[ "${_AM_CLEANED}" == "true" ]]; then
+    return 0
+  fi
+  _AM_CLEANED=true
   if declare -F bastion_port_forward_cleanup >/dev/null 2>&1; then
     bastion_port_forward_cleanup
   fi
@@ -38,6 +46,8 @@ _am_run_exit_traps() {
 
 # Start bastion + SSM tunnel. Uses CLUSTER_PREFIX (eph-<hash>-) when cluster_id omitted.
 start_alertmanager_forward() {
+  # Reset the cleanup guard so a start → clean → start cycle works correctly.
+  _AM_CLEANED=false
   local cluster_id="${1:-}"
   local local_port="${ALERTMANAGER_LOCAL_PORT:-9093}"
   local remote_port="${ALERTMANAGER_REMOTE_PORT:-9093}"
