@@ -212,10 +212,11 @@ argocd/config/shared/vector/
 └── templates/
     ├── namespace.yaml
     ├── pull-secret.yaml
-    ├── serviceaccount.yaml            # sigv4-proxy SA (Pod Identity)
-    ├── sigv4-proxy-deployment.yaml
-    ├── sigv4-proxy-service.yaml
-    └── sigv4-proxy-pdb.yaml
+    └── management/
+        ├── serviceaccount.yaml        # sigv4-proxy SA (Pod Identity)
+        ├── sigv4-proxy-deployment.yaml
+        ├── sigv4-proxy-service.yaml
+        └── sigv4-proxy-pdb.yaml
 ```
 
 The ApplicationSet selects the cluster-specific Vector values overlay using the cluster's `cluster_type` label. Management-only proxy resources are guarded by the same cluster type; regional clusters render the shared chart without those resources.
