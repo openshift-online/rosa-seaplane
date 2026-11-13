@@ -60,10 +60,9 @@ spec:
       - helm:
           valueFiles:
           - values.yaml
-          # Optional per-cluster-type overlay; shared/vector defines these files.
-          - values-{{ .metadata.labels.cluster_type }}.yaml
+          # Vector selects its cluster overlay; other charts reuse their required values.yaml.
+          - '{{ if eq .path.basename "vector" }}values-{{ .metadata.labels.cluster_type }}.yaml{{ else }}values.yaml{{ end }}'
           - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
-          ignoreMissingValueFiles: true
           valuesObject:
             global:
               cluster_type: '{{ .metadata.labels.cluster_type }}'
