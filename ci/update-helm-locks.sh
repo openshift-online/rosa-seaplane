@@ -53,6 +53,11 @@ update_one() {
 	echo "helm dependency update $dir"
 	rm -f "$dir"/charts/*.tgz
 	helm dependency update "$dir"
+	# grafana/loki 7.0.0 querier and index-gateway omit command. The RH
+	# logging-loki image has no ENTRYPOINT; re-wire after every fetch.
+	if [[ "$dir" == */regional-cluster/loki ]]; then
+		python3 "$root/ci/patch-loki-command-templates.py"
+	fi
 }
 
 if [[ -n "${CHART:-}" ]]; then

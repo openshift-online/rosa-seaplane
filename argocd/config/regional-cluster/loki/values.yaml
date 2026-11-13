@@ -42,7 +42,24 @@ serviceAccount:
 loki:
   deploymentMode: Distributed
 
+  # registry.redhat.io. Same SSM pull-secret as Vector / HyperShift.
+  imagePullSecrets:
+    - name: pull-secret
+
   loki:
+    # Catalog: registry.redhat.io/openshift-logging/logging-loki-rhel9:v6.4.7
+    # Logging 6.4.7 operand is Loki 3.7 (label version_minor=v3.7). Chart 7.0.0
+    # appVersion is 3.6.7; args are still -config.file / -target=. Do not pin
+    # Logging 6.0.x (Loki 3.1.0) or 6.4.6 (S3 streaming trailer bug).
+    # Catalog image has no ENTRYPOINT/CMD; chart args would be argv0 without command.
+    command: /usr/bin/loki
+    image:
+      registry: registry.redhat.io
+      repository: openshift-logging/logging-loki-rhel9
+      tag: v6.4.7
+      digest: sha256:90ab304b12402d6759330a338f7b26fcf9ac7ec4d601fcab2582dca99111544b
+      pullPolicy: IfNotPresent
+
     # Single tenant — no gateway or multi-tenancy needed.
     auth_enabled: false
 
