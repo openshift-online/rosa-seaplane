@@ -34,6 +34,9 @@ module "vpc" {
   source = "../../modules/vpc"
 
   resource_name_base = var.management_id
+
+  hcp_slot_count = var.hcp_slot_count
+  hcp_slot_cidrs = var.hcp_slot_cidrs
 }
 
 # =============================================================================
@@ -47,11 +50,14 @@ module "management_cluster" {
   cluster_id                      = var.management_id
   vpc_id                          = module.vpc.vpc_id
   private_subnet_ids              = module.vpc.private_subnet_ids
+  control_plane_subnet_ids        = module.vpc.eks_control_plane_subnet_ids
   cluster_security_group_id       = module.vpc.cluster_security_group_id
   vpc_endpoints_security_group_id = module.vpc.vpc_endpoints_security_group_id
 
   worker_node_ami_id           = var.worker_node_ami_id
   worker_node_root_volume_size = var.worker_node_root_volume_size
+
+  hcp_slot_subnet_arns = module.vpc.hcp_slot_subnet_arns
 }
 
 # =============================================================================

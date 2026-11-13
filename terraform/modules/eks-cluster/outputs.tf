@@ -100,3 +100,8 @@ output "karpenter_node_instance_profile_name" {
   description = "Instance profile name for Karpenter-provisioned nodes (matches EC2NodeClass.spec.instanceProfile)"
   value       = aws_iam_instance_profile.karpenter_node.name
 }
+
+output "hcp_slot_instance_profile_names" {
+  description = "Instance profile per HCP slot, keyed by slot number (matches the HCP slot EC2NodeClass.spec.instanceProfile)"
+  value       = { for slot, profile in aws_iam_instance_profile.hcp_slot_node : slot => profile.name }
+}

@@ -232,11 +232,20 @@ def render_template(template_path: Path, context: dict[str, Any]) -> str:
     return rendered
 
 
+class _NoAliasDumper(yaml.SafeDumper):
+    """Writes repeated values in full: config values that reference the same
+    list or dict (e.g. two charts' instanceFamilies) would otherwise be emitted
+    as YAML anchors and aliases."""
+
+    def ignore_aliases(self, data: Any) -> bool:
+        return True
+
+
 def _toyaml(value: Any) -> str:
     if not value:
         return "{}"
     return yaml.dump(
-        value, default_flow_style=False, sort_keys=False, width=float("inf")
+        value, Dumper=_NoAliasDumper, default_flow_style=False, sort_keys=False, width=float("inf")
     ).rstrip()
 
 

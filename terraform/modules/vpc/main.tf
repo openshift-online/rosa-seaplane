@@ -52,6 +52,21 @@ resource "aws_subnet" "private" {
   })
 }
 
+# EKS control plane network interfaces get their own subnets, so worker subnets
+# (private subnets, HCP slots) can change without touching the
+# cluster's network configuration. No kubernetes.io/cluster or ELB role tags:
+# nodes and load balancers are never placed here.
+resource "aws_subnet" "eks_control_plane" {
+  count             = length(var.eks_control_plane_subnet_cidrs)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.eks_control_plane_subnet_cidrs[count.index]
+  availability_zone = local.azs[count.index]
+
+  tags = merge(local.common_tags, {
+    Name = "${var.resource_name_base}-eks-${local.azs[count.index]}"
+  })
+}
+
 # -----------------------------------------------------------------------------
 # NAT Gateways (per-AZ for high availability)
 # -----------------------------------------------------------------------------
@@ -151,6 +166,12 @@ resource "aws_route_table_association" "public" {
   count          = length(var.public_subnet_cidrs)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "eks_control_plane" {
+  count          = length(var.eks_control_plane_subnet_cidrs)
+  subnet_id      = aws_subnet.eks_control_plane[count.index].id
+  route_table_id = aws_route_table.private[count.index].id
 }
 
 resource "aws_route_table_association" "private" {

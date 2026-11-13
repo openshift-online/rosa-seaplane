@@ -13,6 +13,17 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
+  expireAfter: 504h
+hcpSlots:
+  count: 4
+  instanceFamilies:
+  - m8i-flex
+  - m7i-flex
+  ami:
+    family: AL2023
+    id: ami-00ad69a77c77c2a61
+  rootVolumeSize: 50Gi
+  expireAfter: 504h
 hypershift:
   oidcStorageS3Bucket:
     name: hypershift-mc-us-east-1

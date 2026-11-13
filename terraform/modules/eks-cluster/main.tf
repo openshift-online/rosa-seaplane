@@ -87,6 +87,15 @@ resource "aws_cloudwatch_log_group" "eks_cluster" {
 # -----------------------------------------------------------------------------
 # EKS Cluster
 # -----------------------------------------------------------------------------
+
+# The subnets Karpenter launches nodes into. The cluster depends on them so that
+# on destroy its provisioner below terminates those nodes and deletes their
+# network interfaces before the subnets are deleted. The cluster itself only
+# references its control plane subnets.
+resource "terraform_data" "node_subnets" {
+  input = concat(var.private_subnet_ids, flatten(values(var.hcp_slot_subnet_arns)))
+}
+
 resource "aws_eks_cluster" "main" {
   name     = local.cluster_id
   role_arn = aws_iam_role.eks_cluster.arn
@@ -107,7 +116,9 @@ resource "aws_eks_cluster" "main" {
   }
 
   vpc_config {
-    subnet_ids              = var.private_subnet_ids
+    # Dedicated subnets for the cluster's network interfaces when provided, so
+    # worker subnets can change independently. Updated in place by EKS.
+    subnet_ids              = length(var.control_plane_subnet_ids) > 0 ? var.control_plane_subnet_ids : var.private_subnet_ids
     endpoint_private_access = true
     endpoint_public_access  = false
     security_group_ids      = [var.cluster_security_group_id]
@@ -118,7 +129,8 @@ resource "aws_eks_cluster" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_cluster_managed,
     aws_cloudwatch_log_group.eks_cluster,
-    aws_kms_key.eks_secrets
+    aws_kms_key.eks_secrets,
+    terraform_data.node_subnets,
   ]
 
   # Karpenter nodes are created outside Terraform by the in-cluster controller.
@@ -319,6 +331,7 @@ resource "aws_eks_node_group" "karpenter_bootstrap" {
 
   depends_on = [
     aws_iam_role_policy_attachment.karpenter_node_managed,
+    aws_iam_role_policy.scoped_cni,
     aws_eks_addon.vpc_cni,
   ]
 }
@@ -335,6 +348,17 @@ resource "aws_eks_addon" "vpc_cni" {
   cluster_name = aws_eks_cluster.main.name
   addon_name   = "vpc-cni"
   tags         = local.common_tags
+
+  # Each HCP slot has a /24 per AZ. The default (one warm ENI per
+  # node, up to 30 IPs on large instances) would exhaust it with a few nodes;
+  # keep about one IP per pod plus a few spare per node instead.
+  configuration_values = length(var.hcp_slot_subnet_arns) > 0 ? jsonencode({
+    env = {
+      WARM_ENI_TARGET   = "0"
+      WARM_IP_TARGET    = "2"
+      MINIMUM_IP_TARGET = "8"
+    }
+  }) : null
 }
 
 resource "aws_eks_addon" "kube_proxy" {
