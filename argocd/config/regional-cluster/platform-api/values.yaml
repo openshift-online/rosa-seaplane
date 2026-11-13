@@ -160,3 +160,19 @@ platformApi:
       periodSeconds: 5
       timeoutSeconds: 3
       failureThreshold: 3
+
+seaplane:
+  applicationName: seaplane-api
+  namespace: argocd
+  targetNamespace: platform-api
+  project: default
+
+  source:
+    repoURL: https://github.com/openshift-online/rosa-seaplane-api.git
+    targetRevision: cc51c40da14cba95daf2f7ae64c01950a7a02a10
+    path: seaplane-api/charts
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
