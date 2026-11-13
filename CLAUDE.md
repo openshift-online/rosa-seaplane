@@ -229,11 +229,11 @@ The Platform API implements per-account rate limiting using the GCRA (Generic Ce
 | `terraform/modules/ecs-bootstrap/main.tf`                  | Writes `redis_endpoint` annotation on the ArgoCD cluster secret             |
 | `config/templates/argocd-bootstrap/applicationset.yaml.j2` | Reads `redis_endpoint` annotation into Helm valuesObject                    |
 | `argocd/config/regional-cluster/platform-api/values.yaml`  | Rate limit config (routes, rates, burst), Valkey endpoint                   |
-| `argocd/config/regional-cluster/platform-api/templates/`   | Deployment, ratelimit-configmap, servicemonitor templates                   |
+| `argocd/config/regional-cluster/platform-api/`             | Argo CD Application wrapper (deployment chart in rosa-seaplane-api)         |
 | `argocd/config/regional-cluster/alerting-rules/templates/` | PrometheusRule CRs for rate limit alerts                                    |
 | `docs/design/rate-limiting-architecture.md`                | ADR: rate limiting design decisions                                         |
 
-**Key files (rosa-seaplane-api)**: Rate limiting Go implementation lives in the API repo — `pkg/ratelimit/` (GCRA limiter, config loading), `pkg/middleware/ratelimit.go` (HTTP middleware), `cmd/rosa-seaplane-api/main.go` (wiring).
+**Key files (rosa-seaplane-api)**: Rate limiting Go implementation lives in the API repo — `seaplane-api/pkg/ratelimit/` (GCRA limiter, config, middleware), `seaplane-api/cmd/main.go` (wiring).
 
 **Data flow for Valkey endpoint**: Terraform output → `bootstrap-argocd.sh` (combines host:port) → ECS task env var → cluster secret annotation → ApplicationSet valuesObject → Helm values → `REDIS_ENDPOINT` env var on platform-api pods.
 
