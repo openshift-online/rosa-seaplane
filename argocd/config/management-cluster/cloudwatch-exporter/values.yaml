@@ -6,7 +6,8 @@ prometheus-yet-another-cloudwatch-exporter:
   fullnameOverride: cloudwatch-exporter
 
   image: 
-    repository: quay.io/redhat-services-prod/rhobs-mco-tenant/rhobs-yace@sha256
+    registry: quay.io
+    repository: redhat-services-prod/rhobs-mco-tenant/rhobs-yace@sha256
     tag: afe08ba6f7573e15b4f85de8632a21c01ea633d116d480a74d2cf5452431748a
     pullPolicy: IfNotPresent
 
