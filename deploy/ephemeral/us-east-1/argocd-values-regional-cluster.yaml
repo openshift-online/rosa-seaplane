@@ -16,7 +16,10 @@ eksNodePool:
 baseDomain: us-east-1.eph-dev0.rosa.devshift.org
 platformApi:
   authz:
-    config: "formatVersion: 1\nregisteredAccounts: [\"@@AWS_ACCOUNT_ID@@\"]\npolicies:\n  - id: rc-all-actions\n    ownerAccountID: \"@@AWS_ACCOUNT_ID@@\"\n    content: |\n      permit(principal, action in Seaplane::Action::\"AllActions\", resource)\n      when { context.accountId == \"@@AWS_ACCOUNT_ID@@\" }\n      unless { context.requestLabels.hasTag(\"authz-deny-probe\") };\nattachments:\n  - id: rc-child-admin\n    policyID: rc-all-actions\n    principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:role/rosa-seaplane-account-admin\n    scope: global\n  - id: rc-e2e-user\n    policyID: rc-all-actions\n    principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:user/e2e\n    scope: global"
+    tables:
+      policies: us-east-1-authz-policies
+      global: us-east-1-authz-global
+      regional: us-east-1-authz-regional
   app:
     args:
       defaultClusterExpiration: ''

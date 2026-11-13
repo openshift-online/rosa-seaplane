@@ -13,7 +13,6 @@
 import copy
 import json
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -2729,22 +2728,6 @@ class TestUpdateDocs:
         assert "My custom description" in content
 
 
-AUTHZ_BUNDLE = '''formatVersion: 1
-registeredAccounts: ["012345678901"]
-policies:
-  - id: read-clusters
-    ownerAccountID: "012345678901"
-    content: |
-      permit(principal, action in Seaplane::Action::"ReadOnly", resource)
-      when { context.region == "us-east-1" && context.accountId == "012345678901" };
-attachments:
-  - id: readers
-    policyID: read-clusters
-    principalARN: arn:aws:iam::012345678901:role/platform/readers
-    scope: regional
-    region: us-east-1
-'''
-AUTHZ_EXAMPLE = PROJECT_ROOT / "docs" / "examples" / "authz-dev"
 PLATFORM_CHART = REAL_ARGOCD_CONFIG_DIR / "regional-cluster" / "platform-api"
 
 
@@ -2784,20 +2767,6 @@ def _resource(resources, kind, name):
     return next(r for r in resources if r["kind"] == kind and r["metadata"]["name"] == name)
 
 
-def _assert_bundle_fields(bundle):
-    # Bundles carry no service-operator domain; MCs register at startup instead.
-    assert set(bundle) == {"formatVersion", "registeredAccounts", "policies", "attachments"}
-    assert bundle["formatVersion"] == 1
-
-
-def _assert_rc_grants(bundle, account, role):
-    # Every env grants the identities behind rrp-rc: the child-admin role and CI's e2e user.
-    assert [p["id"] for p in bundle["policies"]] == ["rc-all-actions"]
-    assert [a["principalARN"] for a in bundle["attachments"]] == [
-        f"arn:aws:iam::{account}:role/{role}", f"arn:aws:iam::{account}:user/e2e",
-    ]
-
-
 class TestPlatformAPIChartWrapper:
     def test_application_source_and_child_values(self, tmp_path):
         resources, _ = _helm_platform(tmp_path, {})
@@ -2824,34 +2793,25 @@ class TestPlatformAPIChartWrapper:
         assert "seaplane" not in child_values
 
     def test_environment_values_and_globals_are_forwarded(self, tmp_path):
-        content = AUTHZ_BUNDLE
+        tables = {"policies": "p", "global": "g", "regional": "r"}
         resources, _ = _helm_platform(tmp_path, {
             "global": {"aws_region": "eu-west-2", "aws_account_id": "012345678901"},
-            "platformApi": {"authz": {"config": content}},
+            "platformApi": {"authz": {"tables": tables}},
         })
         app = _resource(resources, "Application", "seaplane-api")
         child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
         assert child_values["global"]["aws_region"] == "eu-west-2"
         assert child_values["global"]["aws_account_id"] == "012345678901"
-        assert child_values["platformApi"]["authz"]["config"] == content
+        assert child_values["platformApi"]["authz"]["tables"] == tables
 
     @pytest.mark.parametrize("env", ["ephemeral", "integration", "stage"])
-    def test_generated_authorization_bundle_is_forwarded(self, tmp_path, monkeypatch, env):
+    def test_generated_authz_tables_are_forwarded(self, tmp_path, monkeypatch, env):
         monkeypatch.delenv("BUILD_ID", raising=False)
         values = _authz_values(tmp_path, env)
         resources, _ = _helm_platform(tmp_path, values)
         app = _resource(resources, "Application", "seaplane-api")
         child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
         assert child_values["platformApi"]["authz"] == values["platformApi"]["authz"]
-
-    def test_custom_authorization_bundle_is_forwarded(self, tmp_path):
-        content = AUTHZ_BUNDLE
-        resources, _ = _helm_platform(tmp_path, {
-            "platformApi": {"authz": {"config": content}},
-        })
-        app = _resource(resources, "Application", "seaplane-api")
-        child_values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
-        assert child_values["platformApi"]["authz"]["config"] == content
 
     def test_chart_source_is_component_owned(self):
         chart = load_yaml(PLATFORM_CHART / "Chart.yaml")

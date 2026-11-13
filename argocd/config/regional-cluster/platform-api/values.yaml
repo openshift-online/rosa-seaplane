@@ -75,15 +75,9 @@ platformApi:
     scrapeTimeout: 10s
     labels: {}
 
-  # Authorization is mandatory. Caller grants belong in environment overrides.
   authz:
-    # Complete v1 bundle, delivered as text. Optional @@AWS_ACCOUNT_ID@@ and
-    # @@AWS_REGION@@ markers use trusted bootstrap identity without adding grants.
-    config: |
-      formatVersion: 1
-      registeredAccounts: []
-      policies: []
-      attachments: []
+    # Rendered from regional_cluster.authz_tables: {policies, global, regional}. Required.
+    tables: {}
 
   # Rate Limiting configuration
   rateLimit:

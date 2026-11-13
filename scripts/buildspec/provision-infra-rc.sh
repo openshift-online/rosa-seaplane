@@ -66,7 +66,7 @@ tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
     zoa_boundary_session_max_duration_hours zoa_lambda_api_concurrency \
     zoa_lambda_worker_concurrency zoa_lambda_access_concurrency \
     zoa_access_trusted_assumer_role_names zoa_access_trusted_assumer_role_name_suffixes \
-    worker_node_ami_id worker_node_root_volume_size
+    worker_node_ami_id worker_node_root_volume_size authz_tables enable_ephemeral_authz_tables
 _zoa_boundary_image_tag=$(jq -r '.zoa_boundary_image_tag // ""' "$DEPLOY_CONFIG_FILE")
 _zoa_boundary_source_image=$(jq -r '.zoa_boundary_source_image // ""' "$DEPLOY_CONFIG_FILE")
 export TF_VAR_zoa_boundary_image="${_zoa_boundary_source_image}:${_zoa_boundary_image_tag}"

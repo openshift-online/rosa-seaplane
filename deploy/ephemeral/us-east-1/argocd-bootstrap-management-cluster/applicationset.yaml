@@ -82,8 +82,6 @@ spec:
                 arn: '{{ .metadata.annotations.api_target_group_arn }}'
               app:
                 args:
-                  dynamodbRegion: '{{ .metadata.annotations.dynamodb_region }}'
-                  dynamodbPrefix: '{{ .metadata.annotations.dynamodb_prefix }}'
                   oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
               rateLimit:
                 redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
