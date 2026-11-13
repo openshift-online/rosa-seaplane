@@ -68,9 +68,11 @@ sequenceDiagram
 
 The UI authenticates with an **RH Token** through the custom-authorizer gateway. The token-to-ARN mappings live in a **DynamoDB** account-linking store, and a single Red Hat identity can be linked to **multiple** AWS ARNs. So the UI runs two steps: first it asks for the list of ARNs the user may operate with (Flow 2a), then it sends each real request with one selected ARN (Flow 2b).
 
+**Account linking is a prerequisite, and the link itself proves control of the AWS identity.** Linking is not part of these UI flows: a customer links an AWS identity to their Red Hat identity by calling the account-linking endpoint through the `AWS_IAM` gateway, so the AWS identity is proven by SigV4 (control of the ARN is established by AWS, not asserted by the client) and the same request carries an RH token that the service verifies synchronously before it writes the linkage record. Supplying an ARN alone never creates a link. The flows below therefore only ever resolve a token to an ARN whose control was proven at link time, and the authorizer rejects any selected ARN that is not currently linked (including revoked links). The linking and authorization mechanism is owned by the Platform API authorization design (`rosa-seaplane-api`, `docs/authz.md`) and is out of scope here.
+
 #### Flow 2a: list linkable ARNs (token only)
 
-The UI calls a token-only endpoint. The Lambda authorizer validates the token and looks the Red Hat identity up in DynamoDB, which returns the (possibly many) linked ARNs used to populate the selector:
+The UI calls a token-only endpoint. The Lambda authorizer validates the token and authorizes the request; the endpoint integration (Platform API) then looks the Red Hat identity up in DynamoDB and returns the (possibly many) linked ARNs used to populate the selector. The authorizer returns only an allow/deny result to API Gateway, so the ARN list is served by the backend integration, not by the authorizer:
 
 ```mermaid
 sequenceDiagram
@@ -78,15 +80,18 @@ sequenceDiagram
     participant UI
     participant GW as API Gateway (CUSTOM)
     participant LA as Lambda authorizer
+    participant PA as Platform API
     participant DB as Account-linking store (DynamoDB)
 
     User->>UI: Log in (Red Hat)
-    UI->>GW: RH Token only (no ARN)
-    GW->>LA: authorize (token-only mode, skips token-to-ARN mapping)
-    LA->>DB: query ARNs linked to this Red Hat identity
+    UI->>GW: GET linkable ARNs (RH Token only, no ARN)
+    GW->>LA: authorize (token-only mode, no token-to-ARN mapping)
+    LA-->>GW: allow (token valid, Red Hat identity in context)
+    GW->>PA: forward request + Red Hat identity
+    PA->>DB: query ARNs linked to this Red Hat identity
     Note over DB: one Red Hat identity maps to many ARNs<br/>(key: Red Hat identity, value: set of ARNs)
-    DB-->>LA: list of linkable ARNs
-    LA-->>UI: ARNs the user may operate with
+    DB-->>PA: list of linkable ARNs
+    PA-->>UI: ARNs the user may operate with
     Note over User,UI: UI populates the ARN selector
 ```
 
@@ -129,7 +134,7 @@ sequenceDiagram
 
 ### Flow 3: Unmanaged OIDC signing-key retrieval
 
-For a unmanaged OIDC, the customer owns the OIDC issuer and stores the RSA private signing key in their own AWS Secrets Manager. They register an OIDC config supplying the issuer URL and the secret ARN; Seaplane never stores the key, it reads it from the customer account via the installer role.
+For an unmanaged OIDC, the customer owns the OIDC issuer and stores the RSA private signing key in their own AWS Secrets Manager. They register an OIDC config supplying the issuer URL and the secret ARN; Seaplane reads the key from the customer's Secrets Manager via the installer role and persists it as a Kubernetes Secret on the MC (see Security), rather than keeping its own copy outside the control plane.
 
 V1 reads and validates the key in **two moments**: a synchronous `GetSecretValue` plus RSA-parse plus issuer-reachability check when the config is registered or patched, and an asynchronous re-read at provisioning. **V2 collapses this to the asynchronous path only.** Because V2 can surface failures quickly through the cluster Condition (the same mechanism preflight uses), there is no need to pay a synchronous cross-account round trip at registration just to produce an actionable error; the provisioning reconciler does the real validation and bubbles any problem back fast.
 
@@ -201,6 +206,8 @@ flowchart LR
 
 Today some customers configure the installer-role trust policy **without** an `sts:ExternalId` condition. This is not the desired pattern; see the AWS guidance on [granting third-party access to AWS resources](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html). In V2, Seaplane will **not** allow a customer to provision clusters unless `ExternalId` is defined in their trust policy.
 
+Because the installer-role trust policy is generated and managed by the `rosa` CLI, Seaplane controls that the `sts:ExternalId` condition, set to the service-owned value, sits on the statement that lets the installer identity assume the role. The V2 provisioning gate verifies that the service-owned value is actually required on that allow: a wildcard condition, or the correct value merely appearing elsewhere in the policy, does not satisfy the gate. A customer who edits their own trust policy to add a separate, unconditional allow is outside the CLI-managed policy and therefore outside what Seaplane generates or verifies; that residual risk is inherent to the customer retaining write access to their own trust policy.
+
 ## Alternatives Considered
 
 1. **Move preflight and discovery into a client SDK (remove the installer role).** The CLI/Terraform clients would resolve customer AWS credentials locally and run the checks before submitting the request. Rejected: the UI cannot run an SDK, so a privileged backend path is still required; shared-VPC, zero-egress, and zero-operator-access flows were not re-validated against it; it shifts the full permission burden onto every executing identity (breaking V1's separation of personas, where one person creates the role and others with minimal permissions can create clusters); the network verifier would run sequentially in the client and take longer; and SDK version skew across CLI, Terraform, and other integrations would fragment check coverage.
@@ -243,7 +250,8 @@ Today some customers configure the installer-role trust policy **without** an `s
 ### Security:
 
 - **Confused-deputy mitigation**: Mandatory, service-owned `ExternalId` is the core control. The service guarantees uniqueness; a fully customer-chosen value that could collide across tenants is not permitted.
-- **UI trust boundary**: The Lambda authorizer is the trust boundary for UI requests. It must verify the Red Hat token **and** enforce the token-to-ARN linking; it must never trust a client-supplied ARN without confirming the mapping. The ARN selector is populated only from the server-resolved list.
+- **UI trust boundary**: The Lambda authorizer is the trust boundary for UI requests. It must verify the Red Hat token **and** enforce the token-to-ARN linking; it must never trust a client-supplied ARN without confirming the mapping, and it must reject any ARN that is not currently linked (including revoked links). Because control of the ARN is proven when the link is created (see Flow 2), the authorizer only ever admits ARNs whose ownership was established out of band. The ARN selector is populated only from the server-resolved list.
+- **Authorizer caching**: if API Gateway authorizer-result caching is enabled, the cache key must be the full `(RH token, selected ARN)` tuple, never the token alone, so an allow decision made for one ARN cannot be replayed for another. The Flow 2a token-only listing request carries no selected ARN, so it must use a distinct cache entry (or caching disabled) and must never share a decision with selected-ARN requests.
 - **Public custom endpoint**: Unlike the `AWS_IAM` gateway, which rejects unsigned requests before any custom code runs, the custom-authorizer gateway is a public endpoint whose authentication is entirely Lambda code. The authorizer is security-critical and should be treated as such (least privilege, tested, monitored).
 - **`X-Amz-Principal-Org-Id` on the UI path**: this header is derived natively from IAM/STS for SigV4 requests, but there is no native source for a customer ARN resolved from the account-linking store. For UI requests the Lambda authorizer must populate it explicitly (for example from the account-linking record) or leave it absent.
 - **Unmanaged OIDC key is sensitive material**: the customer's RSA private signing key is read from their account and materialized as a Kubernetes Secret on the MC. It must not be logged, echoed in API responses or errors, or persisted outside the control plane's signing-key Secret. The V1 installer policy scopes `secretsmanager:GetSecretValue` to secrets tagged `red-hat-managed=true`; this carries over.
@@ -275,3 +283,4 @@ Today some customers configure the installer-role trust policy **without** an `s
 
 - `terraform/modules/api-gateway/integration.tf`: the `AWS_IAM` identity-header contract this design reproduces for the UI path.
 - `docs/design/regional-control-plane-architecture.md`: `seaplane-operator` as the controller and single source of truth for cluster state.
+- `rosa-seaplane-api`, `docs/authz.md`: the Platform API authorization and account/principal-linking design (how AWS identities are linked to a Red Hat identity, and how linked requests are authorized).
