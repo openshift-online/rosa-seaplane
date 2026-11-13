@@ -36,6 +36,7 @@ Detailed architecture and rationale for key technical decisions:
 | [MC Metrics Remote Write](design/mc-metrics-remote-write.md)                         | MC-to-RC metrics forwarding via RHOBS API Gateway                         |
 | [Monitoring Platform](design/monitoring-platform.md)                                 | Metrics pipeline (Prometheus + Thanos)                                    |
 | [Pipeline-Based Lifecycle](design/pipeline-based-lifecycle.md)                       | Historical multi-stage pipeline architecture                              |
+| [Preflight & UI Login Flows](design/preflight-and-ui-login-flows.md)                 | Installer-role discovery and preflight; CLI SigV4 vs UI custom-authorizer gateway |
 | [Rate Limiting](design/rate-limiting-architecture.md)                                | Per-account rate limiting for Platform API                                |
 | [Regional Account Minting](design/regional-account-minting.md)                       | AWS account structure and minting pipelines                               |
 | [Regional Control Plane Architecture](design/regional-control-plane-architecture.md) | Operator + PostgreSQL control plane (seaplane-operator, seaplane-db)      |
