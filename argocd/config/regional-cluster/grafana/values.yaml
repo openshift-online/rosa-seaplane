@@ -7,7 +7,7 @@ grafana:
   image:
     registry: docker.io
     repository: grafana/grafana-oss
-    tag: "11.4.0"
+    tag: "11.6.5"
     pullPolicy: IfNotPresent
 
   # FedRAMP: non-root (UID/GID 472)
