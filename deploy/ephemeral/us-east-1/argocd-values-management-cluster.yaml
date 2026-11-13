@@ -5,8 +5,6 @@
 # Environment: ephemeral
 # Region: us-east-1
 
-ecrCredsSync:
-  enabled: false
 eksNodePool:
   instanceFamilies:
   - m8i-flex

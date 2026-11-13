@@ -1,10 +1,26 @@
-# ecr-creds-sync environment overrides for rosa-seaplane.
-# Chart defaults (image, resources, etc.) live in the canonical values.yaml in
-# the rosa-seaplane-ecr-creds-sync repository. Only environment-specific
-# overrides belong here.
-
 ecrCredsSync:
-  # enabled is the only env-specific override — all other values are inherited
-  # from the chart defaults or supplied at runtime via ArgoCD cluster annotations
-  # (ecrRepository, awsRegion, sourceSecrets).
-  enabled: false
+  applicationName: ecr-creds-sync
+  namespace: argocd
+  targetNamespace: hypershift
+  project: default
+
+  source:
+    repoURL: https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync
+    # Pinned commit SHA of the ecr-creds-sync chart. Update manually or via
+    # Mintmaker when a new chart version is released.
+    targetRevision: "bd7891a"
+    path: helm
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+  # Helm values forwarded to the child chart in rosa-seaplane-ecr-creds-sync.
+  # enabled and all ECR fields are overridden per environment via the
+  # ApplicationSet valuesObject — do not set sensitive values here.
+  helmValues:
+    enabled: false
+    ecrRepository: ""
+    awsRegion: ""
+    sourceSecrets: ""

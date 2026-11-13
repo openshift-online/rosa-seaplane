@@ -104,12 +104,16 @@ spec:
                   sources: '{{ index .metadata.annotations "ecr_mirror_sources" | default "" }}'
                   baseSecretName: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'
 
-            # ecr-creds-sync values derived from SSM-sourced annotations so that
-            # ecrRepository, awsRegion, and sourceSecrets stay out of git.
+            # ecr-creds-sync helm values forwarded to the wrapper chart.
+            # enabled is set explicitly per environment — requires human opt-in.
+            # ecrRepository, awsRegion, and sourceSecrets come from SSM-sourced
+            # annotations so that sensitive ECR config stays out of git.
             ecrCredsSync:
-              ecrRepository: '{{ index .metadata.annotations "ecr_mirror_ecr_repository" | default "" }}'
-              awsRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
-              sourceSecrets: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'
+              helmValues:
+                enabled: False
+                ecrRepository: '{{ index .metadata.annotations "ecr_mirror_ecr_repository" | default "" }}'
+                awsRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
+                sourceSecrets: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'
 
             # Thanos Operator values (keys must match chart's values.yaml structure)
             thanos:
@@ -175,22 +179,3 @@ spec:
       - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
         targetRevision: '{{ .metadata.annotations.git_revision }}'
         ref: values
-  # ecr-creds-sync sources its chart from the rosa-seaplane-ecr-creds-sync
-  # repository rather than the local path, so the chart and controller code
-  # are co-located. All other applications use the default sources above.
-  templatePatch: |
-    {{- if eq .path.basename "ecr-creds-sync" }}
-    spec:
-      sources:
-      - repoURL: 'https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync'
-        targetRevision: 'bd7891a'
-        path: helm
-        helm:
-          valueFiles:
-          - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
-      - repoURL: '{{ .metadata.annotations.git_repo | replace "github.com" "github.com:443" }}'
-        targetRevision: '{{ .metadata.annotations.git_revision }}'
-        ref: values
-    {{- else }}
-    {}
-    {{- end }}
