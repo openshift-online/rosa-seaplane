@@ -48,4 +48,15 @@ Helm release annotations - required for Helm to recognize ownership
 meta.helm.sh/release-name: {{ .Release.Name }}
 meta.helm.sh/release-namespace: {{ .Release.Namespace }}
 argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+argocd.argoproj.io/sync-wave: "1"
+{{- end }}
+
+{{/*
+Red Hat Thanos operand (CMO ose-thanos-rhel9). Operator concatenates
+baseImage:version and sets args (query, receive, ...).
+CR imagePullSecrets are not copied onto pods — see operand-serviceaccounts.yaml.
+*/}}
+{{- define "thanos.operandImage" -}}
+baseImage: {{ .Values.image.repository | quote }}
+version: {{ .Values.image.tag | quote }}
 {{- end }}
