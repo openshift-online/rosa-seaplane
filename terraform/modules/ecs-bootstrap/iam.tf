@@ -96,6 +96,13 @@ resource "aws_iam_role_policy" "task_bootstrap" {
         ]
       },
       {
+        # Seeded out of band. Needed so the first Helm install can pull
+        # registry.redhat.io Argo CD / Dex images before ESO exists.
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/infra/pull-secret"
+      },
+      {
         Effect = "Allow"
         Action = [
           "secretsmanager:GetSecretValue",
