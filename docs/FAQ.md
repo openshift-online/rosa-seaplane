@@ -2,6 +2,10 @@
 
 The operand chart is [`openshift/cert-manager`](https://github.com/openshift/cert-manager) @ **v1.19.6**, matching `jetstack-cert-manager-rhel9:v1.19.6-1`. That chart is still the upstream templates (args, no command). The RH image has no ENTRYPOINT, so kustomize sets `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
 
+### Why is Loki on logging-loki-rhel9 and Grafana still grafana-oss?
+
+RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.0.0**, pinned to `logging-loki-rhel9:v6.4.7` (Loki **3.7**). Logging **6.0.x** is Loki **3.1.0** and is not a tag swap onto this chart. Grafana stays `grafana-oss:11.4.0`: `ose-grafana` is deprecated CMO Grafana ~8.3, not 11.4. See [Loki and Grafana Red Hat images](loki-grafana-redhat-images.md).
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).
