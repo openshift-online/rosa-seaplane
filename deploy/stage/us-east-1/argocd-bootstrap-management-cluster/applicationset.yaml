@@ -56,10 +56,16 @@ spec:
         syncOptions:
         - ServerSideApply=true
         - CreateNamespace=true
+  # templatePatch allows a conditional item in the Helm valueFiles list.
+  templatePatch: |
+    spec:
       sources:
       - helm:
           valueFiles:
           - values.yaml
+          {{ if eq .path.basename "vector" }}
+          - values-{{ .metadata.labels.cluster_type }}.yaml
+          {{ end }}
           - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
           valuesObject:
             global:

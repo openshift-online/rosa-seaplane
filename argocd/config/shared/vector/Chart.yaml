@@ -1,6 +1,6 @@
 apiVersion: v2
 name: vector
-description: Vector log collector for management cluster — collects pod logs and forwards to RC Loki via sigv4-proxy
+description: Shared Vector log collector for regional and management clusters
 type: application
 version: 0.2.0
 home: https://github.com/openshift-online/rosa-seaplane
@@ -17,7 +17,6 @@ keywords:
   - loki
   - rosa
   - eks
-  - management-cluster
 
 dependencies:
   - name: vector
