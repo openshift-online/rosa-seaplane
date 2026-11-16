@@ -101,7 +101,7 @@ terraform_tags:
 # @used-by worker_node_ami pipeline-regional-cluster-inputs/terraform.json.j2
 worker_node_ami:
   family: AL2023
-  id: ami-00ad69a77c77c2a61
+  id: ami-02c0be6b661d6caf5
 
 # @doc worker_node_root_volume_size Root EBS volume size (GiB) for worker nodes. Drives both the Karpenter EC2NodeClass and the Terraform bootstrap node group.
 # @used-by worker_node_root_volume_size _context
