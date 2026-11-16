@@ -1,7 +1,6 @@
 # See the OWNERS docs at https://www.kubernetes.dev/docs/guide/owners/
 reviewers: []
 approvers:
-  - Makdaam
   - MitaliBhalla
   - adamminter
   - alcamech
@@ -10,7 +9,10 @@ approvers:
   - gdbranco
   - jfrazierRedHat
   - jmelis
+  - jnewton75
+  - joshbranham
   - lucasponce
+  - makdaam
   - marcolan018
   - newtonheath
   - psav
