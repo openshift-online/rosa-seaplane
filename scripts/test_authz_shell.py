@@ -30,10 +30,11 @@ class ShellTests(unittest.TestCase):
   {transact}
 }}
 awscurl() {{ printf 'enroll %s\\n' "$*" >> "$LOG"; }}
+export -f aws awscurl
 """ + self.ci_block() + '\necho suite >> "$LOG"\n'
         env = {"E2E_CUSTOMER_ACCOUNT_ID": "", "E2E_ACCOUNT_ID": "", "ZOA_DEPLOYMENT_NAME": "", **env}
         result = self.run_shell(script, BASE_URL="https://example.test", AWS_DEFAULT_REGION="us-east-1",
-                                LOG=str(log), **env)
+                                LOG=str(log), REPO_ROOT=str(ROOT), **env)
         return result, log.read_text().splitlines() if log.exists() else []
 
     def test_ci_enrolls_then_seeds_grants(self):
@@ -120,6 +121,13 @@ awscurl() {{ printf 'enroll %s\\n' "$*" >> "$LOG"; }}
             self.assertEqual(sum(call.startswith("seed ") for call in calls), 8)
             self.assertEqual(result.stdout.count("POLICY#e2e-policy-admin for"), 2)
             self.assertEqual(calls[-1], "suite")
+
+    def test_seed_script_rejects_bad_arguments(self):
+        for args in ([], ["12345", "us-east-1"], ["111111111111", ""]):
+            with self.subTest(args=args):
+                result = subprocess.run([ROOT / "scripts/seed-authz-grants.sh", *args], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("usage:", result.stderr)
 
     def test_ci_rejects_customer_account_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

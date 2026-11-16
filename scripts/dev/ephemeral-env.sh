@@ -44,6 +44,7 @@ usage() {
     echo "  shell           Interactive shell for Platform API access"
     echo "  post-account    Allowlist a customer AWS account with the RC platform API"
     echo "  delete-account  Revoke an allowlisted customer AWS account"
+    echo "  seed-authz      Seed an enrolled account's first authz grants"
     echo "  bastion         Connect to RC/MC bastion in an ephemeral env"
     echo "  port-forward    Forward ports through RC/MC bastion in an ephemeral env"
     echo "  sre-ui          Tunnel SRE UI tools through the internal ALB via bastion"
@@ -895,6 +896,36 @@ cmd_account_allowlist() {
     echo "==> $method account $ACCOUNT_ID: done"
 }
 
+# Seeds an enrolled account's first authz grants (see scripts/seed-authz-grants.sh).
+cmd_seed_authz() {
+    [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || die "ACCOUNT_ID must be a 12-digit AWS account ID"
+
+    select_env "STATE=ready" \
+        "Select environment:" \
+        "No ready environments found." \
+        true
+
+    local region deployment_name
+    region=$(get_field "$ENV_LINE" REGION)
+    deployment_name=$(get_field "$ENV_LINE" ZOA_DEPLOYMENT_NAME)
+    [[ -n "$deployment_name" ]] \
+        || die "No ZOA_DEPLOYMENT_NAME found for ID $BUILD_ID. Was it captured during provision?"
+
+    setup_aws_config
+    write_eph_container_config
+
+    # shellcheck disable=SC2086
+    $CONTAINER_ENGINE run --rm \
+        $_CONTAINER_AWS_FLAGS \
+        -v "${REPO_ROOT}:/workspace:ro,z" \
+        -w /workspace \
+        -e "AWS_DEFAULT_REGION=$region" \
+        -e "AWS_REGION=$region" \
+        "$CI_IMAGE" \
+        scripts/seed-authz-grants.sh "$ACCOUNT_ID" "$deployment_name"
+    echo "==> seeded authz grants for $ACCOUNT_ID: done"
+}
+
 cmd_shell() {
     # Select environment (ready only)
     select_env "STATE=ready" \
@@ -1520,6 +1551,7 @@ case "${1:-help}" in
     shell)          cmd_shell ;;
     post-account)   cmd_account_allowlist POST ;;
     delete-account) cmd_account_allowlist DELETE ;;
+    seed-authz)     cmd_seed_authz ;;
     bastion)        shift; cmd_bastion_interactive "$@" ;;
     port-forward)   shift; cmd_bastion_port_forward "$@" ;;
     sre-ui)         cmd_sre_tunnel ;;

@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint helm-deps check-rendered-files check-e2e-pins promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-helm-locks pre-push render
+.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint helm-deps check-rendered-files check-e2e-pins promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-seed-authz-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-helm-locks pre-push render
 
 # =============================================================================
 # Local tool management
@@ -253,6 +253,9 @@ ephemeral-post-account-shell: ## Allowlist a customer AWS account with the platf
 
 ephemeral-delete-account-shell: ## Revoke an allowlisted customer AWS account (ACCOUNT_ID=<12-digit-id> required)
 	@ID="$(ID)" ACCOUNT_ID="$(ACCOUNT_ID)" ./scripts/dev/ephemeral-env.sh delete-account
+
+ephemeral-seed-authz-shell: ## Seed an enrolled account's first authz grants (ACCOUNT_ID=<12-digit-id> required)
+	@ID="$(ID)" ACCOUNT_ID="$(ACCOUNT_ID)" ./scripts/dev/ephemeral-env.sh seed-authz
 
 ephemeral-bastion-rc: ## Connect to RC bastion in an ephemeral env
 	@ID="$(ID)" ./scripts/dev/ephemeral-env.sh bastion --cluster-type regional
