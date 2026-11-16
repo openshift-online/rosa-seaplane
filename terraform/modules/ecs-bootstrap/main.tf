@@ -153,6 +153,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
             # redisSecretInit creates the Redis auth secret (disabled in the self-managed app).
             helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd" \
               --namespace argocd \
+              --set pullSecret.externalSecret.enabled=false \
               --set argo-cd.redisSecretInit.enabled=true \
               --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
               --set-string 'argo-cd.server.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \

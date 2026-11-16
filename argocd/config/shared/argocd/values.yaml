@@ -1,3 +1,10 @@
+# ExternalSecret refreshes pull-secret after ESO exists. Bootstrap Helm must
+# set this false: the ESO CRD is not installed yet. SkipDryRunOnMissingResource
+# is Argo CD-only and does not help helm upgrade --install.
+pullSecret:
+  externalSecret:
+    enabled: true
+
 # Direct ArgoCD configuration
 # This section will be passed to the upstream ArgoCD chart.
 #
