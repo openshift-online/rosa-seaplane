@@ -53,10 +53,13 @@ argocd.argoproj.io/sync-wave: "1"
 
 {{/*
 Red Hat Thanos operand (CMO ose-thanos-rhel9). Operator concatenates
-baseImage:version and sets args (query, receive, ...).
-CR imagePullSecrets are not copied onto pods — see operand-serviceaccounts.yaml.
+baseImage:version (tag may include @sha256:…) and sets args (query, receive, …).
+CR imagePullSecrets are on CommonFields; this operator build does not copy them
+onto pods — operand-serviceaccounts.yaml is what kubelet uses.
 */}}
 {{- define "thanos.operandImage" -}}
 baseImage: {{ .Values.image.repository | quote }}
 version: {{ .Values.image.tag | quote }}
+imagePullSecrets:
+  - name: pull-secret
 {{- end }}

@@ -9,6 +9,7 @@ metadata:
   annotations:
     {{- include "thanos-operator.annotations" . | nindent 4 }}
 spec:
+  # This chart owns the Thanos CRs. The operator Helm chart does not ship them.
   {{- include "thanos.operandImage" . | nindent 2 }}
   replicas: {{ .Values.query.replicas | default 2 }}
   replicaLabels:

@@ -10,10 +10,12 @@ namespace: thanos
 
 # CMO Thanos operand on the existing thanos-operator CRs.
 # Catalog: registry.redhat.io/openshift4/ose-thanos-rhel9:v4.20.0
-# Operator image stays RHOBS Konflux (thanos-operator chart). Do not install CMO.
+# Operator concatenates baseImage:version (no separate digest field).
+# Digest: RHSA-2026:95380 manifest list. Operator image stays RHOBS Konflux.
+# Do not install CMO.
 image:
   repository: registry.redhat.io/openshift4/ose-thanos-rhel9
-  tag: v4.20.0
+  tag: v4.20.0@sha256:c786183d975a347894ba45f1b559d556d9d2efa35bc558a38dd9fc376ae9969c
 
 objectStore:
   secretName: thanos-objstore-config
