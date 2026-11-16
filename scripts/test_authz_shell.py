@@ -120,6 +120,7 @@ export -f aws awscurl
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(sum(call.startswith("seed ") for call in calls), 8)
             self.assertEqual(result.stdout.count("POLICY#e2e-policy-admin for"), 2)
+            self.assertEqual(result.stdout.count("Seeded authz record"), 6)
             self.assertEqual(calls[-1], "suite")
 
     def test_seed_script_rejects_bad_arguments(self):
