@@ -25,4 +25,4 @@ Chart **10.11.6** is Argo CD **v3.5.6**. That is not a tag swap onto GitOps 1.22
 
 ## Pull secret
 
-`registry.redhat.io` needs `pull-secret` in `argocd`. ECS bootstrap seeds it from SSM `/infra/pull-secret` before the first Helm install. The wrapper ExternalSecret refreshes it after ESO is up (`creationPolicy: Orphan`).
+`registry.redhat.io` needs `pull-secret` in `argocd`. ECS bootstrap seeds it from SSM `/infra/pull-secret` before the first Helm install and sets `pullSecret.externalSecret.enabled=false` so Helm does not apply the ExternalSecret (ESO CRD is not installed yet; `SkipDryRunOnMissingResource` is Argo CD-only). After ESO syncs, Argo CD creates the ExternalSecret (`creationPolicy: Orphan`) to refresh the Secret.
