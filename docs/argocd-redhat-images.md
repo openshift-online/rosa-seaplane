@@ -14,6 +14,8 @@ Chart **10.11.6** is Argo CD **v3.5.6**. That is not a tag swap onto GitOps 1.22
 
 `argo-helm` 10.9.6 sets `args: [/usr/local/bin/argocd-server, …]` (no `command`). The GitOps image must provide that path; this is not the cert-manager “flags as argv0” case.
 
+Repo-server `copyutil` is different. The chart default is `cp --update=none`, which RHEL 9 coreutils does not have (`Init:CrashLoopBackOff`). Dex’s copyutil is hardcoded `cp -f` of the same `/usr/local/bin/argocd` binary. Override `argo-cd.repoServer.copyutil.extraArgs` to `-n`.
+
 ## Comparison
 
 | Source                                                                                                                                  | Version              | Argo CD    |

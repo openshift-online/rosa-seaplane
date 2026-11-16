@@ -164,6 +164,8 @@ resource "aws_ecs_task_definition" "bootstrap" {
             echo "ERROR: helm upgrade --install argocd failed. Dumping argocd namespace:"
             kubectl get pods,jobs -n argocd -o wide || true
             kubectl get events -n argocd --sort-by=.lastTimestamp || true
+            kubectl logs -n argocd -l app.kubernetes.io/name=argocd-repo-server -c copyutil --tail=80 --prefix || true
+            kubectl describe pod -n argocd -l app.kubernetes.io/name=argocd-repo-server || true
             helm status argocd -n argocd || true
             exit 1
           fi
