@@ -51,7 +51,7 @@
   "zoa_access_trusted_assumer_role_names": {% if ci %}["rosa-seaplane-ci"]{% else %}{{ zoa_access_trusted_assumer_role_names | tojson }}{% endif %},
   "zoa_access_trusted_assumer_role_name_suffixes": {% if ci %}["rosa-seaplane-zoa-operator-eph-ci"]{% else %}{{ zoa_access_trusted_assumer_role_name_suffixes | tojson }}{% endif %},{# ZOA Access invoker trust. eph-dev and eph-ci share config/ephemeral but have different central identities, so the ci branch substitutes the eph-ci values. names = the CI/e2e caller (ci: the central rosa-seaplane-ci role Prow assumes; non-ci: none). suffixes = SAML roles prefixed with the central account ID at apply: the per-pool ZOA operator role (human break-glass) and, for eph-dev, the control-admin role local/e2e runs as. Each principal must exist in that pool's central account at apply time. #}
   "worker_node_ami_id": {% if worker_node_ami %}{{ worker_node_ami.id | tojson }}{% else %}""{% endif %},
-  "worker_node_root_volume_size": {{ worker_node_root_volume_size | default(50) | tojson }}
+  "worker_node_root_volume_size": {{ worker_node_root_volume_size | tojson }}
 {%- set _mc_info = [] %}
 {%- for mc in management_clusters if mc.account_id is defined %}
 {%- set _ = _mc_info.append({"id": mc.management_id, "account_id": mc.account_id}) %}

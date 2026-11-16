@@ -2,7 +2,7 @@
 # IAM Roles and Policies for EKS Cluster (Self-managed Karpenter)
 #
 # - eks_cluster role: AmazonEKSClusterPolicy
-# - karpenter_node role: AmazonEKSWorkerNodePolicy + CNI + ECR + SSM
+# - karpenter_node role: AmazonEKSWorkerNodePolicy + ECR + SSM, VPC CNI scoped to the private subnets (vpc-cni-iam.tf)
 # - karpenter_controller role: Pod Identity-backed, scoped to karpenter/karpenter SA
 # - ebs_csi role: Pod Identity-backed, scoped to kube-system/ebs-csi-controller-sa
 # - SQS interruption queue + four EventBridge rules
@@ -66,7 +66,6 @@ resource "aws_iam_role_policy_attachment" "karpenter_node_managed" {
   for_each = toset([
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
-    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore",
   ])
   policy_arn = each.value

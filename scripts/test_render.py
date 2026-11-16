@@ -76,6 +76,7 @@ def _create_config_structure(
     # Start with base required fields (mirrors real config/defaults.yaml)
     base_defaults = {
         "platform_image": "example.invalid/platform:test",
+        "worker_node_root_volume_size": 50,
         "aws": {
             "account_id": "",
             "management_cluster_account_id": "000000000000",
@@ -107,6 +108,7 @@ def _create_config_structure(
         "management_cluster_defaults": {
             "enable_bastion": False,
             "node_instance_families": ["m8i", "m7i"],
+            "hcp_slot_count": 0,
         },
         "observability": {
             "pagerduty": {

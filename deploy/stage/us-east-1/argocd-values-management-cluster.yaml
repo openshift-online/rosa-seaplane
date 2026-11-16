@@ -16,6 +16,17 @@ eksNodePool:
   ecrMirror:
     enabled: false
     mirrors: []
+  expireAfter: 504h
+hcpSlots:
+  count: 60
+  instanceFamilies:
+  - m8i
+  - m7i
+  ami:
+    family: AL2023
+    id: ami-02c0be6b661d6caf5
+  rootVolumeSize: 50Gi
+  expireAfter: 504h
 hypershift:
   oidcStorageS3Bucket:
     name: hypershift-mc-us-east-1
