@@ -129,48 +129,52 @@ resource "aws_ecs_task_definition" "bootstrap" {
             echo "✓ $ADDON active"
           done
 
-          if ! kubectl get deployment argocd-server -n argocd 2>/dev/null; then
-            echo "Installing ArgoCD from repo chart..."
+          echo "Installing ArgoCD from repo chart..."
 
-            # Create argocd namespace
-            kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+          # Create argocd namespace
+          kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
 
-            # registry.redhat.io pull secret before Helm installs Argo CD images.
-            aws ssm get-parameter --name /infra/pull-secret --with-decryption \
-              --query Parameter.Value --output text > /tmp/dockerconfigjson
-            kubectl create secret generic pull-secret \
-              --namespace argocd \
-              --type=kubernetes.io/dockerconfigjson \
-              --from-file=.dockerconfigjson=/tmp/dockerconfigjson \
-              --dry-run=client -o yaml | kubectl apply -f -
-            rm -f /tmp/dockerconfigjson
+          # registry.redhat.io pull secret before Helm installs Argo CD images.
+          aws ssm get-parameter --name /infra/pull-secret --with-decryption \
+            --query Parameter.Value --output text > /tmp/dockerconfigjson
+          kubectl create secret generic pull-secret \
+            --namespace argocd \
+            --type=kubernetes.io/dockerconfigjson \
+            --from-file=.dockerconfigjson=/tmp/dockerconfigjson \
+            --dry-run=client -o yaml | kubectl apply -f -
+          rm -f /tmp/dockerconfigjson
 
-            # Fetch chart dependencies (charts/ is gitignored)
-            helm repo add argo https://argoproj.github.io/argo-helm
-            helm dependency build "$REPO_DIR/argocd/config/shared/argocd"
+          # Fetch chart dependencies (charts/ is gitignored)
+          helm repo add argo https://argoproj.github.io/argo-helm
+          helm dependency build "$REPO_DIR/argocd/config/shared/argocd"
 
-            # tracking-id annotations let the self-managed ArgoCD app adopt these resources.
-            # redisSecretInit creates the Redis auth secret (disabled in the self-managed app).
-            helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd" \
-              --namespace argocd \
-              --set pullSecret.externalSecret.enabled=false \
-              --set argo-cd.redisSecretInit.enabled=true \
-              --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
-              --set-string 'argo-cd.server.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
-              --set-string 'argo-cd.repoServer.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
-              --wait --timeout=10m
-
-            echo "✓ ArgoCD installation complete"
-
-            # Wait for ArgoCD to be ready
-            kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
-            kubectl wait --for=condition=available --timeout=600s deployment/argocd-repo-server -n argocd
-            kubectl wait --for=condition=available --timeout=600s deployment/argocd-applicationset-controller -n argocd
-
-            echo "✓ ArgoCD is running and ready"
-          else
-            echo "✓ ArgoCD is already installed and running, skipping installation"
+          # tracking-id annotations let the self-managed ArgoCD app adopt these resources.
+          # redisSecretInit creates the Redis auth secret (disabled in the self-managed app).
+          # Always helm upgrade --install --wait. A timed-out first install still
+          # leaves argocd-server, and skipping Helm leaves a failed release.
+          # GitOps image pulls + HA redis routinely exceed 10m on a cold cluster.
+          if ! helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd" \
+            --namespace argocd \
+            --set pullSecret.externalSecret.enabled=false \
+            --set argo-cd.redisSecretInit.enabled=true \
+            --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
+            --set-string 'argo-cd.server.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
+            --set-string 'argo-cd.repoServer.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
+            --wait --timeout=20m; then
+            echo "ERROR: helm upgrade --install argocd failed. Dumping argocd namespace:"
+            kubectl get pods,jobs -n argocd -o wide || true
+            kubectl get events -n argocd --sort-by=.lastTimestamp || true
+            helm status argocd -n argocd || true
+            exit 1
           fi
+
+          echo "✓ ArgoCD installation complete"
+
+          kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
+          kubectl wait --for=condition=available --timeout=600s deployment/argocd-repo-server -n argocd
+          kubectl wait --for=condition=available --timeout=600s deployment/argocd-applicationset-controller -n argocd
+
+          echo "✓ ArgoCD is running and ready"
 
           echo "Creating/updating cluster identity secret with values:"
           echo "  ENVIRONMENT: $ENVIRONMENT"

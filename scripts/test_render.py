@@ -2174,6 +2174,9 @@ class TestMainIntegration:
             in bootstrap
         )
         assert "--set pullSecret.externalSecret.enabled=false" in bootstrap
+        assert "--wait --timeout=20m" in bootstrap
+        assert "skipping installation" not in bootstrap
+        assert "Dumping argocd namespace" in bootstrap
         wrapper = yaml.safe_load(values_file.read_text())
         assert wrapper["pullSecret"]["externalSecret"]["enabled"] is True
 
