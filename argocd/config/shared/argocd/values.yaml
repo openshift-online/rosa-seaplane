@@ -93,6 +93,10 @@ argo-cd:
 
   # Repo Server configuration
   repoServer:
+    # Chart default is --update=none (GNU coreutils >= 9.3). GitOps argocd-rhel9
+    # is RHEL 9 (coreutils 8.32). -n is the same "do not overwrite" semantics.
+    copyutil:
+      extraArgs: "-n"
     autoscaling:
       enabled: true
       minReplicas: 2
