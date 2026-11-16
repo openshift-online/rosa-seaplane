@@ -199,7 +199,15 @@ def git_merge_base_with_default() -> str | None:
     """
     base_sha = os.environ.get("PULL_BASE_SHA")
     if base_sha:
-        return run(["git", "merge-base", "HEAD", base_sha])
+        # PULL_BASE_SHA belongs to the PR that triggered the job — normally
+        # this repo, but NOT when the job is rehearsed from an openshift/
+        # release PR (the value is then a release-repo commit that does not
+        # exist in this checkout). Only use it when it is actually a commit
+        # here; otherwise fall through to the default-branch refs.
+        if run(["git", "cat-file", "-e", f"{base_sha}^{{commit}}"], check=False):
+            return run(["git", "merge-base", "HEAD", base_sha])
+        warn("PULL_BASE_SHA is not a commit in this repository "
+             "(rehearsed job?) — falling back to default-branch refs")
     for ref in ("origin/main", "main"):
         if run(["git", "rev-parse", "--verify", ref], check=False):
             return run(["git", "merge-base", "HEAD", ref])
