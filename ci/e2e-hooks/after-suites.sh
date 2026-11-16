@@ -40,7 +40,8 @@ fi
 if [[ "${_E2E_HOOKS_AM_STARTED:-false}" == "true" ]]; then
   echo "after-suites: stopping Alertmanager tunnel"
   if declare -F cleanup_alertmanager_forward >/dev/null 2>&1; then
-    cleanup_alertmanager_forward || echo "WARNING: Alertmanager tunnel cleanup failed" >&2
+    AWS_PROFILE="${RC_AWS_PROFILE:-rrp-rc}" cleanup_alertmanager_forward \
+      || echo "WARNING: Alertmanager tunnel cleanup failed" >&2
   else
     echo "WARNING: cleanup_alertmanager_forward not found — tunnel left to pod teardown" >&2
   fi
