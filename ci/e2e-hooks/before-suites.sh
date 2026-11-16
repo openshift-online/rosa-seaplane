@@ -142,7 +142,13 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
     _e2e_hooks_am_had_errexit=false
     [[ $- == *e* ]] && _e2e_hooks_am_had_errexit=true
     # shellcheck source=ci/alertmanager-forward.sh
-    if source "${REPO_ROOT}/ci/alertmanager-forward.sh" && start_alertmanager_forward; then
+    # The tunnel's aws calls (bastion ECS/EC2/SSM) carry no --profile and
+    # rely on the ambient AWS_PROFILE — which this hook deliberately does
+    # NOT export globally (suites must pick their own identity). Prefix the
+    # start with the RC profile: it applies to the function, its children
+    # and the background port-forward process, without leaking into suites.
+    if source "${REPO_ROOT}/ci/alertmanager-forward.sh" \
+      && AWS_PROFILE="${RC_AWS_PROFILE:-rrp-rc}" start_alertmanager_forward; then
       export _E2E_HOOKS_AM_STARTED=true
       # The helper installed its own EXIT trap (_am_run_exit_traps), which
       # replaces the runner's. Take ownership back: keep the tunnel cleanup
@@ -157,7 +163,7 @@ if [[ "${E2E_SKIP_ALERTMANAGER_FORWARD:-}" != "true" ]]; then
         # must not clobber $? (a failing cleanup or `|| true` would turn an
         # exit 7 into 0 for the prior trap and the script's final status).
         local rc=$?
-        cleanup_alertmanager_forward || true
+        AWS_PROFILE="${RC_AWS_PROFILE:-rrp-rc}" cleanup_alertmanager_forward || true
         if [[ -n "${_e2e_hooks_prior_exit_trap_cmd}" ]]; then
           (exit "${rc}") # restore $? for the prior trap
           eval "${_e2e_hooks_prior_exit_trap_cmd}"
