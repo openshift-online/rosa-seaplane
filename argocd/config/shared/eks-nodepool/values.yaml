@@ -10,6 +10,8 @@ eksNodePool:
   disruption:
     consolidationPolicy: WhenEmpty
     consolidateAfter: 60s
+  # Node lifetime before Karpenter replaces the node (Karpenter's own default).
+  expireAfter: 720h
   # Pin a specific AMI. When null (default), the bottlerocket FIPS name
   # selector is used and amiFamily defaults to Bottlerocket.
   # Example: ami: {family: Bottlerocket, id: ami-0abc123}
