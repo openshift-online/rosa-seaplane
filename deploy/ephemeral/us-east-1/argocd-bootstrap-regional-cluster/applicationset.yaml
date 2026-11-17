@@ -58,6 +58,7 @@ spec:
         - CreateNamespace=true
       sources:
       - helm:
+          ignoreMissingValueFiles: true
           valueFiles:
           - values.yaml
           - values-{{ .metadata.labels.cluster_type }}.yaml
