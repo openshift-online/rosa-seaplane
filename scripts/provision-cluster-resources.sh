@@ -280,7 +280,7 @@ generate_pipeline_file_paths() {
                 ("deploy/" + $env + "/" + $region + "/{pipeline-regional-cluster-inputs/**,argocd-values-regional-cluster.yaml,argocd-bootstrap-regional-cluster/**}"),
                 "scripts/{pipeline-common/**,buildspec/bootstrap-argocd-rc.sh,buildspec/provision-cluster.sh,buildspec/provision-infra-rc.sh,buildspec/wait-for-regional-api.sh}",
                 "terraform/config/{codebuild-regional-cluster/buildspec-combined.yml,regional-cluster/**}",
-                "terraform/modules/{vpc,eks-cluster,ecs-bootstrap,bastion,api-gateway,sre-ui-alb,rhobs-api-gateway,dns-zone-operator,authz,zoa,zoa-lambda,bedrock}/**",
+                "terraform/modules/{vpc,eks-cluster,ecs-bootstrap,bastion,api-gateway,sre-ui-alb,rhobs-api-gateway,dns-zone-operator,authz,zoa,zoa-lambda}/**",
                 "terraform/modules/{zoa-access,seaplane-db,elasticache-valkey,cloudwatch-exporter,aws-load-balancer-controller,regional-oidc,grafana-cloudwatch-logs,cloudtrail,pagerduty-service,sns-alerting,thanos-infrastructure,loki-infrastructure}/**"
             ]'
     elif [ "$cluster_type" = "management" ]; then
@@ -292,7 +292,7 @@ generate_pipeline_file_paths() {
                 ("deploy/" + $env + "/" + $region + "/{pipeline-management-cluster-" + $mc_id + "-inputs/**,argocd-values-management-cluster.yaml,argocd-bootstrap-management-cluster/**}"),
                 "scripts/{pipeline-common/**,buildspec/bootstrap-argocd-mc.sh,buildspec/provision-cluster.sh,buildspec/provision-infra-mc.sh,buildspec/provision-kube-applier-dynamodb.sh,buildspec/provision-mc-zoa-target-ssm.sh,buildspec/register.sh}",
                 "terraform/config/{codebuild-management-cluster/buildspec-combined.yml,management-cluster/**,kube-applier-dynamodb-provisioning/**,mc-zoa-target-ssm-provisioning/**}",
-                "terraform/modules/{vpc,eks-cluster,ecs-bootstrap,bastion,zoa-lambda,bedrock,dns-pod-identity,hypershift-oidc,prometheus-remote-write,loki-log-forwarder,cloudwatch-exporter,grafana-cloudwatch-logs,kube-applier,kube-applier-dynamodb}/**"
+                "terraform/modules/{vpc,eks-cluster,ecs-bootstrap,bastion,zoa-lambda,dns-pod-identity,hypershift-oidc,prometheus-remote-write,loki-log-forwarder,cloudwatch-exporter,grafana-cloudwatch-logs,kube-applier,kube-applier-dynamodb}/**"
             ]'
     fi
 }
