@@ -1,13 +1,36 @@
-# V2 installer-role setup and account linking
+# Installer-role access: v1-style and proposed v2 flows
 
 **Date:** 2026-11-17  
-**Status:** Proposed implementation design
+**Status:** User experience comparison and proposed v2 implementation
 
 ## Purpose and scope
 
-This design covers the foundation that lets Seaplane access a customer's AWS account and lets a customer use the browser with a Red Hat login. It builds on [the selected installer-role plan](https://github.com/jmelis/rosa-hyperfleet/blob/8c39705919b13a95c5084ee59c51cecd54132d7b/docs/design/preflight-and-ui-login-flows.md) and the scope agreed in the subsequent discussion.
+This document separates the shared installer-role setup from the choice of how browser users get access to AWS accounts. It compares the existing v1 role-association flow with [this proposed v2 linking flow](https://github.com/jmelis/rosa-hyperfleet/blob/8c39705919b13a95c5084ee59c51cecd54132d7b/docs/design/preflight-and-ui-login-flows.md), then provides an implementation deep dive for the proposed v2 option.
 
-## What the customer sets up
+## User experience comparison
+
+### Option A: proposed v2 flow
+
+1. **Installer-role setup:** an administrator runs `rosa create account-roles` to create an installer role that trusts the Red Hat jump role, then shares its ARN and required, service-assigned ExternalId with cluster creators.
+2. **CLI and Terraform:** users select their AWS credentials and supply the installer-role ARN and ExternalId when creating a cluster. Normal API use requires no Red Hat login or account-linking step.
+3. **Browser setup:** each user signs into Red Hat and runs the proposed `rosa link account` with their chosen AWS profile. This connects their Red Hat login to that AWS identity. No OCM role or additional user role is needed.
+4. **Browser use:** the user signs into Red Hat and selects a previously connected AWS identity. The selected identity's Seaplane permissions determine which operations they may perform. Linking is only repeated to add another identity.
+
+### Option B: retain a v1-style flow
+
+1. **Installer-role setup:** an administrator runs `rosa create account-roles` to create an installer role that trusts the Red Hat jump role, then shares its ARN and required, service-assigned ExternalId with cluster creators.
+2. **Organization setup:** an administrator creates and links an OCM role in the AWS account to their Red Hat organization. Red Hat saves that association to identify the organization's AWS accounts and verify account access.
+3. **CLI and Terraform:** users authenticate to the Red Hat API and supply the installer-role ARN and ExternalId when creating a cluster. AWS credentials are also needed for commands that perform local AWS setup.
+4. **Browser setup:** each user creates and links a user role in the AWS account to their Red Hat login. This establishes their individual account association; there is no new `rosa link account` command or linking API.
+5. **Browser use:** the user signs into Red Hat and selects an AWS account identified by the saved organization and user-role associations. Their Red Hat permissions and account associations determine which operations they may perform.
+
+## Part 2. Proposed v2 implementation deep dive
+
+The remaining sections describe how we would deliver the **proposed v2 flow**, if selected. They retain the installer-role foundation, proposed commands and APIs, browser authentication design, and delivery plan. Their setup instructions and implementation choices apply to that option only.
+
+This option uses the installer role in place of the OCM role and introduces the new linking flow for browser users. Updating existing installer roles, implementing the preflight controller, AWS resource discovery, and unmanaged OIDC key retrieval remain separate work.
+
+### What the customer sets up
 
 Two independent setup steps serve different purposes:
 
@@ -23,9 +46,9 @@ There are also two different customer-side identities:
 
 Linking a caller does not grant permission to create clusters, and knowing an installer-role ARN does not authorize its use. Existing Seaplane account admission and resource permissions continue to apply.
 
-## 1. Create the installer role with account-roles
+### 1. Create the installer role with account-roles
 
-### Customer experience
+#### Customer experience
 
 Reuse the v1 `rosa create account-roles` command for v2. Initially, it creates only the installer role; support for the other account roles will be added later.
 
@@ -46,7 +69,7 @@ The administrator needs AWS permission to create the role and attach its policy,
 
 If the role name already exists, the command stops without changing it and asks the administrator to choose another name. Updating or adopting existing roles is outside this delivery.
 
-### How ROSA gets the correct jump role
+#### How ROSA gets the correct jump role
 
 **ROSA's configured API address selects the Seaplane environment; the AWS profile selects the customer account.** For example, a CLI configured for stage asks the stage API for its jump role, while a CLI configured for production asks the production API.
 
@@ -62,9 +85,9 @@ The API derives the customer account from the verified request and requires an a
 
 The ExternalId is not a credential, but customers cannot substitute their own value: the role's trust policy and Seaplane's later AWS calls must use the same assigned value.
 
-## 2. Supply installer-role information when creating a cluster
+### 2. Supply installer-role information when creating a cluster
 
-### Customer experience
+#### Customer experience
 
 A cluster creator supplies the identifiers produced during setup:
 
@@ -99,7 +122,7 @@ Request acceptance does not certify that AWS access works. Full trust-policy ins
 
 For future features that need the installer role before a cluster exists, such as discovery, their API contract must supply or select the role separately. Selecting a linked browser identity does not automatically select an installer role. That feature contract is outside this delivery.
 
-## 3. Configure the Red Hat jump role
+### 3. Configure the Red Hat jump role
 
 Deploy a long-lived jump role for each Seaplane environment. Customers trust its ARN when creating their installer role. Regional Platform API and operator workloads receive permission to assume this jump role, and the jump role trusts only the approved service identities.
 
@@ -117,9 +140,9 @@ Provide one shared credential helper for Platform API and operator code. It take
 
 The jump role receives permission to assume the intended customer installer roles, without attaching the customer installer policy to Red Hat's own workload roles. The customer's trust policy requires both the jump-role principal and the exact assigned ExternalId. Authorization and account checks happen before this shared helper is called.
 
-## 4. Link a Red Hat user to an AWS identity
+### 4. Link a Red Hat user to an AWS identity
 
-### Customer experience
+#### Customer experience
 
 A prospective browser user signs into Red Hat through the CLI's supported sign-in flow, then runs:
 
@@ -131,7 +154,7 @@ The command shows the Red Hat user and the AWS identity about to be connected. I
 
 The command is a wrapper around the API. It does not create roles, change AWS policies, or grant Seaplane permissions. Other clients can call the same endpoint.
 
-### Linking API
+#### Linking API
 
 Propose `POST /api/v0/account-links` on the AWS-authenticated gateway:
 
@@ -147,15 +170,15 @@ For assumed AWS roles, the connection must survive a new AWS session. Store the 
 
 Repeated linking of the same pair is idempotent. A user may connect several AWS identities. Several Red Hat users may independently prove control of the same AWS role; this does not give all users in either user's Red Hat organization access.
 
-### Listing and removing connections
+#### Listing and removing connections
 
 The browser can list and remove its own connections using the Red Hat token. These are narrow identity-management operations: they require no selected AWS identity and grant no access to cluster resources. Allowing token-only removal is a proposal extending the selected plan's token-only listing flow.
 
 Removing a connection stops future browser use after the documented authorization-cache window. It does not delete clusters, remove the installer role, stop already accepted background work, or block normal AWS-signed CLI requests.
 
-## 5. Sign in and choose an AWS identity in the browser
+### 5. Sign in and choose an AWS identity in the browser
 
-### User journey
+#### User journey
 
 1. The user selects **Sign in with Red Hat** and completes Red Hat's existing sign-in flow. The UI obtains an access token through the supported browser integration; Seaplane does not collect the user's password.
 2. The UI calls `GET /api/v0/account-links` through the new browser gateway, using `Authorization: Bearer <token>`.
@@ -167,7 +190,7 @@ With no connections, the UI shows instructions for `rosa link account`. With one
 
 This is a persistent connection, not a live AWS login. Expiration of the AWS session used to create it does not end browser access. Red Hat token validity, connection removal, and Seaplane permissions control subsequent browser access. AWS session-specific restrictions, MFA state, or session tags must not be presented as if the browser reproduced them.
 
-### Gateway and authorizer
+#### Gateway and authorizer
 
 Add a second API Gateway with a Lambda **request authorizer**. Keep the existing AWS-authenticated gateway for CLI, Terraform, and the setup/linking calls. Both gateways route to the existing private Platform API through the load balancer.
 
@@ -181,7 +204,7 @@ Gateway integration must overwrite client-supplied backend identity headers, and
 
 Disable API Gateway's authorizer-result cache. Inside Lambda, cache successful token-and-selected-identity checks for at most the smaller of five minutes and the token's remaining validity. Include the Red Hat token and selected identity in the cache key without logging or persisting the raw token. Do not cache connection listings or removals. Each authorizer response permits only the requested route; resource permissions are still checked by Platform API on every request. Disabling the gateway cache is supported by setting its authorizer TTL to zero.
 
-## Proposed API surface
+### Proposed API surface
 
 Paths are illustrative; final names should follow the existing API conventions.
 
@@ -196,7 +219,7 @@ Paths are illustrative; final names should follow the existing API conventions.
 
 Keep the setup/linking write endpoints unavailable through the token-only browser path. Include new request fields and endpoints in the generated API clients so CLI and Terraform use one documented contract.
 
-## Deployment and failure behavior
+### Deployment and failure behavior
 
 Deploy the jump role, workload permissions, browser gateway, Lambda, and DynamoDB records through existing infrastructure configuration. Distribute gateway addresses, jump-role ARN, policy metadata, Red Hat token-verification settings, and allowed UI origins from environment configuration.
 
@@ -215,7 +238,7 @@ Log role creation outcomes, link creation/removal, the Red Hat user, selected AW
 | Link store is unavailable | Reject new linking/listing and uncached authorization checks; do not extend cached decisions. |
 | Customer removes installer trust | AWS operations fail with an actionable access error; do not try another identity. |
 
-## Delivery order and completion criteria
+### Delivery order and completion criteria
 
 1. **AWS access foundation:** deploy the jump role, account setup configuration, CLI role creation, and shared credential helper. Demonstrate access to a new customer role with the assigned ExternalId and rejection without it.
 2. **Cluster configuration:** add and persist the role fields across API, CLI, and Terraform, using the v1 names with ExternalId required. Verify normal AWS-signed use needs no Red Hat link and cannot select another account's role.
@@ -224,7 +247,7 @@ Log role creation outcomes, link creation/removal, the Red Hat user, selected AW
 
 Completion means these access paths work independently of discovery, unmanaged OIDC, and the future preflight controller. It does not mean provisioning checks or either downstream feature have been implemented.
 
-## Decisions to settle before implementation
+### Decisions to settle before implementation
 
 - Confirm account-and-environment-scoped ExternalIds, rather than requiring Red Hat organization ownership for AWS-only setup.
 - Assign ownership of the Red Hat browser/CLI sign-in integration and token-verification configuration, including supported session lifetime and refresh behavior.
