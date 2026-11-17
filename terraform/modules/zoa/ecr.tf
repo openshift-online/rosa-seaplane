@@ -85,8 +85,9 @@ resource "aws_ecr_repository_policy" "lambda" {
 
 resource "null_resource" "mirror_lambda" {
   triggers = {
-    image_tag = var.zoa_lambda_image_tag
-    repo      = aws_ecr_repository.lambda.repository_url
+    image_tag   = var.zoa_lambda_image_tag
+    source_repo = var.zoa_lambda_source_image
+    repo        = aws_ecr_repository.lambda.repository_url
   }
 
   provisioner "local-exec" {

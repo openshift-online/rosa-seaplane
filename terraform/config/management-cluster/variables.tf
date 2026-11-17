@@ -144,7 +144,7 @@ variable "zoa_runner_image_tag" {
 variable "zoa_runner_source_image" {
   description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror)"
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-runner"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }
 
 variable "worker_node_ami_id" {

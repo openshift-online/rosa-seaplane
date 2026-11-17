@@ -42,13 +42,13 @@ variable "output_retention_days" {
 variable "zoa_lambda_source_image" {
   description = "Source registry image for ZOA Lambda (mirrored to ECR at deploy time)"
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-lambda"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
 }
 
 variable "zoa_runner_source_image" {
   description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror)"
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-runner"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }
 
 variable "zoa_lambda_image_tag" {
