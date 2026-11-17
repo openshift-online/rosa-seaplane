@@ -60,9 +60,8 @@ suites:
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_lambda_image_tag
-        # TODO: "43aeef8" is a short Konflux build tag that is not a git
-        # commit prefix — re-pin with a full-SHA-tagged build and remove
-        # enforce: false.
+        # TODO: pin may not match zoa git ancestry (Konflux on-push tag) — remove
+        # enforce: false once lineage is verified or pins track zoa main commits.
         enforce: false
       - name: zoa-runner-image-tag
         doc: ZOA Runner image tag.
@@ -70,14 +69,14 @@ suites:
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_runner_image_tag
-        enforce: false # TODO: same as zoa-lambda-image-tag
+        enforce: false
       - name: zoa-boundary-image-tag
         doc: ZOA Boundary (ECS) image tag.
         bump_together: zoa-images
         source:
           file: config/defaults.yaml
           key: regional_cluster.zoa_boundary_image_tag
-        enforce: false # TODO: same as zoa-lambda-image-tag
+        enforce: false
 
   # rosa-cli is intentionally NOT registered here: it is a test tool,
   # not a deployed component, and its checkout branch (seaplane-v2) is

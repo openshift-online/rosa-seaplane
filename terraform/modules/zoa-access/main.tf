@@ -69,7 +69,7 @@ resource "aws_lambda_function" "access" {
   role          = local.lambda_role_arn
   package_type  = "Image"
   image_uri     = var.image_uri
-  # Must match zoa-lambda (x86_64) and quay.io/rrp-dev-ci/zoa-lambda image builds (linux/amd64).
+  # Must match zoa-lambda (x86_64) Konflux image builds (linux/amd64).
   architectures = ["x86_64"]
   timeout       = 30
   memory_size   = 256

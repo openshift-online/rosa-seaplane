@@ -171,26 +171,26 @@ regional_cluster:
   # @doc regional_cluster.zoa_lambda_image_tag Immutable tag for the ZOA Lambda image. Defaults to a known-good Konflux on-push build. Override via --provision-override-file for ephemeral e2e with a CI-built tag (e.g. ci-<PR>-<BUILD_ID>).
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_lambda_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image. Defaults to same Konflux build as Lambda. Override independently when testing a new runner with the current Lambda (or vice versa).
+  zoa_lambda_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image (Konflux on-push full git SHA). Override via --provision-override-file for ephemeral e2e with a CI-built tag.
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_runner_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_lambda_source_image Source registry image for the ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag when pointing at a fork or CI registry (e.g. quay.io/rrp-dev-ci/zoa-lambda).
+  zoa_runner_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_lambda_source_image Source registry for ZOA Lambda (mirrored to ECR via skopeo). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_lambda_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_lambda_source_image: "quay.io/rrp-dev-ci/zoa-lambda"
-  # @doc regional_cluster.zoa_runner_source_image Source registry image for the ZOA Runner (pulled directly by K8s, no ECR mirror). Override together with zoa_runner_image_tag when pointing at a fork or CI registry.
+  zoa_lambda_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
+  # @doc regional_cluster.zoa_runner_source_image Source registry image for the ZOA Runner (pulled directly by K8s, no ECR mirror). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_runner_source_image pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_runner_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_runner_source_image: "quay.io/rrp-dev-ci/zoa-runner"
-  # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image. Required; same commit tag as Lambda/Runner when bumped together.
+  zoa_runner_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
+  # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image (Konflux on-push full git SHA). Bump with runner when moving Konflux pins.
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_boundary_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_boundary_source_image Source registry image for ZOA Boundary (pulled directly by ECS). Override together with zoa_boundary_image_tag when pointing at a fork or CI registry.
+  zoa_boundary_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_boundary_source_image Source registry image for ZOA Boundary (pulled directly by ECS). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_boundary_source_image: "quay.io/rrp-dev-ci/zoa-boundary"
+  zoa_boundary_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-boundary"
   # @doc regional_cluster.zoa_boundary_session_idle_timeout_seconds Terminal inactivity (seconds) before the boundary reaper stops a session. Wired to RC zoa-lambda (worker reaper) and zoa-access (RunTask MOTD); MC zoa-lambda uses the same value for MC-target reaping.
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2

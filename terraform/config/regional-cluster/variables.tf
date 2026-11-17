@@ -499,13 +499,13 @@ variable "zoa_runner_image_tag" {
 variable "zoa_lambda_source_image" {
   description = "Source registry image for ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag to point at a fork or CI registry."
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-lambda"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
 }
 
 variable "zoa_runner_source_image" {
   description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror). Override together with zoa_runner_image_tag to point at a fork or CI registry."
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-runner"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }
 
 # =============================================================================
