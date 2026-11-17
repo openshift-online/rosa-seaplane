@@ -71,6 +71,22 @@ resource "aws_vpc_ipv4_cidr_block_association" "hcp_slots" {
   for_each   = local.slot_count > 0 ? toset(var.hcp_slot_cidrs) : toset([])
   vpc_id     = aws_vpc.main.id
   cidr_block = each.value
+
+  # AWS default quota is 200 subnets per VPC. Slot subnets (one per routed AZ per
+  # slot) plus the primary subnets (private + public + control-plane) must stay
+  # below it. Fail at plan time rather than part-way through apply; raise the
+  # "Subnets per VPC" quota before increasing hcp_slot_count past the limit.
+  lifecycle {
+    precondition {
+      condition = (
+        local.slot_count * length(slice(local.azs, 0, length(var.private_subnet_cidrs)))
+        + length(var.private_subnet_cidrs)
+        + length(var.public_subnet_cidrs)
+        + length(var.eks_control_plane_subnet_cidrs)
+      ) <= 190
+      error_message = "Total subnet count (slot subnets + primary subnets) exceeds 190 — raise the AWS 'Subnets per VPC' quota before increasing hcp_slot_count."
+    }
+  }
 }
 
 resource "aws_subnet" "hcp_slot" {
