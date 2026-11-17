@@ -24,6 +24,7 @@ Detailed architecture and rationale for key technical decisions:
 | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
 | [Alerting Architecture](design/alerting-architecture.md)                             | Fan-out alert routing (AlertManager, PagerDuty, SNS)                      |
 | [AWS IAM Hosted Cluster Auth](design/aws-iam-hosted-cluster-authentication.md)       | AWS IAM authentication for hosted clusters (experimental)                 |
+| [AWS Preflight Checks](design/aws-preflight-design.md)                               | Asynchronous customer-account AWS checks and per-step provisioning gates  |
 | [DNS Architecture](design/dns-architecture.md)                                       | Hierarchical DNS with zone shards, `deployment_name`, DNSSEC chain        |
 | [ECS Fargate Bootstrap](design/fully-private-eks-bootstrap.md)                       | How fully private EKS clusters are bootstrapped via ECS                   |
 | [FIPS-Only EKS Compute](design/fips-eks-compute.md)                                  | FIPS NodeClass/NodePool strategy for FedRAMP workload nodes               |
