@@ -59,8 +59,10 @@ spec:
         - CreateNamespace=true
       sources:
       - helm:
+          ignoreMissingValueFiles: true
           valueFiles:
           - values.yaml
+          - values-{{ '{{ .metadata.labels.cluster_type }}' }}.yaml
           - $values/deploy/{{ '{{ .metadata.labels.environment }}' }}/{{ '{{ .metadata.labels.region_deployment }}' }}/argocd-values-{{ '{{ .metadata.labels.cluster_type }}' }}.yaml
           valuesObject:
             global:

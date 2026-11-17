@@ -182,12 +182,11 @@ All logs are stored under a single Loki tenant. Cluster identity is enforced at 
 
 ### ArgoCD Apps
 
-| App (`argocd/config/`)       | Cluster | Chart                              | Purpose                                              |
-| ---------------------------- | ------- | ---------------------------------- | ---------------------------------------------------- |
-| `regional-cluster/loki/`     | RC      | `grafana/loki` v7.0.0 (subchart)   | Loki Distributed + platform templates (SA, TGB, PDB) |
-| `regional-cluster/vector/`   | RC      | `vector/vector` v0.52.0 (subchart) | Vector DaemonSet → local Loki Distributor            |
-| `management-cluster/vector/` | MC      | `vector/vector` v0.52.0 (subchart) | Vector DaemonSet → sigv4-proxy → API Gateway         |
-| `regional-cluster/grafana/`  | RC      | (existing)                         | Logging dashboards in `dashboards/logging/`          |
+| App (`argocd/config/`)      | Cluster | Chart                              | Purpose                                                                   |
+| --------------------------- | ------- | ---------------------------------- | ------------------------------------------------------------------------- |
+| `regional-cluster/loki/`    | RC      | `grafana/loki` v7.0.0 (subchart)   | Loki Distributed + platform templates (SA, TGB, PDB)                      |
+| `shared/vector/`            | RC + MC | `vector/vector` v0.52.0 (subchart) | Shared collector chart; overlays select local Loki or sigv4-proxy routing |
+| `regional-cluster/grafana/` | RC      | (existing)                         | Logging dashboards in `dashboards/logging/`                               |
 
 ### Helm Chart Structure
 
@@ -203,22 +202,24 @@ argocd/config/regional-cluster/loki/
     ├── pdb.yaml                 # PDBs per component (conditional)
     └── _helpers.tpl             # Shared labels
 
-argocd/config/regional-cluster/vector/
-├── Chart.yaml          # depends on vector/vector v0.52.0
-├── values.yaml         # RHOBS-aligned pipeline config under vector: key
-└── templates/
-    └── namespace.yaml  # Namespace resource
-
-argocd/config/management-cluster/vector/
-├── Chart.yaml          # depends on vector/vector v0.52.0
-├── values.yaml         # Same as RC + sigv4-proxy config
+argocd/config/shared/vector/
+├── Chart.yaml                    # depends on vector/vector v0.52.0
+├── Chart.lock                    # shared dependency lock
+├── charts/vector-0.52.0.tgz      # vendored chart dependency
+├── values.yaml                   # common RHOBS-aligned collector configuration
+├── values-regional-cluster.yaml  # local Loki sink
+├── values-management-cluster.yaml # sigv4-proxy sink and proxy settings
 └── templates/
     ├── namespace.yaml
-    ├── serviceaccount.yaml            # sigv4-proxy SA (Pod Identity)
-    ├── sigv4-proxy-deployment.yaml
-    ├── sigv4-proxy-service.yaml
-    └── sigv4-proxy-pdb.yaml
+    ├── pull-secret.yaml
+    └── management/
+        ├── serviceaccount.yaml        # sigv4-proxy SA (Pod Identity)
+        ├── sigv4-proxy-deployment.yaml
+        ├── sigv4-proxy-service.yaml
+        └── sigv4-proxy-pdb.yaml
 ```
+
+The ApplicationSet selects the cluster-specific Vector values overlay using the cluster's `cluster_type` label. Management-only proxy resources are guarded by the same cluster type; regional clusters render the shared chart without those resources.
 
 ### Terraform Resources
 
