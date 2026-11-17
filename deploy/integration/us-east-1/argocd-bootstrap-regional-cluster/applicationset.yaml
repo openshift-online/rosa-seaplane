@@ -63,9 +63,7 @@ spec:
       - helm:
           valueFiles:
           - values.yaml
-          {{ if eq .path.basename "vector" }}
           - values-{{ .metadata.labels.cluster_type }}.yaml
-          {{ end }}
           - $values/deploy/{{ .metadata.labels.environment }}/{{ .metadata.labels.region_deployment }}/argocd-values-{{ .metadata.labels.cluster_type }}.yaml
           valuesObject:
             global:
