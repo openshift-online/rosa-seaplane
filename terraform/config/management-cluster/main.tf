@@ -152,15 +152,6 @@ module "zoa_lambda" {
 }
 
 # =============================================================================
-# Bedrock account primitives (agreements, budget)
-# =============================================================================
-
-module "bedrock" {
-  source      = "../../modules/bedrock"
-  environment = var.environment
-}
-
-# =============================================================================
 # DNS Pod Identity (cross-account Route53 access for external-dns + cert-manager)
 # =============================================================================
 
