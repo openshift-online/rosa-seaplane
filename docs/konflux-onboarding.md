@@ -79,7 +79,7 @@ Konflux can only attest images **it** built. Released images must come from Konf
 
 ## Dependency PRs (MintMaker)
 
-MintMaker applies a [global Renovate config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json) even without a repo `renovate.json`. Default managers include `helmv3`, `helm-values`, `terraform`, `github-actions`, and `git-submodules`. Do **not** copy an app-repo `renovate.json` onto this repo: those files set `enabledManagers` to `dockerfile` / `gomod` / `tekton` only and would stop Helm bumps.
+MintMaker applies a [global Renovate config](https://github.com/konflux-ci/mintmaker/blob/main/config/renovate/renovate.json) even without a repo `renovate.json`. Default managers include `helmv3`, `helm-values`, `terraform`, and `github-actions`. Do **not** copy an app-repo `renovate.json` onto this repo: those files set `enabledManagers` to `dockerfile` / `gomod` / `tekton` only and would stop Helm bumps.
 
 This repo's root `renovate.json` only tightens cooldown (it does not pin `enabledManagers`):
 

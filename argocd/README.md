@@ -88,7 +88,7 @@ Wrapper charts with `dependencies:` vendor `Chart.lock` and `charts/<name>-<vers
 make helm-deps CHART=argocd/config/shared/argocd   # or make helm-deps for every wrapper
 ```
 
-Commit the lock and tgz. `make check-helm-locks` (also in `make pre-push`) fails if they drift. Cert-manager is a git submodule, not this Helm lock.
+Commit the lock and tgz. `make check-helm-locks` (also in `make pre-push`) fails if they drift. The cert-manager operand chart is vendored the same way in `argocd/config/shared/cert-manager/jetstack-chart/` and rendered by Kustomize so its command patches are applied.
 
 ## How It Works
 

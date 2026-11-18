@@ -2086,7 +2086,10 @@ class TestMainIntegration:
         cert_manager_values = load_yaml(
             REAL_ARGOCD_CONFIG_DIR / "shared/cert-manager/jetstack-values.yaml"
         )
-        assert cert_manager_values["prometheus"]["servicemonitor"]["enabled"] is True
+        assert (
+            cert_manager_values["cert-manager"]["prometheus"]["servicemonitor"]["enabled"]
+            is True
+        )
         dsn = (
             REAL_ARGOCD_CONFIG_DIR
             / "regional-cluster/external-secrets-config/templates/seaplane-db-dsn.yaml"
@@ -2108,10 +2111,17 @@ class TestMainIntegration:
         assert (shared / "Chart.yaml").is_file()
         kustomization = load_yaml(shared / "kustomization.yaml")
         assert kustomization["helmCharts"][0]["name"] == "jetstack-chart"
-        assert (shared / "jetstack-chart/templates").is_symlink()
-        assert "path = argocd/config/shared/cert-manager/upstream" in (
-            PROJECT_ROOT / ".gitmodules"
-        ).read_text()
+        operand_chart = load_yaml(shared / "jetstack-chart/Chart.yaml")
+        assert operand_chart["dependencies"] == [
+            {
+                "name": "cert-manager",
+                "version": "1.19.6",
+                "repository": "oci://quay.io/jetstack/charts",
+            }
+        ]
+        assert (shared / "jetstack-chart/Chart.lock").is_file()
+        assert (shared / "jetstack-chart/charts/cert-manager-1.19.6.tgz").is_file()
+        assert not (shared / "jetstack-chart/templates").is_symlink()
         pull_secret = load_yaml(shared / "templates/pull-secret.yaml")
         assert "argocd.argoproj.io/sync-wave" not in pull_secret["metadata"]["annotations"]
         issuer = (shared / "templates/clusterissuer.yaml").read_text()
@@ -2127,7 +2137,6 @@ class TestMainIntegration:
         configs = values["configs"]
 
         assert configs["cm"]["kustomize.buildOptions"] == "--enable-helm"
-        assert configs["params"]["reposerver.enable.git.submodule"] is True
         assert "applicationsetcontroller.enable.progressive.syncs" not in configs["params"]
 
         bootstrap = (PROJECT_ROOT / "terraform/modules/ecs-bootstrap/main.tf").read_text()
