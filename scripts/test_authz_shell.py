@@ -126,7 +126,7 @@ export -f aws awscurl
     def test_seed_script_rejects_bad_arguments(self):
         for args in ([], ["12345", "us-east-1"], ["111111111111", ""]):
             with self.subTest(args=args):
-                result = subprocess.run([ROOT / "scripts/seed-authz-grants.sh", *args], capture_output=True, text=True)
+                result = subprocess.run([ROOT / "scripts/dev/seed-authz-grants.sh", *args], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("usage:", result.stderr)
 

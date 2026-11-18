@@ -896,7 +896,7 @@ cmd_account_allowlist() {
     echo "==> $method account $ACCOUNT_ID: done"
 }
 
-# Seeds an enrolled account's first authz grants (see scripts/seed-authz-grants.sh).
+# Seeds an enrolled account's first authz grants (see scripts/dev/seed-authz-grants.sh).
 cmd_seed_authz() {
     [[ "${ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || die "ACCOUNT_ID must be a 12-digit AWS account ID"
 
@@ -922,7 +922,7 @@ cmd_seed_authz() {
         -e "AWS_DEFAULT_REGION=$region" \
         -e "AWS_REGION=$region" \
         "$CI_IMAGE" \
-        scripts/seed-authz-grants.sh "$ACCOUNT_ID" "$deployment_name"
+        scripts/dev/seed-authz-grants.sh "$ACCOUNT_ID" "$deployment_name"
     echo "==> seeded authz grants for $ACCOUNT_ID: done"
 }
 

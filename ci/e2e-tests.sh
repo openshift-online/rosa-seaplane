@@ -237,7 +237,7 @@ for _account in "${_accounts[@]}"; do
     -d "{\"accountId\":\"${_account}\"}" "${BASE_URL}/api/v0/accounts"
 done
 for _account in "${_accounts[@]}"; do
-  "${REPO_ROOT}/scripts/seed-authz-grants.sh" "${_account}" "${_authz_prefix}"
+  "${REPO_ROOT}/scripts/dev/seed-authz-grants.sh" "${_account}" "${_authz_prefix}"
 done
 
 platform_rc=0

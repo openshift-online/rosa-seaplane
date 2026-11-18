@@ -85,7 +85,7 @@ as `global.management_clusters`; the RC pipeline waits for the API.
 ## Seed the first grants
 
 Temporary pre-production seeding until SSO org-admin linking. After enrollment,
-`ci/e2e-tests.sh` runs `scripts/seed-authz-grants.sh`, which writes each
+`ci/e2e-tests.sh` runs `scripts/dev/seed-authz-grants.sh`, which writes each
 account's first grants straight into the authz tables with `rrp-rc`, before resource suites and cleanup; failure stops the run.
 All tables live in the RC account, so one profile seeds the RC and customer
 accounts. Tables are `<deployment_name>-authz-*` (`ZOA_DEPLOYMENT_NAME`, else the
@@ -104,7 +104,7 @@ make ephemeral-seed-authz-shell ACCOUNT_ID=<12-digit-id> [ID=<env-id>]
 ```
 
 Elsewhere, with `rrp-rc` credentials, run
-`scripts/seed-authz-grants.sh <account-id> <deployment_name>`.
+`scripts/dev/seed-authz-grants.sh <account-id> <deployment_name>`.
 
 Each policy and each attachment is a separate conditional write with a fixed ID,
 so a rerun skips existing records and recreates deleted ones. Changing a seeded
