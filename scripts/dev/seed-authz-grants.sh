@@ -29,12 +29,14 @@ transactions=$(jq -nc --arg a "${account}" --arg pt "${prefix}-authz-policies" -
                      put($gt; "\($key)#ROLE#aws/\($a)/\($role)"; "ATTACHMENT#\($id)"; $attachmentRev; $attachment)]}
   ' --args $(python3 -c 'import uuid; [print(uuid.uuid4()) for _ in range(4)]'))
 
+all_rows_exist='\[ConditionalCheckFailed(, ConditionalCheckFailed)*\]'
 while IFS= read -r transaction; do
   record=$(jq -r '.TransactItems[0].Put.Item.sk.S' <<<"${transaction}")
   if output=$(AWS_PROFILE=rrp-rc aws dynamodb transact-write-items --cli-input-json "${transaction}" 2>&1); then
     echo "Seeded authz record ${record} for ${account}"
     continue
   fi
-  [[ "${output}" == *ConditionalCheckFailed* ]] || { echo "ERROR: seeding authz grants for ${account}: ${output}" >&2; exit 1; }
+  # Already seeded only if every row's condition failed; "None" for a row means it is missing.
+  [[ "${output}" =~ ${all_rows_exist} ]] || { echo "ERROR: seeding authz grants for ${account}: ${output}" >&2; exit 1; }
   echo "Authz record ${record} for ${account} already seeded"
 done <<<"${transactions}"

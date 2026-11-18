@@ -99,9 +99,12 @@ export -f aws awscurl
             self.assertRegex(revision, r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
     def test_ci_seeding_reruns_and_failures(self):
-        cases = {"seeded": ("echo 'TransactionCanceledException: [ConditionalCheckFailed, None]' >&2; return 255", True),
-                 "denied": ("echo 'AccessDeniedException' >&2; return 255", False)}
-        for name, (transact, accepted) in cases.items():
+        # A record is already seeded only when every row's condition failed; one missing row
+        # ("None") means a half-written attachment that a rerun cannot repair.
+        cases = {"seeded": ("echo 'TransactionCanceledException: [ConditionalCheckFailed, ConditionalCheckFailed]' >&2; return 255", True, ""),
+                 "partial": ("echo 'TransactionCanceledException: [ConditionalCheckFailed, None]' >&2; return 255", False, "[ConditionalCheckFailed, None]"),
+                 "denied": ("echo 'AccessDeniedException' >&2; return 255", False, "AccessDeniedException")}
+        for name, (transact, accepted, error) in cases.items():
             with self.subTest(name), tempfile.TemporaryDirectory() as directory:
                 result, calls = self.run_ci(directory, transact=transact)
                 self.assertEqual(result.returncode == 0, accepted, result.stderr)
@@ -109,7 +112,7 @@ export -f aws awscurl
                 if accepted:
                     self.assertIn("already seeded", result.stdout)
                 else:
-                    self.assertIn("AccessDeniedException", result.stderr)
+                    self.assertIn(error, result.stderr)
 
     def test_ci_seeding_repairs_partial_grants(self):
         """An existing record must not stop the account's other records from being written."""
