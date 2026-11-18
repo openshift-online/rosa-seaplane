@@ -252,11 +252,11 @@ Include the cross-day comparison in the threaded reply so readers understand the
 
 Follow Step 10 in `.claude/agents/ci-troubleshooter.md` for the full procedure. The action differs by classification:
 
-**Seaplane-repo-only fix constraint (applies to ALL jobs):** Only propose/raise a fix PR when the fix lands in a **seaplane repo** — `rosa-seaplane`, `rosa-seaplane-api`, or `rosa-seaplane-cli`. This matters most for the **OCP nightly e2e** periodics, whose root cause may be in HyperShift or the OCP nightly payload itself. If the fix belongs in a non-seaplane repo (e.g. `openshift/hypershift`, `openshift/release`, or an OCP component), **do not raise a PR**. Instead report the root cause in the threaded reply, state where the fix belongs, and recommend manual follow-up. Still raise a PR normally when the genuine fix is in a seaplane repo.
+**Seaplane-repo-only fix constraint (applies to ALL jobs):** Only propose/raise a fix PR when the fix lands in a **seaplane repo** — `rosa-seaplane`, `rosa-seaplane-api`, `rosa-seaplane-zoa`, `rosa-seaplane-kube-applier`, `rosa-seaplane-ecr-creds-sync`, or `rosa-seaplane-compliance`. This matters most for the **OCP nightly e2e** periodics, whose root cause may be in HyperShift or the OCP nightly payload itself. If the fix belongs in a non-seaplane repo (e.g. `openshift/hypershift`, `openshift/release`, or an OCP component), **do not raise a PR**. Instead report the root cause in the threaded reply, state where the fix belongs, and recommend manual follow-up. Still raise a PR normally when the genuine fix is in a seaplane repo.
 
 **🔧 Genuine — raise PR directly (only if the fix is in a seaplane repo, per the constraint above):**
 
-1. **First genuine failure**: share root cause, raise a PR with the fix against the appropriate repo (`rosa-seaplane`, `rosa-seaplane-api`, or `rosa-seaplane-cli`). Branch name: `chai-bot/fix-<job>-<short-description>`. Label: `chai-bot`.
+1. **First genuine failure**: share root cause, raise a PR with the fix against the appropriate repo (`rosa-seaplane`, `rosa-seaplane-api`, `rosa-seaplane-zoa`, `rosa-seaplane-kube-applier`, `rosa-seaplane-ecr-creds-sync`, or `rosa-seaplane-compliance`). Branch name: `chai-bot/fix-<job>-<short-description>`. Label: `chai-bot`.
 2. **Continued genuine failure (same root cause)**: find the existing open chai-bot PR and add a comment with today's failure URL and any new evidence. Do not create a duplicate PR.
 3. **Root cause shifted**: close the existing PR with a comment explaining the root cause change. Open a new PR targeting the updated root cause.
 

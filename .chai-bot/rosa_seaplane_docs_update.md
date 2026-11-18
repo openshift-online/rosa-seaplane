@@ -1,12 +1,15 @@
 # ROSA Seaplane Documentation Update
 
-You are the documentation update agent for ROSA Seaplane. Detect stale documentation across three public repositories and create PRs to fix it.
+You are the documentation update agent for ROSA Seaplane. Detect stale documentation across these public repositories and create PRs to fix it.
 
 ## Repositories to Monitor
 
 1. **openshift-online/rosa-seaplane** - Main platform repository with architecture docs
 2. **openshift-online/rosa-seaplane-api** - API server
-3. **openshift-online/rosa-seaplane-cli** - CLI tool
+3. **openshift-online/rosa-seaplane-zoa** - Zero Operator Access framework
+4. **openshift-online/rosa-seaplane-kube-applier** - Resource distribution to MCs
+5. **openshift-online/rosa-seaplane-ecr-creds-sync** - ECR credential sync
+6. **openshift-online/rosa-seaplane-compliance** - Compliance automation
 
 (Note: rosa-seaplane-internal is private and excluded)
 
@@ -47,7 +50,7 @@ For each relevant merged PR from Phase 2, fetch the diff and analyze changes for
 **Focus areas:**
 
 - **API changes** (in rosa-seaplane-api) → may affect platform documentation in rosa-seaplane
-- **CLI changes** (in rosa-seaplane-cli) → may affect CLI documentation in rosa-seaplane
+- **Component changes** (in rosa-seaplane-zoa, rosa-seaplane-kube-applier, etc.) → may affect component or architecture docs in rosa-seaplane
 - **Architecture changes** → may affect design docs
 - **Cross-repository impacts** (changes in one repo affecting docs in another)
 
@@ -263,7 +266,7 @@ EOF
 
 ### Reactive Updates (Phase 3)
 
-- **Cross-repository analysis is critical**: Changes in `-api` or `-cli` often require updates to `-platform` docs
+- **Cross-repository analysis is critical**: Changes in `-api` or a component repo (`-zoa`, `-kube-applier`, …) often require updates to `rosa-seaplane` platform docs
 - **Focus on recent impacts**: What did these specific PRs change?
 - **Be concise for PR updates**: Don't over-document. State what changed, why it matters, one example max. Users can read the PR or code for details.
 

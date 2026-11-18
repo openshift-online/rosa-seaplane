@@ -28,7 +28,10 @@ Search for recently opened or merged PRs from ALL contributors (not just one per
 
 - `openshift-online/rosa-seaplane` (main codebase)
 - `openshift-online/rosa-seaplane-api` (API repository)
-- `openshift-online/rosa-seaplane-cli` (CLI repository)
+- `openshift-online/rosa-seaplane-zoa` (Zero Operator Access framework)
+- `openshift-online/rosa-seaplane-kube-applier` (resource distribution to MCs)
+- `openshift-online/rosa-seaplane-ecr-creds-sync` (ECR credential sync)
+- `openshift-online/rosa-seaplane-compliance` (compliance automation)
 
 Use GitHub tools or `fetch_web_content` to find PRs from the last 7 days. Include merged and notable open PRs.
 
@@ -53,7 +56,10 @@ Post the report as a single Slack message. Keep it scannable — no trend tables
 *PRs (7d):*
 <https://github.com/openshift-online/rosa-seaplane/pulls|rosa-seaplane>: %MERGED% merged, %OPEN% open
 <https://github.com/openshift-online/rosa-seaplane-api/pulls|rosa-seaplane-api>: %MERGED% merged, %OPEN% open
-<https://github.com/openshift-online/rosa-seaplane-cli/pulls|rosa-seaplane-cli>: %MERGED% merged, %OPEN% open
+<https://github.com/openshift-online/rosa-seaplane-zoa/pulls|rosa-seaplane-zoa>: %MERGED% merged, %OPEN% open
+<https://github.com/openshift-online/rosa-seaplane-kube-applier/pulls|rosa-seaplane-kube-applier>: %MERGED% merged, %OPEN% open
+<https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync/pulls|rosa-seaplane-ecr-creds-sync>: %MERGED% merged, %OPEN% open
+<https://github.com/openshift-online/rosa-seaplane-compliance/pulls|rosa-seaplane-compliance>: %MERGED% merged, %OPEN% open
 ```
 
 - Group epics by status: In Progress (with progress badge), To Do, Done
