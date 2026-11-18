@@ -1,4 +1,4 @@
-.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint helm-deps check-rendered-files check-e2e-pins promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-submodule-fetch-config check-helm-locks pre-push render
+.PHONY: help terraform-fmt terraform-init terraform-validate terraform-upgrade terraform-output-management terraform-output-regional helm-lint helm-deps check-rendered-files check-e2e-pins promtool-test check-session-manager-plugin ephemeral-provision ephemeral-provision-resume ephemeral-teardown ephemeral-resync ephemeral-list ephemeral-shell ephemeral-post-account-shell ephemeral-delete-account-shell ephemeral-bastion-rc ephemeral-bastion-mc ephemeral-port-forward-rc ephemeral-port-forward-mc ephemeral-port-forward-rc-all ephemeral-port-forward-mc-all ephemeral-sre-ui ephemeral-e2e ephemeral-dump-env int-shell int-bastion-rc int-bastion-mc int-port-forward-rc int-port-forward-mc int-port-forward-rc-all int-port-forward-mc-all int-e2e int-dump-env stage-shell stage-bastion-rc stage-bastion-mc stage-port-forward-rc stage-port-forward-mc stage-port-forward-rc-all stage-port-forward-mc-all stage-e2e stage-dump-env check-docs check-default-tags check-helm-locks pre-push render
 
 # =============================================================================
 # Local tool management
@@ -133,7 +133,7 @@ HELM_LINT_SET := --set global.aws_region=us-east-1 --set global.environment=lint
 helm-lint: ## Lint all Helm charts
 	@echo "🔍 Linting Helm charts..."
 	@failed=false; \
-	for chart_dir in $$(find argocd/config -name "Chart.yaml" -not -path "*/jetstack-chart/*" -not -path "*/upstream/*" -exec dirname {} \; | sort); do \
+	for chart_dir in $$(find argocd/config -name "Chart.yaml" -exec dirname {} \; | sort); do \
 		echo "   Linting $$chart_dir"; \
 		if ! helm lint $$chart_dir $(HELM_LINT_SET); then \
 			failed=true; \
@@ -184,9 +184,6 @@ check-docs: ## Check documentation formatting
 	@npx --no-install prettier --check '**/*.md'
 	@echo "✅ Documentation formatting check complete"
 
-check-submodule-fetch-config: ## Verify .gitmodules keeps Prow's sparse checkout working
-	@./ci/check-submodule-fetch-config.sh
-
 # central-account-bootstrap (shared connection/state) is excluded from tag
 # enforcement; the CodePipeline modules are tagged and linted normally.
 TFLINT_EXCLUDE_DIRS := \
@@ -212,7 +209,7 @@ pre-push: ## Run all CI validation checks (parallel)
 	@echo "Formatting Terraform files..."
 	@$(MAKE) terraform-fmt
 	@echo ""
-	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags check-submodule-fetch-config check-helm-locks
+	@$(MAKE) -j4 check-docs check-rendered-files helm-lint terraform-validate promtool-test check-default-tags check-helm-locks
 	@$(MAKE) check-e2e-pins E2E_PIN_ARGS=--skip-ancestry
 	@echo ""
 	@echo "✅ All pre-push checks passed!"
