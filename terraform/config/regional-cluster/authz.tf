@@ -1,5 +1,5 @@
 variable "authz_tables" {
-  description = "Same-account, same-region authz table names: retained (authz-storage) or created here when enable_ephemeral_authz_tables. Null disables API IAM."
+  description = "Same-account, same-region authz table names, created in this RC state. Null creates no tables and disables API IAM."
   type = object({
     policies = string
     global   = string
@@ -16,22 +16,18 @@ variable "authz_tables" {
   }
 }
 
-variable "enable_ephemeral_authz_tables" {
-  description = "Create authz_tables in this RC state, destroyed with the RC. Non-production only; production uses retained authz-storage."
+variable "authz_dynamodb_deletion_protection" {
+  description = "Enable deletion protection, PITR, and janitor exclusion for the authz DynamoDB tables"
   type        = bool
-  default     = false
-  validation {
-    condition     = !var.enable_ephemeral_authz_tables || var.authz_tables != null
-    error_message = "enable_ephemeral_authz_tables requires authz_tables."
-  }
+  default     = true
 }
 
-# Non-production RCs own disposable tables so teardown leaves nothing behind.
-module "ephemeral_authz_tables" {
-  count            = var.enable_ephemeral_authz_tables ? 1 : 0
+# Like seaplane_db and ZOA tables: protected in production, disposable elsewhere.
+module "authz_tables" {
+  count            = var.authz_tables == null ? 0 : 1
   source           = "../../modules/authz-tables"
   table_names      = var.authz_tables
-  enable_retention = false
+  enable_retention = var.authz_dynamodb_deletion_protection
 }
 
 data "aws_partition" "current" {}

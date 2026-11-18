@@ -1,5 +1,4 @@
-# Authz storage tables. One schema for retained (separate state) and
-# disposable (owned by an ephemeral RC) environments. prevent_destroy cannot be
+# Authz storage tables, owned by the RC state. prevent_destroy cannot be
 # conditional, so retained tables rely on AWS deletion protection instead.
 resource "aws_dynamodb_table" "authz" {
   for_each = var.table_names

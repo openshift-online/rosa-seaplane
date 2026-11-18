@@ -1,6 +1,6 @@
 # Configure Platform API authorization
 
-This repo provisions retained DynamoDB tables and API IAM, delivers table names,
+This repo provisions the authz DynamoDB tables and API IAM, delivers table names,
 and seeds the first grants directly into DynamoDB from CI. See the API
 repo's [runtime](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/README.md),
 [management](https://github.com/openshift-online/rosa-seaplane-api/blob/main/docs/authz/management.md),
@@ -12,17 +12,15 @@ contracts for permission and API behavior.
 1. Verify gateway-only access. The API trusts `X-Amz-Account-Id` and
    `X-Amz-Caller-Arn`; direct access to port 8000 allows impersonation. ClusterIP
    does not enforce this boundary. Gateway isolation remains unverified.
-2. Approve the region, retained backend bucket/key, three table names, account IDs,
-   and retention/recovery owner.
-3. Retained tables carry `platform-janitor/lifecycle=ignore`, which both janitor
-   configs skip. Other cleanup systems need the same exclusion.
-4. Provision `terraform/config/authz-storage` under separate retained state with
-   `aws_region` and `table_names` keys `policies`, `global`, and `regional`.
-   Keep the backend key stable across RC replacement and outside RC/MC destroy.
-   Integration, stage, and ephemeral environments skip this step:
-   `regional_cluster.enable_ephemeral_authz_tables` makes the RC create unretained
-   `<deployment_name>-authz-*` tables, destroyed with it. CI reseeds their grants.
-5. Set these source values in `config/<environment>/defaults.yaml` or the region
+2. Approve the region, three table names, account IDs, and retention/recovery
+   owner.
+3. The RC creates the tables. `regional_cluster.authz_dynamodb_deletion_protection`
+   (default `true`) enables deletion protection, PITR, and the
+   `platform-janitor/lifecycle=ignore` tag, which both janitor configs skip. Other
+   cleanup systems need the same exclusion. Integration, stage, and ephemeral set
+   it to `false`, so their tables are destroyed with the RC. CI reseeds their
+   grants.
+4. Set these source values in `config/<environment>/defaults.yaml` or the region
    override. For ephemeral environments, use `.ephemeral-env/defaults.yaml`.
    - `regional_cluster.authz_tables` only if the provisioned tables differ from the
      default `<deployment_name>-authz-{policies,global,regional}`.
@@ -31,7 +29,7 @@ contracts for permission and API behavior.
      `seaplane.source.targetRevision` in the platform-api wrapper chart, pointing to
      the API revision whose chart sets them.
      Use a compatible operator image. Configured image pins remain unverified.
-6. Render and inspect before deployment:
+5. Render and inspect before deployment:
 
    ```sh
    uv run scripts/render.py
@@ -44,12 +42,12 @@ The API chart fails on missing table names. The API validates them at startup.
 
 ## Storage and runtime identity
 
-The storage root creates three ordinary regional tables with string `pk`/`sk`
-keys, on-demand billing, encryption, PITR, and deletion protection (module
-`terraform/modules/authz-tables`). It creates no replicas. Intentional destruction
-requires a separate approved procedure.
+The RC root creates three ordinary regional tables with string `pk`/`sk` keys,
+on-demand billing, and encryption (module `terraform/modules/authz-tables`), plus
+PITR and deletion protection when enabled. It creates no replicas. Destroying
+protected tables requires a separate approved procedure.
 
-The RC root references those tables and associates `platform-api/platform-api-sa`
+The RC root also associates `platform-api/platform-api-sa`
 with permissions on their exact same-account, same-region ARNs. Allowed operations
 are `GetItem`, `BatchGetItem`, `Query`, `PutItem`, `DeleteItem`, and
 `ConditionCheckItem`. There is no scan, table administration, or operator role
@@ -129,4 +127,4 @@ make check-rendered-files helm-lint terraform-validate
 
 Local tests do not establish deployment readiness. Verify gateway isolation,
 negative IAM cases, allowed requests, denial, revocation, backend failure, metrics,
-cross-account MC lifecycle/cleanup, and retained state across RC replacement.
+cross-account MC lifecycle/cleanup, and deletion protection on production tables.
