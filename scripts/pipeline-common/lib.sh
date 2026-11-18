@@ -202,8 +202,11 @@ resolve_image_registry_account_id_from_target() {
 # Read OCP image mirror configuration from SSM in the currently-active target
 # account. This covers the ECR registry used to mirror OCP release images to
 # zero-egress environments — not platform operator images, which are handled by
-# resolve_image_registry_account_id_from_target. Must be called after
-# use_mc_account so the AWS credentials scope to the RC account where the
+# resolve_image_registry_account_id_from_target. The registry account comes
+# from /infra/image-registry/ocp-mirror-account (the upstream OCP image
+# registry) and is deliberately never read from /infra/image-registry/account_id,
+# which names the seaplane component registry. Must be called after
+# use_mc_account so the AWS credentials scope to the target account where the
 # parameters live. Exports ECR_MIRROR_REGISTRY_ACCOUNT, ECR_MIRROR_REGION,
 # ECR_MIRROR_REPOSITORY, ECR_MIRROR_SOURCES, ECR_MIRROR_BASE_SECRET_NAME, and
 # ECR_MIRROR_ECR_REPOSITORY (full URI derived from the first three). All are
@@ -212,7 +215,7 @@ resolve_ecr_mirror_config_from_target() {
     local prefix="/infra/image-registry"
     local ssm_args=(--with-decryption --query 'Parameter.Value' --output text --region "${TARGET_REGION}")
 
-    ECR_MIRROR_REGISTRY_ACCOUNT=$(aws ssm get-parameter --name "${prefix}/account_id"       "${ssm_args[@]}" 2>/dev/null || echo "")
+    ECR_MIRROR_REGISTRY_ACCOUNT=$(aws ssm get-parameter --name "${prefix}/ocp-mirror-account" "${ssm_args[@]}" 2>/dev/null || echo "")
     ECR_MIRROR_REGION=$(          aws ssm get-parameter --name "${prefix}/region"            "${ssm_args[@]}" 2>/dev/null || echo "${TARGET_REGION}")
     ECR_MIRROR_REPOSITORY=$(      aws ssm get-parameter --name "${prefix}/repository"        "${ssm_args[@]}" 2>/dev/null || echo "")
     ECR_MIRROR_SOURCES=$(         aws ssm get-parameter --name "${prefix}/sources"           "${ssm_args[@]}" 2>/dev/null || echo "")

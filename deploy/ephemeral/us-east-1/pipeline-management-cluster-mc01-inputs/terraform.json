@@ -23,5 +23,6 @@
   "worker_node_ami_id": "ami-02c0be6b661d6caf5",
   "worker_node_root_volume_size": 50,
   "hcp_slot_count": 4,
-  "enable_bastion": true
+  "enable_bastion": true,
+  "enable_ecr_creds_sync": true
 }

@@ -106,9 +106,13 @@ For per-region overrides, create
 `infra/environments/<env>/account-config/rc/<region>.hcl` with the same locals.
 Regions without a file inherit from `defaults.hcl`.
 
-The ECR registry account ID (`ECR_MIRROR_REGISTRY_ACCOUNT`) is sourced from the
-existing `/infra/image-registry/account_id` SSM parameter, which is provisioned
-separately by the shared ECR account onboarding.
+The OCP image mirror account ID (`ECR_MIRROR_REGISTRY_ACCOUNT`) is sourced from
+the `/infra/image-registry/ocp-mirror-account` SSM parameter, set per
+environment in rosa-seaplane-internal alongside the other `ecr_mirror_*`
+values. It is deliberately distinct from `/infra/image-registry/account_id`,
+which names the seaplane component registry (`global.image_registry_account_id`
+for kube-applier and ecr-creds-sync image resolution) and must not be
+repurposed for the mirror.
 
 **To activate the mirror in rosa-seaplane**, set only the boolean opt-in in
 `config/<env>/defaults.yaml` and re-render:

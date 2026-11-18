@@ -29,7 +29,7 @@ platformApi:
     idleTimeoutSeconds: 60
 seaplane:
   ecrMirror:
-    enabled: false
+    enabled: true
   oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
 pagerduty:
   enabled: false

@@ -14,7 +14,7 @@ eksNodePool:
     id: ami-02c0be6b661d6caf5
   rootVolumeSize: 50Gi
   ecrMirror:
-    enabled: false
+    enabled: true
     mirrors: []
   expireAfter: 504h
 hcpSlots:

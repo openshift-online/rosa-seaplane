@@ -77,9 +77,16 @@ applications:
   regional-cluster:
     seaplane:
       oidcS3Bucket: "hypershift-{{ eph_prefix }}-regional-oidc-{{ account_id }}"
+      ecrMirror:
+        # SSM parameters are provisioned for eph-ci and eph-dev in rosa-seaplane-internal.
+        # ECR_MIRROR_* values are injected from SSM at bootstrap time — do not set them here.
+        enabled: true
 
 management_cluster_defaults:
   enable_bastion: true
   node_instance_families: ["m8i-flex", "m7i-flex"]
   # A few HCP slots keep ephemeral provisioning fast and quota-light.
   hcp_slot_count: 4
+  # Enable the ecr-creds-sync DaemonSet on MCs to keep the ECR authorization
+  # token refreshed for zero-egress dataplane image pulls.
+  enable_ecr_creds_sync: true

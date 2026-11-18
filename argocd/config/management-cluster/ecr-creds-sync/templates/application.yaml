@@ -14,8 +14,11 @@ spec:
     path: {{ index .Values "ecrCredsSync" "source" "path" }}
     helm:
       values: |
+        global:
+          image_registry_account_id: {{ index .Values "global" "image_registry_account_id" | default "" | quote }}
         {{- if index .Values "ecrCredsSync" "helmValues" }}
-        {{- toYaml (index .Values "ecrCredsSync" "helmValues") | nindent 8 }}
+        ecrCredsSync:
+        {{- toYaml (index .Values "ecrCredsSync" "helmValues") | nindent 10 }}
         {{- end }}
 
   destination:

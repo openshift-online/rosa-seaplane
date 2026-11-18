@@ -105,5 +105,8 @@ print_provision_param_summary "MC ArgoCD bootstrap" \
 use_mc_account
 resolve_image_registry_account_id_from_target \
     "$(jq -r '.image_registry_account_id // empty' "$DEPLOY_CONFIG_FILE")"
+# Read ECR mirror config from the MC account's own SSM parameters.
+# The MC account holds /infra/image-registry/* written by its account-config unit.
+resolve_ecr_mirror_config_from_target
 terraform_init_backend management-cluster "${TARGET_REGION}" "${MANAGEMENT_ID}"
 bootstrap_argocd management-cluster "${TARGET_ACCOUNT_ID}"

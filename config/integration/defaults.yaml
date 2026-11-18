@@ -32,5 +32,16 @@ regional_cluster:
 cluster_lifecycle:
   default_expiration: "24h"
 
+applications:
+  regional-cluster:
+    seaplane:
+      ecrMirror:
+        # SSM parameters are provisioned for int in rosa-seaplane-internal.
+        # ECR_MIRROR_* values are injected from SSM at bootstrap time — do not set them here.
+        enabled: true
+
 management_cluster_defaults:
   enable_bastion: true
+  # Enable the ecr-creds-sync DaemonSet on MCs to keep the ECR authorization
+  # token refreshed for zero-egress dataplane image pulls.
+  enable_ecr_creds_sync: true
