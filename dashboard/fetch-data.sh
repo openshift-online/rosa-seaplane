@@ -14,10 +14,11 @@ OUT="${SCRIPT_DIR}/data.json"
 REPOS=(
   openshift-online/rosa-seaplane
   openshift-online/rosa-seaplane-api
-  openshift-online/rosa-seaplane-cli
   openshift-online/rosa-seaplane-internal
   openshift-online/rosa-seaplane-zoa
   openshift-online/rosa-seaplane-kube-applier
+  openshift-online/rosa-seaplane-ecr-creds-sync
+  openshift-online/rosa-seaplane-compliance
   openshift-online/aws-nuke-cf
 )
 
