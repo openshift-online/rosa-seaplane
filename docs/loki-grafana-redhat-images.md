@@ -15,7 +15,7 @@ Keep [grafana/loki](https://grafana.github.io/helm-charts) **7.0.0** (vendored).
 
 v6.0.16 is not a tag swap onto chart 7.0.0. v6.4.7 is the Logging 6.4 line (same product as Vector `vector-rhel9:v6.4.6`) without the 6.4.6 S3 upload bug. Chart args remain `-config.file` / `-target=`. Storage stays classic S3 (`use_thanos_objstore` off).
 
-The catalog image has no ENTRYPOINT/CMD. Set `loki.loki.command: /usr/bin/loki`. grafana/loki 7.0.0 wires that on distributor, ingester, query-frontend, and compactor, but not querier or index-gateway. `ci/patch-loki-command-templates.py` adds the same hook; `make helm-deps CHART=argocd/config/regional-cluster/loki` re-applies it after a fetch.
+The catalog image has no ENTRYPOINT/CMD. Set `loki.loki.command: /usr/bin/loki`. grafana/loki 7.0.0 wires that on distributor, ingester, query-frontend, and compactor, but not querier or index-gateway. Same pattern as cert-manager: vendor the chart in `loki-chart/`, render with Kustomize `helmCharts`, and strategic-merge `command: [/usr/bin/loki]` on those two workloads. `make helm-deps CHART=argocd/config/regional-cluster/loki/loki-chart` refreshes the lock and tgz.
 
 Manifest-list digest (v6.4.7): `sha256:90ab304b12402d6759330a338f7b26fcf9ac7ec4d601fcab2582dca99111544b`.
 

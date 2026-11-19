@@ -1,0 +1,23 @@
+# Inflate the vendored grafana/loki chart and patch container command.
+# The RH logging-loki image has no ENTRYPOINT, so chart args would otherwise
+# be exec'd as the binary. grafana/loki 7.0.0 wires loki.command on four
+# Distributed workloads; querier and index-gateway still omit it. Drop these
+# patches if the chart grows a command value on those two.
+#
+# loki-chart is a local wrapper chart; make helm-deps vendors its grafana/loki
+# dependency so Kustomize can render and patch it without network access.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+helmGlobals:
+  chartHome: .
+helmCharts:
+  - name: loki-chart
+    releaseName: loki
+    namespace: loki
+    includeCRDs: true
+    valuesFile: values.yaml
+# helmCharts.namespace stamps metadata.namespace on the workloads. Patches
+# without that field are looked up as Deployment/...[noNs] and fail to match.
+patches:
+  - path: patches/querier-command.yaml
+  - path: patches/index-gateway-command.yaml

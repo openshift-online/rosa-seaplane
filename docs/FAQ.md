@@ -6,6 +6,10 @@ The operand chart is the upstream cert-manager chart **1.19.6**, vendored from `
 
 RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.0.0**, pinned to `logging-loki-rhel9:v6.4.7` (Loki **3.7**). Logging **6.0.x** is Loki **3.1.0** and is not a tag swap onto this chart. Grafana stays `grafana-oss:11.4.0`: `ose-grafana` is deprecated CMO Grafana ~8.3, not 11.4. See [Loki and Grafana Red Hat images](loki-grafana-redhat-images.md).
 
+### Why does Loki use kustomize command patches?
+
+Same reason as cert-manager: the RH operand image has no ENTRYPOINT. grafana/loki **7.0.0** honors `loki.command` on four Distributed workloads and omits it on querier and index-gateway. The chart is vendored in `loki-chart/` and rendered through Kustomize so those two objects get `command: [/usr/bin/loki]`. Drop the patches if the chart grows a command value there.
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

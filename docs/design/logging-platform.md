@@ -1,6 +1,6 @@
 # Logging Platform
 
-**Last Updated**: 2026-11-13
+**Last Updated**: 2026-11-19
 
 ## Summary
 
@@ -182,24 +182,27 @@ All logs are stored under a single Loki tenant. Cluster identity is enforced at 
 
 ### ArgoCD Apps
 
-| App (`argocd/config/`)      | Cluster | Chart                              | Purpose                                                                   |
-| --------------------------- | ------- | ---------------------------------- | ------------------------------------------------------------------------- |
-| `regional-cluster/loki/`    | RC      | `grafana/loki` v7.0.0 (subchart)   | Loki Distributed + platform templates (SA, TGB, PDB)                      |
-| `shared/vector/`            | RC + MC | `vector/vector` v0.52.0 (subchart) | Shared collector chart; overlays select local Loki or sigv4-proxy routing |
-| `regional-cluster/grafana/` | RC      | (existing)                         | Logging dashboards in `dashboards/logging/`                               |
+| App (`argocd/config/`)      | Cluster | Chart                                        | Purpose                                                                   |
+| --------------------------- | ------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `regional-cluster/loki/`    | RC      | `grafana/loki` v7.0.0 (Kustomize helmCharts) | Loki Distributed + platform templates (SA, TGB, PDB)                      |
+| `shared/vector/`            | RC + MC | `vector/vector` v0.52.0 (subchart)           | Shared collector chart; overlays select local Loki or sigv4-proxy routing |
+| `regional-cluster/grafana/` | RC      | (existing)                                   | Logging dashboards in `dashboards/logging/`                               |
 
 ### Helm Chart Structure
 
-Both Vector and Loki use upstream charts as subchart dependencies:
+Vector uses an upstream chart as a subchart dependency. Loki vendors grafana/loki the same way as cert-manager (`loki-chart/` + Kustomize `helmCharts` and command patches):
 
 ```text
 argocd/config/regional-cluster/loki/
-├── Chart.yaml          # depends on grafana/loki v7.0.0
-├── values.yaml         # RHOBS-aligned component config
+├── Chart.yaml                   # wrapper (SA, TGB, PDB, pull-secret, S3 Secret)
+├── values.yaml                  # RHOBS-aligned component config
+├── kustomization.yaml           # helmCharts + querier/index-gateway command patches
+├── loki-chart/                  # vendored grafana/loki v7.0.0
 └── templates/
     ├── serviceaccount.yaml      # Pod Identity SA
     ├── targetgroupbinding.yaml  # ALB TGBs (distributor + query-frontend)
     ├── pdb.yaml                 # PDBs per component (conditional)
+    ├── s3-secret.yaml           # runtime bucket/region/KMS for expand-env
     └── _helpers.tpl             # Shared labels
 
 argocd/config/shared/vector/

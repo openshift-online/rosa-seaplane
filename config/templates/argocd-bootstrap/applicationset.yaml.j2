@@ -171,13 +171,13 @@ spec:
         path: '{{ '{{ .path.path }}' }}'
         repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
-      # A ref-only source with an empty path generates no resources. Only
-      # cert-manager supplies a path here to render its Kustomize operand;
-      # the Helm source above still renders its wrapper with the same globals.
+      # A ref-only source with an empty path generates no resources.
+      # cert-manager and loki supply a path here to render the Kustomize
+      # operand; the Helm source above still renders the wrapper.
       - repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
         ref: operand
-        path: '{{ '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}' }}'
+        path: '{{ '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") }}{{ .path.path }}{{ end }}' }}'
         kustomize: {}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'

@@ -2069,7 +2069,7 @@ class TestMainIntegration:
             )
             assert sources[0]["targetRevision"] == expected_revision
             assert sources[1] == {
-                "path": '{{ if eq .path.basename "cert-manager" }}{{ .path.path }}{{ end }}',
+                "path": '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") }}{{ .path.path }}{{ end }}',
                 "repoURL": "{{ .metadata.annotations.git_repo }}",
                 "targetRevision": expected_revision,
                 "ref": "operand",
@@ -2130,6 +2130,35 @@ class TestMainIntegration:
             REAL_ARGOCD_CONFIG_DIR / "regional-cluster/aws-load-balancer-controller/values.yaml"
         )["aws-load-balancer-controller"]
         assert controller["enableCertManager"] is True
+
+    def test_loki_kustomize_operand_chart(self):
+        loki = REAL_ARGOCD_CONFIG_DIR / "regional-cluster/loki"
+        kustomization = load_yaml(loki / "kustomization.yaml")
+        assert kustomization["helmCharts"][0]["name"] == "loki-chart"
+        assert kustomization["helmCharts"][0]["valuesFile"] == "values.yaml"
+        patch_paths = [patch["path"] for patch in kustomization["patches"]]
+        assert patch_paths == [
+            "patches/querier-command.yaml",
+            "patches/index-gateway-command.yaml",
+        ]
+        operand_chart = load_yaml(loki / "loki-chart/Chart.yaml")
+        assert operand_chart["dependencies"] == [
+            {
+                "name": "loki",
+                "version": "7.0.0",
+                "repository": "https://grafana.github.io/helm-charts",
+            }
+        ]
+        assert (loki / "loki-chart/Chart.lock").is_file()
+        assert (loki / "loki-chart/charts/loki-7.0.0.tgz").is_file()
+        wrapper = load_yaml(loki / "Chart.yaml")
+        assert "dependencies" not in wrapper or not wrapper.get("dependencies")
+        assert not (loki / "Chart.lock").exists()
+        querier = load_yaml(loki / "patches/querier-command.yaml")
+        assert querier["metadata"] == {"name": "loki-querier", "namespace": "loki"}
+        assert querier["spec"]["template"]["spec"]["containers"][0]["command"] == [
+            "/usr/bin/loki"
+        ]
 
     def test_shared_argocd_bootstrap_values_enable_first_install_features(self):
         values_file = REAL_ARGOCD_CONFIG_DIR / "shared" / "argocd" / "values.yaml"

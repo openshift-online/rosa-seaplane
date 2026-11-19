@@ -42,6 +42,16 @@ serviceAccount:
 loki:
   deploymentMode: Distributed
 
+  # Kustomize helmCharts cannot take ApplicationSet valuesObject. Bucket /
+  # region / KMS stay ${LOKI_*} in the operand config; the wrapper Secret
+  # loki-s3 is filled from that overlay and injected here.
+  global:
+    extraArgs:
+      - -config.expand-env=true
+    extraEnvFrom:
+      - secretRef:
+          name: loki-s3
+
   # registry.redhat.io. Same SSM pull-secret as Vector / HyperShift.
   imagePullSecrets:
     - name: pull-secret
@@ -52,6 +62,8 @@ loki:
     # appVersion is 3.6.7; args are still -config.file / -target=. Do not pin
     # Logging 6.0.x (Loki 3.1.0) or 6.4.6 (S3 streaming trailer bug).
     # Catalog image has no ENTRYPOINT/CMD; chart args would be argv0 without command.
+    # Four Distributed workloads honor this value; querier and index-gateway
+    # get it from kustomize patches (see patches/).
     command: /usr/bin/loki
     image:
       registry: registry.redhat.io
@@ -82,17 +94,18 @@ loki:
             period: 24h
 
     # S3 auth is via EKS Pod Identity (transparent via AWS SDK env vars).
+    # Placeholders expand from Secret loki-s3 (ApplicationSet valuesObject).
     storage:
       type: s3
       s3:
-        region: ""
+        region: "${LOKI_S3_REGION}"
         s3ForcePathStyle: false
         sse:
           type: SSE-KMS
-          kms_key_id: ""
+          kms_key_id: "${LOKI_KMS_KEY_ID}"
       bucketNames:
-        chunks: ""
-        ruler: ""
+        chunks: "${LOKI_CHUNKS_BUCKET}"
+        ruler: "${LOKI_RULER_BUCKET}"
 
     # Aligned with RHOBS production baseline.
     limits_config:
