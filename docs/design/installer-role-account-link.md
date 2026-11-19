@@ -29,7 +29,7 @@ An administrator runs:
 rosa create account-roles
 ```
 
-The administrator needs AWS permission to create or update the role and its policy attachments. Registering the account with Seaplane also requires Red Hat organization-admin authority or a defined ROSAAdmin role.
+The administrator needs AWS permission to create or update the role and its policy attachments. Registering the account with Seaplane also requires Red Hat organization-admin authority or a defined ROSAAdmin role. ROSAAdmin does not exist today, so that delegation must be implemented before it can replace organization-admin authority.
 
 Setup verifies the administrator's Red Hat authority and their authority over the target AWS account. This is an administrator-only setup requirement; ordinary CLI and Terraform use does not subsequently require a Red Hat login. An AWS-signed request identifies its AWS caller, but does not alone establish either Red Hat organization administration or unrestricted AWS administration.
 
@@ -69,11 +69,9 @@ The proposed path uses one jump role per environment, shared by regional Seaplan
 
 After setup, Seaplane must be able to resolve the installer role and expected ExternalId from the customer account alone. This information is needed before the first cluster exists, because the user may first ask to see VPCs or subnets.
 
-The proposed approach registers an **AWS access association** at the account level: the approved binding between the customer account and its installer-role configuration. Discovery requests use the authenticated account to find it; background workers use the stored owning account of the cluster or OIDC configuration. This approach has one association for the installer role per AWS account across regions within the environment. 
+The proposed approach registers an AWS access association at the account level: a dedicated resource representing the approved binding between the customer account and its installer-role configuration. Discovery requests use the authenticated account to find it; background workers use the stored owning account of the cluster or OIDC configuration. This approach has one association for the installer role per AWS account across regions within the environment. 
 
-The role's AWS account must match the account Seaplane has authorized. ExternalId is an additional trust requirement, not a substitute for this ownership check. Role access is validated before setup is considered complete, and a partially configured account is reported as such.
-
-Each association records the assigned ExternalId and identifies the owning Red Hat organization. Supporting several organizations for one role requires explicit ownership and trust rules; linking another user must not silently grant another organization ownership of the account.
+The role's AWS account must match the account Seaplane has authorized. ExternalId is an additional trust requirement, not a substitute for this ownership check. Role access is validated before setup is considered complete, and a partially configured account is reported as such. Each association records the assigned ExternalId and identifies the owning Red Hat organization. Supporting several organizations for one role requires explicit ownership and trust rules.
 
 **Alternative: keep the v1 pattern of storing the association on each cluster.** Seaplane could populate role information on clusters automatically, and NodePools could resolve it through their parent cluster. This keeps background lookup close to the resource but repeats configuration and complicates role rotation. It also needs an account-level lookup or deterministic rule for discovery before a cluster exists; per-cluster storage alone cannot provide the entire flow.
 
@@ -103,11 +101,13 @@ This is a one-time step for each connection, rather than a requirement on every 
 
 ### Signing into the browser
 
-Browser access requires a read-only API that accepts the user’s Red Hat token, identifies the signed-in user, and retrieves their saved AWS identity connections. It returns the AWS account ID and role or user ARN for each connection, giving the UI the information needed to populate an account/identity selector. This lookup uses the saved connections rather than querying AWS for accounts. The user selects an identity, and the UI includes it with subsequent requests. The proposed gateway and Lambda authorizer validate the Red Hat token and confirm that the selected identity is linked to that user. The API contract and integration with the existing UI sign-in flow remain to be agreed.
+Browser access requires a read-only API that accepts the user’s Red Hat token, identifies the signed-in user, and retrieves their saved AWS identity connections. It returns the AWS account ID and role or user ARN for each connection, giving the UI the information needed to populate an account/identity selector. This lookup uses the saved connections rather than querying AWS for accounts. The user selects an identity, and the UI includes it with subsequent requests.
+
+These browser API calls pass through a proposed new API Gateway with a Lambda authorizer that the gateway invokes to check authentication before forwarding requests to Platform API. It validates the Red Hat token issued by the existing sign-in flow. The initial connection-list request requires only that token; subsequent account requests also require the authorizer to confirm that the selected AWS identity is linked to the user.
 
 ## Discovery API
 
-The UI calls a discovery endpoint on the selected AWS region's API, such as `GET /api/v0/cloud_discovery/vpcs`, with the Red Hat token and saved AWS identity. A Lambda function attached to the API Gateway validates the Red Hat token and selected AWS identity connection. If approved, the gateway forwards the request and verified identity information to Platform API. Platform API checks the caller's discovery permission, then uses the account ID to resolve the registered installer-role ARN and assigned ExternalId. It assumes the Red Hat jump role and then the customer installer role, builds an AWS SDK client with the temporary credentials, and queries AWS in the API's region. The API returns the results to the UI. The saved AWS identity authorizes the request; the installer role performs the AWS reads.
+The UI calls a discovery endpoint on the selected AWS region's API, such as `GET /api/v0/cloud_discovery/vpcs`, with the Red Hat token and saved AWS identity. The same gateway and Lambda authorizer used for the browser's connection-list request validate the token and, for discovery, also verify the selected AWS identity connection. If approved, the gateway forwards the request and verified identity information to Platform API. Platform API checks the caller's discovery permission, then uses the account ID to resolve the registered installer-role ARN and assigned ExternalId. It assumes the Red Hat jump role and then the customer installer role, builds an AWS SDK client with the temporary credentials, and queries AWS in the API's region. The API returns the results to the UI. The saved AWS identity authorizes the request; the installer role performs the AWS reads.
 
 The account’s installer-role configuration can also be used by background cluster operations, including preflight checks and unmanaged OIDC key retrieval. These operations resolve access from the cluster or OIDC configuration’s owning account, using the same lookup and role-assumption mechanism as discovery.
 
