@@ -213,6 +213,12 @@ resource "aws_ecs_task_definition" "bootstrap" {
               sre_alb_dns_name: "$SRE_ALB_DNS_NAME"
               sre_domain: "$SRE_DOMAIN"
               redis_endpoint: "$REDIS_ENDPOINT"
+              ecr_mirror_registry_account: "$ECR_MIRROR_REGISTRY_ACCOUNT"
+              ecr_mirror_region: "$ECR_MIRROR_REGION"
+              ecr_mirror_repository: "$ECR_MIRROR_REPOSITORY"
+              ecr_mirror_sources: "$ECR_MIRROR_SOURCES"
+              ecr_mirror_base_secret_name: "$ECR_MIRROR_BASE_SECRET_NAME"
+              ecr_mirror_ecr_repository: "$ECR_MIRROR_ECR_REPOSITORY"
               vpc_id: "$VPC_ID"
           type: Opaque
           stringData:

@@ -82,12 +82,6 @@ while IFS= read -r chart; do
 	[[ -n "$chart" ]] || continue
 	dir="$(dirname "$chart")"
 	display_chart="${chart#"$root"/}"
-	case "$dir" in
-	*/upstream | */jetstack-chart | */cert-manager/upstream)
-		printf 'SKIP: %s (upstream/submodule chart source)\n' "$display_chart"
-		continue
-		;;
-	esac
 	chart_fail=0
 	chart_skip=0
 	yaml_deps="$(dep_ids "$chart")"

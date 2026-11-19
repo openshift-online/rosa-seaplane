@@ -1,0 +1,71 @@
+{{- if eq .Values.global.cluster_type "management-cluster" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sigv4-proxy-logs
+  namespace: vector
+  labels:
+    app.kubernetes.io/name: sigv4-proxy-logs
+    app.kubernetes.io/component: logs-proxy
+    app.kubernetes.io/part-of: observability
+spec:
+  replicas: {{ .Values.sigv4ProxyLogs.replicas | default 2 }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sigv4-proxy-logs
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sigv4-proxy-logs
+        app.kubernetes.io/component: logs-proxy
+    spec:
+      serviceAccountName: sigv4-proxy-logs
+      securityContext:
+        {{- toYaml .Values.sigv4ProxyLogs.podSecurityContext | nindent 8 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sigv4-proxy-logs
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sigv4-proxy-logs
+      containers:
+        - name: sigv4-proxy
+          image: "{{ .Values.sigv4ProxyLogs.image.repository }}:{{ .Values.sigv4ProxyLogs.image.tag }}"
+          imagePullPolicy: {{ .Values.sigv4ProxyLogs.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.sigv4ProxyLogs.containerSecurityContext | nindent 12 }}
+          args:
+            - --name
+            - execute-api
+            - --region
+            - {{ .Values.global.aws_region | default "" | quote }}
+            - --host
+            - {{ (urlParse (.Values.global.rhobs_api_url | default "")).host | quote }}
+            - --port
+            - {{ printf ":%d" (int .Values.sigv4ProxyLogs.port) | quote }}
+            - --strip
+            - Content-Encoding
+          ports:
+            - name: proxy
+              containerPort: {{ .Values.sigv4ProxyLogs.port }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.sigv4ProxyLogs.resources | nindent 12 }}
+          livenessProbe:
+            tcpSocket:
+              port: proxy
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: proxy
+            initialDelaySeconds: 3
+            periodSeconds: 5
+{{- end }}

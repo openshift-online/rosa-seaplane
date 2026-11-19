@@ -19,7 +19,7 @@ validate_aws_account_id "TARGET_ACCOUNT_ID" "${TARGET_ACCOUNT_ID}"
 validate_aws_account_id "REGIONAL_AWS_ACCOUNT_ID" "${REGIONAL_AWS_ACCOUNT_ID}"
 tf_require_nonempty_json_vars "${DEPLOY_CONFIG_FILE}" "MC core" \
     management_id app_code service_phase cost_center zoa_deployment_name \
-    zoa_boundary_image_tag zoa_boundary_source_image
+    zoa_boundary_image_tag zoa_boundary_source_image hcp_slot_count
 tf_require_json_vars "${DEPLOY_CONFIG_FILE}" "MC" \
     zoa_lambda_image_tag zoa_runner_image_tag zoa_runner_source_image \
     worker_node_ami_id worker_node_root_volume_size \
@@ -42,7 +42,7 @@ tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
     zoa_lambda_image_tag zoa_runner_image_tag zoa_runner_source_image \
     zoa_boundary_session_idle_timeout_seconds zoa_boundary_session_stale_creating_seconds \
     zoa_lambda_api_concurrency zoa_lambda_worker_concurrency zoa_deployment_name \
-    worker_node_ami_id worker_node_root_volume_size
+    worker_node_ami_id worker_node_root_volume_size hcp_slot_count
 _zoa_boundary_image_tag=$(jq -r '.zoa_boundary_image_tag // ""' "$DEPLOY_CONFIG_FILE")
 _zoa_boundary_source_image=$(jq -r '.zoa_boundary_source_image // ""' "$DEPLOY_CONFIG_FILE")
 export TF_VAR_zoa_boundary_image="${_zoa_boundary_source_image}:${_zoa_boundary_image_tag}"

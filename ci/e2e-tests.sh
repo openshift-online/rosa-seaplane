@@ -220,6 +220,7 @@ if [[ "${E2E_SKIP_PLATFORM_API}" == "true" ]]; then
   echo "=== Platform API Tests ==="
   echo "Skipped (E2E_SKIP_PLATFORM_API=${E2E_SKIP_PLATFORM_API})"
 else
+  export GOTOOLCHAIN=auto
   make test-e2e-api || platform_rc=$?
 fi
 

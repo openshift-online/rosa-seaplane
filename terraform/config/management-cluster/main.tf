@@ -34,6 +34,9 @@ module "vpc" {
   source = "../../modules/vpc"
 
   resource_name_base = var.management_id
+
+  hcp_slot_count = var.hcp_slot_count
+  hcp_slot_cidrs = var.hcp_slot_cidrs
 }
 
 # =============================================================================
@@ -47,11 +50,14 @@ module "management_cluster" {
   cluster_id                      = var.management_id
   vpc_id                          = module.vpc.vpc_id
   private_subnet_ids              = module.vpc.private_subnet_ids
+  control_plane_subnet_ids        = module.vpc.eks_control_plane_subnet_ids
   cluster_security_group_id       = module.vpc.cluster_security_group_id
   vpc_endpoints_security_group_id = module.vpc.vpc_endpoints_security_group_id
 
   worker_node_ami_id           = var.worker_node_ami_id
   worker_node_root_volume_size = var.worker_node_root_volume_size
+
+  hcp_slot_subnet_arns = module.vpc.hcp_slot_subnet_arns
 }
 
 # =============================================================================
@@ -146,15 +152,6 @@ module "zoa_lambda" {
 }
 
 # =============================================================================
-# Bedrock account primitives (agreements, budget)
-# =============================================================================
-
-module "bedrock" {
-  source      = "../../modules/bedrock"
-  environment = var.environment
-}
-
-# =============================================================================
 # DNS Pod Identity (cross-account Route53 access for external-dns + cert-manager)
 # =============================================================================
 
@@ -164,6 +161,18 @@ module "dns_pod_identity" {
   management_id              = var.management_id
   eks_cluster_name           = module.management_cluster.cluster_name
   dns_zone_operator_role_arn = var.dns_zone_operator_role_arn
+}
+
+# =============================================================================
+# ECR Credentials Sync Pod Identity
+# =============================================================================
+
+module "ecr_creds_sync" {
+  count  = var.enable_ecr_creds_sync ? 1 : 0
+  source = "../../modules/ecr-creds-sync"
+
+  management_id    = var.management_id
+  eks_cluster_name = module.management_cluster.cluster_name
 }
 
 # =============================================================================

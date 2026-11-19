@@ -1,0 +1,7 @@
+apiVersion: v2
+name: ecr-creds-sync
+version: 0.1.0
+description: >
+  Wrapper chart — renders an ArgoCD Application that sources the ecr-creds-sync
+  chart from the rosa-seaplane-ecr-creds-sync repository. Follows the same
+  wrapper pattern as hyperfleet (seaplane-operator) and platform-api.

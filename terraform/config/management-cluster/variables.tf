@@ -58,6 +58,12 @@ variable "enable_bastion" {
   default     = false
 }
 
+variable "enable_ecr_creds_sync" {
+  description = "Enable the ecr-creds-sync Pod Identity role and association. Required when zero-egress ECR mirroring is active so the controller can call ecr:GetAuthorizationToken."
+  type        = bool
+  default     = false
+}
+
 # =============================================================================
 # Management Cluster Configuration Variables
 # =============================================================================
@@ -138,7 +144,7 @@ variable "zoa_runner_image_tag" {
 variable "zoa_runner_source_image" {
   description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror)"
   type        = string
-  default     = "quay.io/rrp-dev-ci/zoa-runner"
+  default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }
 
 variable "worker_node_ami_id" {
@@ -151,6 +157,22 @@ variable "worker_node_root_volume_size" {
   description = "Root EBS volume size (GiB) for the Karpenter bootstrap nodes."
   type        = number
   default     = 50
+}
+
+variable "hcp_slot_count" {
+  description = "Number of hosted control plane (HCP) slots (isolated subnets, NACL and node role per hosted control plane), and so the most HostedClusters this MC holds. Must match the hcp-slots ArgoCD chart and the Seaplane Operator's --hcp-slot-count."
+  type        = number
+
+  validation {
+    condition     = var.hcp_slot_count >= 1 && var.hcp_slot_count <= 99 && floor(var.hcp_slot_count) == var.hcp_slot_count
+    error_message = "hcp_slot_count must be a whole number from 1 to 99: every hosted control plane runs in a slot, and slot names are two digits."
+  }
+}
+
+variable "hcp_slot_cidrs" {
+  description = "Secondary VPC CIDRs that hold the hosted control plane slots (one /22 per slot)."
+  type        = list(string)
+  default     = ["10.1.0.0/16"]
 }
 
 variable "zoa_table_name" {

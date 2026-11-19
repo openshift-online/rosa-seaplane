@@ -62,10 +62,14 @@ spec:
             cp /tmp/aws/private-creds /tmp/aws/oidc-creds
           fi
 
+          # --tech-preview-no-upgrade (below) enables the AWSManagedDNS feature
+          # gate for managed ingress DNS. Remove it once managed DNS is GA/default
+          # (no longer behind tech-preview-no-upgrade).
           hypershift install \
             --namespace hypershift \
             --enable-conversion-webhook=false \
             --hypershift-image {{ .Values.hypershift.hypershift.image }} \
+            --tech-preview-no-upgrade \
             --limit-crd-install AWS \
             --private-platform AWS \
             --aws-private-creds /tmp/aws/private-creds \
@@ -77,24 +81,34 @@ spec:
             --external-dns-domain-filter {{ .Values.hypershift.externalDns.domain }} \
             --external-dns-secret external-dns \
             --external-dns-image {{ .Values.hypershift.externalDns.image }} \
+            --external-dns-txt-owner-id {{ .Values.global.cluster_name }} \
 
           # TODO(hypershift): Upstream --aws-assume-role + Pod Identity support
           # to hypershift install CLI, then replace this post-install patch
           # with native flags.
           if [ -n "${DNS_ZONE_OPERATOR_ROLE_ARN:-}" ]; then
-            echo "Patching external-dns with --aws-assume-role=${DNS_ZONE_OPERATOR_ROLE_ARN}"
             _CA=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
             _TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
             _API="https://kubernetes.default.svc"
 
-            # Patch the command and add --aws-assume-role.
-            curl -sf --cacert "$_CA" -H "Authorization: Bearer $_TOKEN" \
-              -H "Content-Type: application/json-patch+json" -X PATCH \
-              "${_API}/apis/apps/v1/namespaces/hypershift/deployments/external-dns" \
-              -d '[
-                {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--aws-assume-role='"${DNS_ZONE_OPERATOR_ROLE_ARN}"'"}
-              ]' \
-              -o /dev/null -w "  HTTP %{http_code}\n"
+            # Idempotent: only add --aws-assume-role if the install job re-runs
+            # and the arg is not already present, so re-syncs don't duplicate it.
+            _HAS_ARG=$(curl -sf --cacert "$_CA" -H "Authorization: Bearer $_TOKEN" \
+              "${_API}/apis/apps/v1/namespaces/hypershift/deployments/external-dns" | \
+              grep -c "aws-assume-role" || true)
+
+            if [ "$_HAS_ARG" -eq 0 ]; then
+              echo "Patching external-dns with --aws-assume-role=${DNS_ZONE_OPERATOR_ROLE_ARN}"
+              curl -sf --cacert "$_CA" -H "Authorization: Bearer $_TOKEN" \
+                -H "Content-Type: application/json-patch+json" -X PATCH \
+                "${_API}/apis/apps/v1/namespaces/hypershift/deployments/external-dns" \
+                -d '[
+                  {"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--aws-assume-role='"${DNS_ZONE_OPERATOR_ROLE_ARN}"'"}
+                ]' \
+                -o /dev/null -w "  HTTP %{http_code}\n"
+            else
+              echo "--aws-assume-role already present, skipping patch"
+            fi
           fi
       restartPolicy: Never
       serviceAccountName: hypershift-installer

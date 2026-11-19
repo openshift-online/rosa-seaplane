@@ -13,6 +13,9 @@ spec:
       name: letsencrypt-dns01-key
     solvers:
     - dns01:
+        # Managed ingress DNS delegates the ingress zone to a per-cluster zone;
+        # Follow CNAMEs so the DNS01 challenge is solved in the delegated zone.
+        cnameStrategy: Follow
         route53:
           region: {{ .Values.global.aws_region }}
           role: {{ .Values.global.dns_zone_operator_role_arn }}

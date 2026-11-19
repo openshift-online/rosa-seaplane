@@ -229,11 +229,11 @@ The Platform API implements per-account rate limiting using the GCRA (Generic Ce
 | `terraform/modules/ecs-bootstrap/main.tf`                  | Writes `redis_endpoint` annotation on the ArgoCD cluster secret             |
 | `config/templates/argocd-bootstrap/applicationset.yaml.j2` | Reads `redis_endpoint` annotation into Helm valuesObject                    |
 | `argocd/config/regional-cluster/platform-api/values.yaml`  | Rate limit config (routes, rates, burst), Valkey endpoint                   |
-| `argocd/config/regional-cluster/platform-api/templates/`   | Deployment, ratelimit-configmap, servicemonitor templates                   |
+| `argocd/config/regional-cluster/platform-api/`             | Argo CD Application wrapper (deployment chart in rosa-seaplane-api)         |
 | `argocd/config/regional-cluster/alerting-rules/templates/` | PrometheusRule CRs for rate limit alerts                                    |
 | `docs/design/rate-limiting-architecture.md`                | ADR: rate limiting design decisions                                         |
 
-**Key files (rosa-seaplane-api)**: Rate limiting Go implementation lives in the API repo — `pkg/ratelimit/` (GCRA limiter, config loading), `pkg/middleware/ratelimit.go` (HTTP middleware), `cmd/rosa-seaplane-api/main.go` (wiring).
+**Key files (rosa-seaplane-api)**: Rate limiting Go implementation lives in the API repo — `seaplane-api/pkg/ratelimit/` (GCRA limiter, config, middleware), `seaplane-api/cmd/main.go` (wiring).
 
 **Data flow for Valkey endpoint**: Terraform output → `bootstrap-argocd.sh` (combines host:port) → ECS task env var → cluster secret annotation → ApplicationSet valuesObject → Helm values → `REDIS_ENDPOINT` env var on platform-api pods.
 
@@ -246,11 +246,11 @@ Scheduled CI/documentation tasks run via Chai Bot. Schedules are defined in `.ch
 - `---THREAD_DETAILS---` — everything after this line becomes threaded replies (not posted to the channel)
 - `---THREAD_BREAK---` — separates individual threaded replies
 
-**Daily CI report** tracks the `nightly-ephemeral`, `nightly-integration`, and `nightly-stage` jobs. Top-level message shows today's status + 10-day trend table. It also reports, as a single condensed header line, the latest run of the **OCP nightly e2e** periodics — the HyperShift `periodic-ci-openshift-hypershift-release-{5.0,5.1}-periodics-e2e-rosa-seaplane` jobs that run rosa-seaplane e2e against OCP nightly release images (condensed latest-run header line plus a 10-run trend row per OCP version). Threaded replies are created only when jobs are failing, using the `ci-troubleshooter` agent for root cause analysis. Fix PRs are only raised when the fix lands in a seaplane repo (`rosa-seaplane`, `rosa-seaplane-api`, `rosa-seaplane-cli`); failures rooted in HyperShift or the OCP payload are reported with a recommendation but no PR.
+**Daily CI report** tracks the `nightly-ephemeral`, `nightly-integration`, and `nightly-stage` jobs. Top-level message shows today's status + 10-day trend table. It also reports, as a single condensed header line, the latest run of the **OCP nightly e2e** periodics — the HyperShift `periodic-ci-openshift-hypershift-release-{5.0,5.1}-periodics-e2e-rosa-seaplane` jobs that run rosa-seaplane e2e against OCP nightly release images (condensed latest-run header line plus a 10-run trend row per OCP version). Threaded replies are created only when jobs are failing, using the `ci-troubleshooter` agent for root cause analysis. Fix PRs are only raised when the fix lands in a seaplane repo (`rosa-seaplane`, `rosa-seaplane-api`, `rosa-seaplane-zoa`, `rosa-seaplane-kube-applier`, `rosa-seaplane-ecr-creds-sync`, `rosa-seaplane-compliance`); failures rooted in HyperShift or the OCP payload are reported with a recommendation but no PR.
 
-**Weekly status** groups epics by status (In Progress with completion %, To Do, Done) and summarizes PR activity across `rosa-seaplane`, `rosa-seaplane-api`, and `rosa-seaplane-cli`.
+**Weekly status** groups epics by status (In Progress with completion %, To Do, Done) and summarizes PR activity across the public seaplane repos (`rosa-seaplane`, `rosa-seaplane-api`, `rosa-seaplane-zoa`, `rosa-seaplane-kube-applier`, `rosa-seaplane-ecr-creds-sync`, `rosa-seaplane-compliance`).
 
-**Docs update** detects stale documentation across the three repos and creates PRs to fix it, using the `documentation-updater` agent for validation.
+**Docs update** detects stale documentation across the public seaplane repos and creates PRs to fix it, using the `documentation-updater` agent for validation.
 
 **Adversary scan** runs a weekly Groundwork-mode security scan of each repo using the `adversary` agent and posts severity-ranked findings to Slack. This is static/adversarial analysis, not CVE scanning.
 

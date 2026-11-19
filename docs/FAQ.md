@@ -1,6 +1,6 @@
 ### Why does cert-manager use kustomize command patches?
 
-The operand chart is [`openshift/cert-manager`](https://github.com/openshift/cert-manager) @ **v1.19.6**, matching `jetstack-cert-manager-rhel9:v1.19.6-1`. That chart is still the upstream templates (args, no command). The RH image has no ENTRYPOINT, so kustomize sets `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
+The operand chart is the upstream cert-manager chart **1.19.6**, vendored from `oci://quay.io/jetstack/charts` by `make helm-deps` and rendered through Kustomize. It matches `jetstack-cert-manager-rhel9:v1.19.6-1`. The RH image has no ENTRYPOINT, so Kustomize patches `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
 
 ### Why is Loki on logging-loki-rhel9 and Grafana still grafana-oss?
 

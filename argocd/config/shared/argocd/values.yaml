@@ -168,8 +168,6 @@ argo-cd:
   configs:
     params:
       server.insecure: false
-      # Keep first-install ArgoCD aligned with the self-managed Application.
-      reposerver.enable.git.submodule: true
     cm:
       kustomize.buildOptions: --enable-helm
 

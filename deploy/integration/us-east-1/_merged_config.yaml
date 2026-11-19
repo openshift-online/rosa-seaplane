@@ -101,7 +101,7 @@ terraform_tags:
 # @used-by worker_node_ami pipeline-regional-cluster-inputs/terraform.json.j2
 worker_node_ami:
   family: AL2023
-  id: ami-00ad69a77c77c2a61
+  id: ami-02c0be6b661d6caf5
 
 # @doc worker_node_root_volume_size Root EBS volume size (GiB) for worker nodes. Drives both the Karpenter EC2NodeClass and the Terraform bootstrap node group.
 # @used-by worker_node_root_volume_size _context
@@ -180,26 +180,26 @@ regional_cluster:
   # @doc regional_cluster.zoa_lambda_image_tag Immutable tag for the ZOA Lambda image. Defaults to a known-good Konflux on-push build. Override via --provision-override-file for ephemeral e2e with a CI-built tag (e.g. ci-<PR>-<BUILD_ID>).
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_lambda_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_lambda_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image. Defaults to same Konflux build as Lambda. Override independently when testing a new runner with the current Lambda (or vice versa).
+  zoa_lambda_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_runner_image_tag Immutable tag for the ZOA Runner image (Konflux on-push full git SHA). Override via --provision-override-file for ephemeral e2e with a CI-built tag.
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_runner_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_runner_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_lambda_source_image Source registry image for the ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag when pointing at a fork or CI registry (e.g. quay.io/rrp-dev-ci/zoa-lambda).
+  zoa_runner_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_lambda_source_image Source registry for ZOA Lambda (mirrored to ECR via skopeo). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_lambda_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_lambda_source_image: "quay.io/rrp-dev-ci/zoa-lambda"
-  # @doc regional_cluster.zoa_runner_source_image Source registry image for the ZOA Runner (pulled directly by K8s, no ECR mirror). Override together with zoa_runner_image_tag when pointing at a fork or CI registry.
+  zoa_lambda_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
+  # @doc regional_cluster.zoa_runner_source_image Source registry image for the ZOA Runner (pulled directly by K8s, no ECR mirror). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_runner_source_image pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_runner_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_runner_source_image: "quay.io/rrp-dev-ci/zoa-runner"
-  # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image. Required; same commit tag as Lambda/Runner when bumped together.
+  zoa_runner_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
+  # @doc regional_cluster.zoa_boundary_image_tag Immutable tag for the ZOA Boundary ECS image (Konflux on-push full git SHA). Bump with runner when moving Konflux pins.
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_image_tag pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_boundary_image_tag: "43aeef8"
-  # @doc regional_cluster.zoa_boundary_source_image Source registry image for ZOA Boundary (pulled directly by ECS). Override together with zoa_boundary_image_tag when pointing at a fork or CI registry.
+  zoa_boundary_image_tag: "1740bc6e5e853c98cc5bb0df75dbb836b115a261"
+  # @doc regional_cluster.zoa_boundary_source_image Source registry image for ZOA Boundary (pulled directly by ECS). Konflux release path; ephemeral zoa PR e2e overrides to quay.io/rrp-dev-ci via openshift/release.
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_source_image pipeline-regional-cluster-inputs/terraform.json.j2
-  zoa_boundary_source_image: "quay.io/rrp-dev-ci/zoa-boundary"
+  zoa_boundary_source_image: "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-boundary"
   # @doc regional_cluster.zoa_boundary_session_idle_timeout_seconds Terminal inactivity (seconds) before the boundary reaper stops a session. Wired to RC zoa-lambda (worker reaper) and zoa-access (RunTask MOTD); MC zoa-lambda uses the same value for MC-target reaping.
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-management-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2
@@ -230,9 +230,20 @@ management_cluster_defaults:
   # @used-by management_cluster_defaults.enable_bastion _context
   # @used-by management_cluster_defaults.enable_bastion pipeline-management-cluster-inputs/terraform.json.j2
   enable_bastion: true
+  # @doc management_cluster_defaults.enable_ecr_creds_sync Enable the ecr-creds-sync Pod Identity IAM role and ArgoCD application on management clusters. Enable in environments where zero-egress ECR mirroring is active.
+  # @used-by management_cluster_defaults.enable_ecr_creds_sync _context
+  # @used-by management_cluster_defaults.enable_ecr_creds_sync pipeline-management-cluster-inputs/terraform.json.j2
+  enable_ecr_creds_sync: false
   # @doc management_cluster_defaults.node_instance_families Default EC2 instance families for MC Karpenter NodePool (e.g. m8i, m7i). Sizes are generated by the eks-nodepool Helm chart.
   # @used-by management_cluster_defaults.node_instance_families _context
   node_instance_families: ["m8i", "m7i"]
+  # @doc management_cluster_defaults.hcp_slot_count Hosted control plane (HCP) slots per MC, and so the most HostedClusters an MC holds: each slot is a /22 of three /24 subnets behind its own NACL, a scoped node IAM role and a Karpenter NodePool, and holds one hosted control plane. A deleting cluster keeps its slot until its HostedCluster is gone. One /16 holds 64 slots; the default subnet quota (200 per VPC) allows about 63. Must be 1 to 99, so slot names stay two digits. Region-wide (ArgoCD values are per region), so it can't differ between the MCs of a region.
+  # @used-by management_cluster_defaults.hcp_slot_count _context
+  # @used-by management_cluster_defaults.hcp_slot_count pipeline-management-cluster-inputs/terraform.json.j2
+  hcp_slot_count: 60
+  # @doc management_cluster_defaults.node_expire_after Lifetime of every MC node (platform and HCP slot NodePools) before Karpenter replaces it.
+  # @used-by management_cluster_defaults.node_expire_after _context
+  node_expire_after: 504h
 
 observability:
   pagerduty:
@@ -268,6 +279,30 @@ applications:
       # @doc applications.management-cluster.eksNodePool.rootVolumeSize Root volume size for the MC Karpenter EC2NodeClass when a custom AMI is pinned. Only applied on the custom-AMI path.
       # @used-by applications.management-cluster.eksNodePool.rootVolumeSize _context
       rootVolumeSize: "{{ worker_node_root_volume_size }}Gi"
+      ecrMirror:
+        # @doc applications.management-cluster.eksNodePool.ecrMirror ECR mirror config for MC Karpenter nodes. When enabled, injects CRI-O registries.conf.d configuration with one block per mirrors entry on custom-AMI (rhel-bootc/CRI-O) nodes. Each entry pairs a sourcePrefix (exact source repository URI) with a registryUri (ECR repository URI) at the same path depth.
+        # @used-by applications.management-cluster.eksNodePool.ecrMirror _context
+        enabled: "{{ management_cluster_defaults.enable_ecr_creds_sync }}"
+        mirrors: []
+      # @doc applications.management-cluster.eksNodePool.expireAfter Lifetime of the MC platform nodes before Karpenter replaces them.
+      # @used-by applications.management-cluster.eksNodePool.expireAfter _context
+      expireAfter: "{{ management_cluster_defaults.node_expire_after }}"
+    hcpSlots:
+      # @doc applications.management-cluster.hcpSlots.count Number of HCP slot EC2NodeClasses/NodePools; must match the Terraform slots.
+      # @used-by applications.management-cluster.hcpSlots.count _context
+      count: "{{ management_cluster_defaults.hcp_slot_count }}"
+      # @doc applications.management-cluster.hcpSlots.instanceFamilies Instance families for the HCP slot NodePools.
+      # @used-by applications.management-cluster.hcpSlots.instanceFamilies _context
+      instanceFamilies: "{{ management_cluster_defaults.node_instance_families }}"
+      # @doc applications.management-cluster.hcpSlots.ami Pinned AMI for the HCP slot EC2NodeClasses ({family, id}). Null uses the default bottlerocket FIPS name selector.
+      # @used-by applications.management-cluster.hcpSlots.ami _context
+      ami: "{{ worker_node_ami }}"
+      # @doc applications.management-cluster.hcpSlots.rootVolumeSize Root volume size for the HCP slot EC2NodeClasses when a custom AMI is pinned.
+      # @used-by applications.management-cluster.hcpSlots.rootVolumeSize _context
+      rootVolumeSize: "{{ worker_node_root_volume_size }}Gi"
+      # @doc applications.management-cluster.hcpSlots.expireAfter Lifetime of HCP slot nodes before Karpenter replaces them.
+      # @used-by applications.management-cluster.hcpSlots.expireAfter _context
+      expireAfter: "{{ management_cluster_defaults.node_expire_after }}"
     hypershift:
       oidcStorageS3Bucket:
         # @doc applications.management-cluster.hypershift.oidcStorageS3Bucket.name OIDC S3 bucket name for HyperShift.
@@ -332,6 +367,13 @@ applications:
         writeTimeoutSeconds: 30          # starts after headers are read; includes handler time
         idleTimeoutSeconds: 60
     seaplane:
+      ecrMirror:
+        # @doc applications.regional-cluster.seaplane.ecrMirror Seaplane Operator ECR mirror configuration. When enabled, the operator reads ECR_MIRROR_* env vars to populate imageContentSources on every HostedCluster and redirect the ESO pull-secret target. All five ECR_MIRROR_* values (account, region, repository, sources, base-secret-name) are sourced from SSM parameters (/infra/image-registry/*) provisioned by rosa-seaplane-internal and threaded in as ArgoCD cluster secret annotations at bootstrap time. Must be set explicitly per environment; intentionally decoupled from management_cluster_defaults.enable_ecr_creds_sync.
+        # @used-by applications.regional-cluster.seaplane.ecrMirror _context
+        # SSM parameters are provisioned in rosa-seaplane-internal for eph and int
+        # environments but the mirror is not yet active. Set enabled: true per
+        # environment (e.g. config/integration/defaults.yaml) and re-bootstrap to activate.
+        enabled: false
       # @doc applications.regional-cluster.seaplane.oidcS3Bucket S3 bucket name the Seaplane Operator writes OIDC discovery documents to.
       # @used-by applications.regional-cluster.seaplane.oidcS3Bucket _context
       # NOTE: This value is overridden in the ApplicationSet valuesObject (config/templates/argocd-bootstrap/applicationset.yaml.j2)

@@ -25,13 +25,6 @@ if ! command -v "$yq_bin" >/dev/null 2>&1; then
 	exit 1
 fi
 
-skip_dir() {
-	case "$1" in
-	*/upstream | */jetstack-chart | */cert-manager/upstream) return 0 ;;
-	esac
-	return 1
-}
-
 has_deps() {
 	[[ -n "$("$yq_bin" -r '.dependencies[]? | .name' "$1")" ]]
 }
@@ -42,9 +35,6 @@ update_one() {
 	if [[ ! -f "$chart" ]]; then
 		echo "missing $chart" >&2
 		return 1
-	fi
-	if skip_dir "$dir"; then
-		return 0
 	fi
 	if ! has_deps "$chart"; then
 		echo "skip $dir (no dependencies)"

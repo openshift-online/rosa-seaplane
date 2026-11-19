@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ index .Values "ecrCredsSync" "applicationName" }}
+  namespace: {{ index .Values "ecrCredsSync" "namespace" }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ index .Values "ecrCredsSync" "project" }}
+
+  source:
+    repoURL: {{ index .Values "ecrCredsSync" "source" "repoURL" }}
+    targetRevision: {{ index .Values "ecrCredsSync" "source" "targetRevision" }}
+    path: {{ index .Values "ecrCredsSync" "source" "path" }}
+    helm:
+      values: |
+        {{- if index .Values "ecrCredsSync" "helmValues" }}
+        {{- toYaml (index .Values "ecrCredsSync" "helmValues") | nindent 8 }}
+        {{- end }}
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ index .Values "ecrCredsSync" "targetNamespace" }}
+
+  syncPolicy:
+    {{- if index .Values "ecrCredsSync" "syncPolicy" "automated" }}
+    automated:
+      prune: {{ index .Values "ecrCredsSync" "syncPolicy" "automated" "prune" }}
+      selfHeal: {{ index .Values "ecrCredsSync" "syncPolicy" "automated" "selfHeal" }}
+    {{- end }}
+    retry:
+      limit: -1
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 1m
+    syncOptions:
+    - ServerSideApply=true
+    - CreateNamespace=true

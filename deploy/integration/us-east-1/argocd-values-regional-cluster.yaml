@@ -11,7 +11,7 @@ eksNodePool:
   - m7i
   ami:
     family: AL2023
-    id: ami-00ad69a77c77c2a61
+    id: ami-02c0be6b661d6caf5
   rootVolumeSize: 50Gi
 baseDomain: us-east-1.int0.rosa.devshift.org
 platformApi:
@@ -28,6 +28,8 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
+  ecrMirror:
+    enabled: false
   oidcS3Bucket: PLACEHOLDER-overridden-by-terraform-output
 pagerduty:
   enabled: false

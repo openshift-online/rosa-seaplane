@@ -294,6 +294,7 @@ module "regional_cluster" {
   cluster_id                      = var.regional_id
   vpc_id                          = module.vpc.vpc_id
   private_subnet_ids              = module.vpc.private_subnet_ids
+  control_plane_subnet_ids        = module.vpc.eks_control_plane_subnet_ids
   cluster_security_group_id       = module.vpc.cluster_security_group_id
   vpc_endpoints_security_group_id = module.vpc.vpc_endpoints_security_group_id
 
@@ -626,17 +627,6 @@ module "zoa_lambda" {
 
   lambda_api_concurrency    = var.zoa_lambda_api_concurrency
   lambda_worker_concurrency = var.zoa_lambda_worker_concurrency
-}
-
-# =============================================================================
-# Bedrock account primitives (agreements, budget)
-# =============================================================================
-# Per-account resources; skip-if-exists for shared pool accounts. Not wired to ZOA.
-# Future: call module.bedrock from dedicated per-account Terraform only.
-
-module "bedrock" {
-  source      = "../../modules/bedrock"
-  environment = var.environment
 }
 
 # =============================================================================
