@@ -1,38 +1,20 @@
 # AWS Account Cleanup (Janitor)
 
-The ephemeral tests create AWS resources across multiple accounts. Teardown relies on `terraform destroy`, which can fail and leak resources. To clean up leaked resources, a CloudFormation-based [aws-nuke-cf](https://github.com/openshift-online/aws-nuke-cf) stack is deployed into each AWS account. It runs aws-nuke on a schedule using an in-account IAM role.
+The ephemeral tests create AWS resources across multiple accounts. Teardown relies on `terraform destroy`, which can fail and leak resources. To clean up leaked resources, a scheduled [aws-nuke](https://github.com/ekristen/aws-nuke) job runs in each minted CI / ephemeral account.
 
 ## Configuration
 
-`aws-nuke-config.yaml` contains the nuke configuration for all RRP AWS accounts. It defines:
+`aws-nuke-config-v2.yaml` is the nuke configuration. It is account-agnostic: the janitor appends an `accounts:` block for the account it runs in at runtime. It defines:
 
 - **Regions** to scan (us-east-1 + global)
-- **Account allowlist** (CI and shared-dev accounts)
-- **Preservation presets** — resources that must survive cleanup:
-  - `globals`: app-sre-infra, Terraform state, default VPCs, CloudTrails, org roles
-  - `ci`: CI identity (e2e/ci IAM users and roles), ECR repos, Route53 zones
-  - `shared-dev`: shared-dev user and role
-  - `central`: CodeStar connection for GitHub
-  - `mc`: SSM pull-secret for management clusters
-  - `customer`: HCP customer IAM user
+- **Preservation rules** — resources that must survive cleanup, mostly via the `aws-nuke=skip` and `platform-janitor/lifecycle=ignore` tags, plus AWS/SSO/org-managed roles by name
 
-## Deploying to an AWS account
+Everything not matched is deleted.
 
-1. Clone [aws-nuke-cf](https://github.com/openshift-online/aws-nuke-cf)
-2. Deploy the stack, passing this config (daily at 4 AM cron example):
+## Deployment
 
-```bash
-make deploy CONFIG_URL=https://raw.githubusercontent.com/openshift-online/rosa-seaplane/refs/heads/main/ci/janitor/aws-nuke-config.yaml DRY_RUN=false SCHEDULE="cron(0 4 * * ? *)"
-```
-
-3. Repeat for each AWS account that needs cleanup.
-
-See the [aws-nuke-cf README](https://github.com/openshift-online/aws-nuke-cf) for full deployment options.
+The janitor is provisioned per account by the `aws-nuke` Terraform module in [rosa-seaplane-internal](https://github.com/openshift-online/rosa-seaplane-internal) (`infra/modules/aws-nuke`). It downloads this config from `main` at runtime, so changes take effect on the next scheduled run after merge.
 
 ## Modifying preservation rules
 
-Edit `aws-nuke-config.yaml` to add or remove resource filters. Presets are composed per-account in the `accounts` section. After updating the config, re-upload it to each deployed stack:
-
-```bash
-make upload-config CONFIG=/path/to/rosa-seaplane/ci/janitor/aws-nuke-config.yaml
-```
+Edit `aws-nuke-config-v2.yaml`. Prefer tagging resources with `aws-nuke=skip` over adding name-based filters.
