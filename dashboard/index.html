@@ -247,7 +247,7 @@
         </ul>
       </div>
       <section class="label-section">
-        <h2>Review Ready <span class="count" id="rr-count">-</span></h2>
+        <h2>Ready for Human Review <span class="count" id="rr-count">-</span></h2>
         <div id="review-ready"><span class="empty">Loading...</span></div>
       </section>
       <section class="label-section">
@@ -313,14 +313,14 @@
 
         var reviewerEl = document.getElementById("ic-reviewers");
         if (data.review_ready.length === 0) {
-          reviewerEl.innerHTML = '<span class="status-ok">&#10003;</span> No review-ready PRs';
+          reviewerEl.innerHTML = '<span class="status-ok">&#10003;</span> No ready-for-human-review PRs';
         } else if (allHaveReviewers) {
-          reviewerEl.innerHTML = '<span class="status-ok">&#10003;</span> All review-ready PRs have reviewers';
+          reviewerEl.innerHTML = '<span class="status-ok">&#10003;</span> All ready-for-human-review PRs have reviewers';
         } else {
           var missing = data.review_ready.filter(function (pr) {
             return !pr.reviewRequests || pr.reviewRequests.length === 0;
           }).length;
-          reviewerEl.innerHTML = '<span class="status-fail">&#10007;</span> ' + missing + ' review-ready PR' + (missing > 1 ? 's' : '') + ' missing reviewers';
+          reviewerEl.innerHTML = '<span class="status-fail">&#10007;</span> ' + missing + ' ready-for-human-review PR' + (missing > 1 ? 's' : '') + ' missing reviewers';
         }
 
         var botEl = document.getElementById("ic-bot-prs");
