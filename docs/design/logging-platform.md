@@ -1,13 +1,13 @@
 # Logging Platform
 
-**Last Updated**: 2026-05-18
+**Last Updated**: 2026-11-19
 
 ## Summary
 
 The ROSA Seaplane logging stack provides centralized log collection from both Regional Clusters (RC) and Management Clusters (MC). It consists of:
 
-- **Vector** (DaemonSet) — log collector on RC and MC, deployed via the upstream `vector/vector` Helm chart (v0.52.0)
-- **Loki** (Distributed mode) — log aggregation on RC, deployed via the upstream `grafana/loki` Helm chart (v7.0.0, Loki 3.6.7)
+- **Vector** (DaemonSet) — log collector on RC and MC, deployed via the upstream `vector/vector` Helm chart (v0.52.0) with `vector-rhel9:v6.4.6`
+- **Loki** (Distributed mode) — log aggregation on RC, deployed via the upstream `grafana/loki` Helm chart (v7.0.0) with `logging-loki-rhel9:v6.4.7` (Loki 3.7)
 - **Grafana Dashboards** — three logging dashboards (Log Explorer, Vector Health, Loki Health) in the regional Grafana instance
 - **E2E Tests** — validate log ingestion from RC and MC via the RHOBS API Gateway
 
@@ -182,24 +182,27 @@ All logs are stored under a single Loki tenant. Cluster identity is enforced at 
 
 ### ArgoCD Apps
 
-| App (`argocd/config/`)      | Cluster | Chart                              | Purpose                                                                   |
-| --------------------------- | ------- | ---------------------------------- | ------------------------------------------------------------------------- |
-| `regional-cluster/loki/`    | RC      | `grafana/loki` v7.0.0 (subchart)   | Loki Distributed + platform templates (SA, TGB, PDB)                      |
-| `shared/vector/`            | RC + MC | `vector/vector` v0.52.0 (subchart) | Shared collector chart; overlays select local Loki or sigv4-proxy routing |
-| `regional-cluster/grafana/` | RC      | (existing)                         | Logging dashboards in `dashboards/logging/`                               |
+| App (`argocd/config/`)      | Cluster | Chart                                        | Purpose                                                                   |
+| --------------------------- | ------- | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `regional-cluster/loki/`    | RC      | `grafana/loki` v7.0.0 (Kustomize helmCharts) | Loki Distributed + platform templates (SA, TGB, PDB)                      |
+| `shared/vector/`            | RC + MC | `vector/vector` v0.52.0 (subchart)           | Shared collector chart; overlays select local Loki or sigv4-proxy routing |
+| `regional-cluster/grafana/` | RC      | (existing)                                   | Logging dashboards in `dashboards/logging/`                               |
 
 ### Helm Chart Structure
 
-Both Vector and Loki use upstream charts as subchart dependencies:
+Vector uses an upstream chart as a subchart dependency. Loki vendors grafana/loki the same way as cert-manager (`loki-chart/` + Kustomize `helmCharts` and command patches):
 
 ```text
 argocd/config/regional-cluster/loki/
-├── Chart.yaml          # depends on grafana/loki v7.0.0
-├── values.yaml         # RHOBS-aligned component config
+├── Chart.yaml                   # wrapper (SA, TGB, PDB, pull-secret, S3 Secret)
+├── values.yaml                  # RHOBS-aligned component config
+├── kustomization.yaml           # helmCharts + querier/index-gateway command patches
+├── loki-chart/                  # vendored grafana/loki v7.0.0
 └── templates/
     ├── serviceaccount.yaml      # Pod Identity SA
     ├── targetgroupbinding.yaml  # ALB TGBs (distributor + query-frontend)
     ├── pdb.yaml                 # PDBs per component (conditional)
+    ├── s3-secret.yaml           # runtime bucket/region/KMS for expand-env
     └── _helpers.tpl             # Shared labels
 
 argocd/config/shared/vector/
@@ -259,19 +262,21 @@ Three dashboards deployed as ConfigMaps with `grafana_dashboard: "1"` label (sid
 
 ### Key Configuration
 
-| Setting                | Value                            |
-| ---------------------- | -------------------------------- |
-| Loki Helm chart        | `grafana/loki` v7.0.0            |
-| Vector Helm chart      | `vector/vector` v0.52.0          |
-| Loki deployment mode   | Distributed                      |
-| StorageClass           | `gp3`                            |
-| Schema                 | `v13` (TSDB)                     |
-| Replication factor     | 1 (eph) / 2 (prod)               |
-| Retention              | 90 days                          |
-| Buffer (Vector)        | Disk, 256MB max, block when full |
-| Zone-aware replication | Disabled                         |
-| Gateway (nginx)        | Disabled (single-tenant)         |
-| Query Scheduler        | Disabled (not used in RHOBS)     |
+| Setting                | Value                                  |
+| ---------------------- | -------------------------------------- |
+| Loki Helm chart        | `grafana/loki` v7.0.0                  |
+| Loki image             | `logging-loki-rhel9:v6.4.7` (Loki 3.7) |
+| Vector Helm chart      | `vector/vector` v0.52.0                |
+| Vector image           | `vector-rhel9:v6.4.6`                  |
+| Loki deployment mode   | Distributed                            |
+| StorageClass           | `gp3`                                  |
+| Schema                 | `v13` (TSDB)                           |
+| Replication factor     | 1 (eph) / 2 (prod)                     |
+| Retention              | 90 days                                |
+| Buffer (Vector)        | Disk, 256MB max, block when full       |
+| Zone-aware replication | Disabled                               |
+| Gateway (nginx)        | Disabled (single-tenant)               |
+| Query Scheduler        | Disabled (not used in RHOBS)           |
 
 ## Security
 
@@ -284,13 +289,12 @@ Three dashboards deployed as ConfigMaps with `grafana_dashboard: "1"` label (sid
 
 ### What is NOT FIPS-compliant (known gap)
 
-- **Loki binary**: The upstream `grafana/loki` container image uses standard Go crypto libraries (not BoringCrypto). TLS connections from Loki to S3 use non-FIPS-validated modules.
-- **Vector binary**: The upstream `vector/vector` container image uses Rust's standard TLS stack (rustls/native-tls), which is not FIPS-validated.
+- **Loki / Vector binaries**: Images are OpenShift Logging operands (`logging-loki-rhel9`, `vector-rhel9`) on upstream Helm charts. That is the catalog trusted-build path. It is not a FIPS validation of this EKS Helm topology. The Loki Operator and Cluster Logging Operator stay off EKS.
 
 **Path to FIPS compliance** (if required for FedRAMP Moderate):
 
-1. **Loki**: Replace upstream image with a custom build using `GOEXPERIMENT=boringcrypto`, or migrate to the Loki Operator (which provides FIPS builds on OpenShift).
-2. **Vector**: No upstream FIPS build exists. Options: (a) contribute FIPS Rust TLS backend upstream, (b) replace Vector with Fluent Bit compiled with OpenSSL FIPS module, (c) wait for RHOBS to provide an EKS-compatible FIPS Vector package.
+1. **Loki / Vector**: Treat the Logging operand images as the RH binary source. Do not install Loki Operator or CLO on EKS. A FIPS claim for this topology needs a separate assessment; Konflux rebuilds are the type-3 path if catalog images are not accepted.
+2. Grafana stays `grafana-oss:11.4.0` (`ose-grafana` is not Grafana 11). See [Loki and Grafana Red Hat images](../loki-grafana-redhat-images.md).
 
 For FedRAMP Moderate in US commercial regions, the FIPS S3 endpoints satisfy the network-level requirement (SC-13 for data in transit to S3). The binary-level gap affects internal TLS handshakes only.
 
@@ -321,7 +325,7 @@ For FedRAMP Moderate in US commercial regions, the FIPS S3 endpoints satisfy the
 - Vector standalone requires separate Helm chart management (no CLO abstraction on EKS)
 - Upstream chart version must be manually bumped to consume upstream fixes
 - No operator to handle schema migrations or rolling upgrades automatically
-- **FIPS binary gap**: Upstream Vector and Loki images are not FIPS-validated (documented path to resolution above)
+- **FIPS binary gap**: Logging operand images on EKS Helm are not a FIPS certification of this topology (documented above)
 
 ## Related
 
@@ -329,6 +333,7 @@ For FedRAMP Moderate in US commercial regions, the FIPS S3 endpoints satisfy the
 - [Thanos Metrics Infrastructure](thanos-metrics-infrastructure.md) — parallel pattern for metrics
 - [MC Metrics Pipeline via Remote Write](mc-metrics-remote-write.md) — cross-account ingestion pattern
 - [Metrics Platform Overview](monitoring-platform.md) — end-to-end observability architecture
+- [Loki and Grafana Red Hat images](../loki-grafana-redhat-images.md)
 - [grafana/loki Helm chart](https://github.com/grafana/helm-charts/tree/main/charts/loki)
 - [vector/vector Helm chart](https://github.com/vectordotdev/helm-charts)
 - [RHOBS Configuration Repository](https://gitlab.cee.redhat.com/rhobs/configuration)

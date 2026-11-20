@@ -1,18 +1,6 @@
-# Patterns to ignore when building packages.
-.DS_Store
+# Wrapper chart is SA, TGB, PDB, pull-secret, and the S3 Secret only. The
+# grafana/loki operand is inflated by Kustomize from the vendored local wrapper.
+loki-chart/
+patches/
+kustomization.yaml
 .git/
-.gitignore
-.bzr/
-.bzrignore
-.hg/
-.hgignore
-.svn/
-*.swp
-*.bak
-*.tmp
-*.orig
-*~
-.project
-.idea/
-*.tmproj
-.vscode/

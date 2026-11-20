@@ -1,0 +1,9 @@
+apiVersion: v2
+name: loki-chart
+description: Local wrapper for rendering the vendored grafana/loki dependency with Kustomize
+type: application
+version: 0.1.0
+dependencies:
+  - name: loki
+    version: "7.0.0"
+    repository: "https://grafana.github.io/helm-charts"
