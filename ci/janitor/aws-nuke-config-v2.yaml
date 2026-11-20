@@ -61,6 +61,11 @@ presets:
           type: glob
           value: "*OrgIntegration"
       IAMRolePolicyAttachment:
+        # Attachments carry no tags of their own; keep the API Gateway access
+        # logging roles' attachments by role name.
+        - property: RoleName
+          type: glob
+          value: "*api-gateway-cloudwatch"
         - property: tag:role:aws-nuke
           value: "skip"
         - property: tag:role:platform-janitor/lifecycle
@@ -150,6 +155,11 @@ presets:
       IAMRole:
         - "OrganizationAccountAccessRole"
         - "rh-aws-saml-login"
+        # Account-level API Gateway access logging roles outlive every cluster
+        # in the account. See docs/design/api-gateway-account-ownership.md.
+        - property: Name
+          type: glob
+          value: "*api-gateway-cloudwatch"
         - property: Path
           type: glob
           value: "/aws-service-role/*"

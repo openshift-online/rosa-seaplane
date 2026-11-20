@@ -80,7 +80,8 @@ scripts/pipeline-common/
 
 terraform/config/
 ├── regional-cluster/
-│   └── imports.sh               # RC-specific import entries (optional)
+│   ├── imports.sh               # RC-specific import entries (optional)
+│   └── pre-destroy.sh           # RC-specific pre-destroy detach entries (optional)
 └── management-cluster/
     └── imports.sh               # MC-specific import entries (optional)
 
@@ -124,6 +125,10 @@ Core function that idempotently imports a single resource. Handles four outcomes
 Extracts an attribute from a resource already in Terraform state. Used for dynamic import IDs that depend on other resources (e.g., broker IDs, API Gateway IDs, any server-assigned UUID).
 
 Uses `terraform state pull | jq` for reliable JSON parsing.
+
+### `state_rm_if_present <terraform-address>` / `tf_state_rm_summary`
+
+The destroy-side counterpart, used by an optional `pre-destroy.sh` in the same configuration directory. `removed` blocks relinquish ownership on apply, but `terraform destroy` ignores them, so a state torn down before it has applied a handover would still delete what it no longer owns. `state_rm_if_present` detaches the address and re-reads state to prove the removal; an unreadable state or an ineffective removal is a failure, and `tf_state_rm_summary` then gates the destroy the way `tf_import_summary` gates the apply. `tf_apply` sources the hook on `destroy` only and refuses to destroy when it fails.
 
 ### `tf_import_summary`
 
