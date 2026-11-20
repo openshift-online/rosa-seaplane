@@ -5,5 +5,5 @@ type: application
 version: 0.1.0
 dependencies:
   - name: cert-manager
-    version: 1.19.6
+    version: v1.21.3
     repository: oci://quay.io/jetstack/charts
