@@ -295,11 +295,11 @@ DNS infrastructure must be available in CI and shared-dev environments so that e
 The DNS zone hierarchy splits into two tiers:
 
 - **Persistent (pre-provisioned, survives across e2e runs)**:
-  - Environment zone in the central account (e.g., `ci00.rosa.devshift.net`)
+  - Environment zone in the central account (e.g., `eph-ci0.rosa.devshift.org`)
   - Created and owned externally by the [rosa-seaplane-internal](https://github.com/openshift-online/rosa-seaplane-internal) control account (`aws_route53_zone.environment`); rosa-seaplane only looks it up by name to delegate into it
   - Pre-provisioned once per environment and reused across runs
 - **Per-run (created and destroyed with each e2e run)**:
-  - Regional zone in the regional account - the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.ci00.rosa.devshift.net`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
+  - Regional zone in the regional account - the `deployment_name` is suffixed with the CI run's unique identifier (e.g., `us-east-1-eph-a1b2.eph-ci0.rosa.devshift.org`), so each run gets its own isolated zone. Created and destroyed as part of the existing RC terraform lifecycle.
   - Shard zone(s) under the regional zone, in the DNS shard account - created and destroyed with the RC terraform lifecycle; cluster records live here
   - Cluster-specific records (api, oauth, ACME challenge) in the shard zone - created by external-dns and cert-manager on the MC
   - Ingress zones (public + private) in the customer account - created and reconciled by HyperShift CPO
@@ -315,15 +315,15 @@ The environment hosted zone is always created and owned externally by rosa-seapl
 
 ### Per-Environment DNS Domains
 
-Each account set (CI, shared-dev) uses its own `dns.domain` injected via config overrides.
+Each account set (eph-ci, eph-dev) uses its own `dns.domain` injected via config overrides (`config/ephemeral/defaults.yaml`).
 
-Proposed domains (4-char prefix, matching `int0`/`stg0` length):
+Current domains (zones owned by the Terragrunt control accounts in rosa-seaplane-internal):
 
-| Environment | Domain                   | Central Account |
-| :---------- | :----------------------- | :-------------- |
-| Integration | `int0.rosa.devshift.net` | (existing)      |
-| CI          | `ci00.rosa.devshift.net` | CI central      |
-| Shared-dev  | `dev0.rosa.devshift.net` | Dev central     |
+| Environment   | Domain                       | Central Account |
+| :------------ | :--------------------------- | :-------------- |
+| Integration   | `int0.rosa.devshift.org`     | int control     |
+| Ephemeral CI  | `eph-ci0.rosa.devshift.org`  | eph-ci control  |
+| Ephemeral dev | `eph-dev0.rosa.devshift.org` | eph-dev control |
 
 ### Scaling
 
@@ -333,7 +333,7 @@ The environment zone scales to 10k regional NS delegations. Adding regional or M
 
 Each new environment requires a one-time setup:
 
-1. Cloudflare/app-interface delegation from `rosa.devshift.net` to the new environment subdomain
+1. Cloudflare/app-interface delegation from `rosa.devshift.org` to the new environment subdomain
 2. Creation of the environment hosted zone in the central account via rosa-seaplane-internal (`control-account` module)
 
 DNSSEC is not required for CI/dev - only for FedRAMP compliance in staging and production.

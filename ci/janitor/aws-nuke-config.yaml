@@ -210,26 +210,6 @@ presets:
           value: "rrp-hcp-customer"
 
 accounts:
-  # CI accounts
-  "662212752128":
-    presets: [globals, ci, central]
-  "720644165472":
-    presets: [globals, ci]
-  "129678139271":
-    presets: [globals, ci, mc]
-  "313828097858":
-    presets: [globals, ci, customer]
-
-  # Shared Dev accounts
-  "791666871613":
-    presets: [globals, ci, shared-dev, central]
-  "599476212575":
-    presets: [globals, ci, shared-dev]
-  "855246887846":
-    presets: [globals, ci, shared-dev, mc]
-  "114594328247":
-    presets: [globals, ci, shared-dev, customer]
-
   # Integration Customer Account 
   "206641868149":
     presets: [globals, ci, shared-dev, customer]
