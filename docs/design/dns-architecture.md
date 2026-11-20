@@ -17,7 +17,7 @@ ROSA Seaplane uses a hierarchical DNS architecture built on AWS Route 53, with D
 - **Assumptions**:
   - We expect 50–100 regions total in production
   - Each cluster consumes ~4–8 DNS records
-  - For integration, we use `int0.rosa.devshift.net` and for staging we use `stg0.rosa.devshift.org` instead of `rosa.openshiftapps.com`. The `int0`/`stg0` suffix keeps consistent length with the production domain.
+  - For integration, we use `int0.rosa.devshift.org` and for staging we use `stg0.rosa.devshift.org` instead of `rosa.openshiftapps.com`. The `int0`/`stg0` suffix keeps consistent length with the production domain.
 
 ## Design
 
@@ -193,16 +193,16 @@ openshift-console.apps.in.typeidhcp.1fb9.0.us-east-1.rosa.openshiftapps.com
 
 ### Cloudflare → Central Account
 
-1. Top-level domain `rosa.devshift.net` must have DNSSEC enabled in Cloudflare
+1. Top-level domain `rosa.devshift.org` must have DNSSEC enabled in Cloudflare
 2. The DS record generated must be added to the domain registrar
-3. Cloudflare delegates `int0.rosa.devshift.net` to the Central account
-4. In Route 53, `int0.rosa.devshift.net` must have DNSSEC enabled (requires an `ECC_NIST_P256` Customer Managed Key)
-5. The DS record generated in Route 53 must be added to `int0.rosa.devshift.net` in Cloudflare
+3. Cloudflare delegates `int0.rosa.devshift.org` to the Central account
+4. In Route 53, `int0.rosa.devshift.org` must have DNSSEC enabled (requires an `ECC_NIST_P256` Customer Managed Key)
+5. The DS record generated in Route 53 must be added to `int0.rosa.devshift.org` in Cloudflare
 
 ### Central Account → Regional Account
 
-1. Central account delegates `{deployment_name}.int0.rosa.devshift.net` to the Regional account
-2. Enable DNSSEC for `{deployment_name}.int0.rosa.devshift.net` in the Regional account (requires a KMS key)
+1. Central account delegates `{deployment_name}.int0.rosa.devshift.org` to the Regional account
+2. Enable DNSSEC for `{deployment_name}.int0.rosa.devshift.org` in the Regional account (requires a KMS key)
 3. The DS record generated in the Regional account must be added to the Central account's delegation
 
 ### DNSSEC Validation (FedRAMP)
