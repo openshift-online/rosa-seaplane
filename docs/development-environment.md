@@ -35,11 +35,6 @@ By default, scripts look for account ID files in the `rosa-seaplane-internal` si
 
 If you have the internal repo checked out alongside this one, no extra setup is needed.
 
-> **Note:** ephemeral now runs against the minted **eph-dev** accounts and reads the Terragrunt
-> account snapshot, not the legacy `dev/accounts.json`. Environments created before this switch
-> cannot be resynced or torn down by the new script — pull the latest internal repo and provision a
-> fresh ephemeral environment.
-
 To override, set `RRP_ACCOUNTS_DEV` (ephemeral) or `RRP_ACCOUNTS_INT` (integration) to point to a
 different file. Both use the Terragrunt account snapshot shape — account IDs live under the region,
 the control account replaces `central`, and the HCP account is used as the e2e customer account:
