@@ -19,6 +19,7 @@ spec:
         {{- end }}
         awsRegion: {{ .Values.global.aws_region }}
         baseDomain: {{ .Values.baseDomain }}
+        hcpSlotCount: {{ required "hcpSlotCount is required" .Values.hcpSlotCount }}
         oidcS3Bucket: {{ index .Values "seaplane" "oidcS3Bucket" }}
         oidcIssuerBaseUrl: {{ index .Values "seaplane" "oidcIssuerBaseUrl" }}
         alertmanager:
