@@ -6,7 +6,7 @@
 # current source rather than trying to preserve the other's previously
 # deployed bytes, so the site is always self-consistent.
 #
-# The dashboard shows open PRs labelled "review-ready" or "discussion-needed"
+# The dashboard shows open PRs labelled "ready-for-human-review" or "discussion-needed"
 # across all ROSA Seaplane repositories.
 #
 # Setup:

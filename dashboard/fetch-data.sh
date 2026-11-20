@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetches open PRs labelled "review-ready", "discussion-needed", or "needs-ok-to-test" across all
+# Fetches open PRs labelled "ready-for-human-review", "discussion-needed", or "needs-ok-to-test" across all
 # ROSA Seaplane repos and writes dashboard/data.json.
 #
 # Uses `gh pr list` (not `gh search prs`) so we can include reviewRequests.
@@ -46,8 +46,8 @@ fetch_label() {
   rm -f "$tmp"
 }
 
-echo "Fetching review-ready PRs..."
-fetch_label "review-ready" > /tmp/rr.json
+echo "Fetching ready-for-human-review PRs..."
+fetch_label "ready-for-human-review" > /tmp/rr.json
 
 echo "Fetching discussion-needed PRs..."
 fetch_label "discussion-needed" > /tmp/dn.json
@@ -77,4 +77,4 @@ jq -n \
   '{updated: $updated, review_ready: $rr[0], discussion_needed: $dn[0], needs_ok_to_test: $okt[0]}' \
   > "$OUT"
 
-echo "Wrote $OUT ($(jq '.review_ready | length' "$OUT") review-ready, $(jq '.discussion_needed | length' "$OUT") discussion-needed, $(jq '.needs_ok_to_test | length' "$OUT") needs-ok-to-test)"
+echo "Wrote $OUT ($(jq '.review_ready | length' "$OUT") ready-for-human-review, $(jq '.discussion_needed | length' "$OUT") discussion-needed, $(jq '.needs_ok_to_test | length' "$OUT") needs-ok-to-test)"

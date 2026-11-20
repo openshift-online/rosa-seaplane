@@ -61,11 +61,11 @@ Cross-reference CI failures with PRs to determine whether issues are being addre
 From the open PRs, extract:
 
 - **`rrp-bot` PRs** (author login `rrp-bot`) — IC should review these
-- **`review-ready` PRs without active reviewers** — IC should assign or review
+- **`ready-for-human-review` PRs without active reviewers** — IC should assign or review
 - **Stale PRs** (open >2 weeks, not draft) — need a nudge
 - **Draft/WIP PRs** — mention as a count only, skip details
 
-**Important:** Only flag a PR for reviewer assignment if it has the `review-ready` label or is already `approved`+`lgtm` (merge-ready). PRs without `review-ready` are still being prepared by the author and don't need a reviewer yet.
+**Important:** Only flag a PR for reviewer assignment if it has the `ready-for-human-review` label or is already `approved`+`lgtm` (merge-ready). PRs without `ready-for-human-review` are still being prepared by the author and don't need a reviewer yet.
 
 ## Output format
 
@@ -91,7 +91,7 @@ Reference links for humans:
 List PRs needing IC attention:
 
 1. `rrp-bot` PRs (these should be reviewed by IC)
-2. `review-ready` PRs without active reviewers (IC should assign or review)
+2. `ready-for-human-review` PRs without active reviewers (IC should assign or review)
 3. Stale PRs that need a nudge
 
 ### IC Queue — Unassigned Work
@@ -110,6 +110,6 @@ If there are also assigned in-progress items, list them briefly so the IC has fu
 End with a short numbered list (max 5 items) of what the IC should tackle first, in priority order. Consider:
 
 - Red CI jobs with no fix PR are always top priority
-- `rrp-bot` PRs and review-ready PRs are next
+- `rrp-bot` PRs and ready-for-human-review PRs are next
 - Unassigned IC queue items fill the remaining time
 - Remind the IC that this should take ~1 hour; if overwhelmed, pull the Andon Cord and ask the team for help
