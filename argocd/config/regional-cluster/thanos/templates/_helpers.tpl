@@ -54,8 +54,8 @@ argocd.argoproj.io/sync-wave: "1"
 {{/*
 Red Hat Thanos operand (CMO ose-thanos-rhel9). Operator concatenates
 baseImage:version (tag may include @sha256:…) and sets args (query, receive, …).
-CR imagePullSecrets are on CommonFields; this operator build does not copy them
-onto pods — operand-serviceaccounts.yaml is what kubelet uses.
+Do not set CR imagePullSecrets here: this operator build never copies them
+onto pods. operand-serviceaccounts.yaml is what kubelet uses.
 
 securityContext is required: the operator sets container runAsNonRoot: true
 and does not set runAsUser. ose-thanos-rhel9 uses USER nobody (non-numeric),
@@ -65,8 +65,6 @@ so kubelet fails CreateContainerConfigError until a numeric UID is set.
 {{- define "thanos.operandImage" -}}
 baseImage: {{ .Values.image.repository | quote }}
 version: {{ .Values.image.tag | quote }}
-imagePullSecrets:
-  - name: pull-secret
 {{- with .Values.securityContext }}
 securityContext:
   {{- toYaml . | nindent 2 }}
