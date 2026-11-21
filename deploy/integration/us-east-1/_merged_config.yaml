@@ -329,6 +329,9 @@ applications:
     # @doc applications.regional-cluster.baseDomain DNS base domain for HostedClusters (deployment_name.dns.domain).
     # @used-by applications.regional-cluster.baseDomain _context
     baseDomain: "{% if dns.domain %}{{ deployment_name }}.{{ dns.domain }}{% endif %}"
+    # @doc applications.regional-cluster.hcpSlotCount HCP slots per MC, passed to the Seaplane Operator, which places each HostedCluster on a free slot; same source as hcpSlots.count.
+    # @used-by applications.regional-cluster.hcpSlotCount _context
+    hcpSlotCount: "{{ management_cluster_defaults.hcp_slot_count }}"
     platformApi:
       authz:
         # @doc applications.regional-cluster.platformApi.authz.config Complete serialized v1 authorization bundle. Enrolls the RC account (@@AWS_ACCOUNT_ID@@, resolved by Helm) and grants the identities behind rrp-rc (the child-admin role; CI's e2e user) AllActions on the RC account's own resources, except the authz deny probe. Customer accounts are allowlisted at runtime. Overrides replace the entire bundle.
