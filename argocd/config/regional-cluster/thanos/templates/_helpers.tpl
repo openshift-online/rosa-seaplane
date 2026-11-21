@@ -48,4 +48,25 @@ Helm release annotations - required for Helm to recognize ownership
 meta.helm.sh/release-name: {{ .Release.Name }}
 meta.helm.sh/release-namespace: {{ .Release.Namespace }}
 argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+argocd.argoproj.io/sync-wave: "1"
+{{- end }}
+
+{{/*
+Red Hat Thanos operand (CMO ose-thanos-rhel9). Operator concatenates
+baseImage:version (tag may include @sha256:…) and sets args (query, receive, …).
+Do not set CR imagePullSecrets here: this operator build never copies them
+onto pods. operand-serviceaccounts.yaml is what kubelet uses.
+
+securityContext is required: the operator sets container runAsNonRoot: true
+and does not set runAsUser. ose-thanos-rhel9 uses USER nobody (non-numeric),
+so kubelet fails CreateContainerConfigError until a numeric UID is set.
+65534 matches CMO's Thanos pod securityContext (nobody on RHEL).
+*/}}
+{{- define "thanos.operandImage" -}}
+baseImage: {{ .Values.image.repository | quote }}
+version: {{ .Values.image.tag | quote }}
+{{- with .Values.securityContext }}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
 {{- end }}

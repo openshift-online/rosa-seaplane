@@ -10,6 +10,14 @@ RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.
 
 Same reason as cert-manager: the RH operand image has no ENTRYPOINT. grafana/loki **7.0.0** honors `loki.command` on four Distributed workloads and omits it on querier and index-gateway. The chart is vendored in `loki-chart/` and rendered through Kustomize so those two objects get `command: [/usr/bin/loki]`. Drop the patches if the chart grows a command value there.
 
+### Why is the Thanos image pin in the seaplane CR templates?
+
+The operator Helm chart only installs the operator. Query / receive / store / compact / ruler CRs are this repo’s `argocd/config/regional-cluster/thanos/` chart. `baseImage` / `version` belong on those CRs. CMO is not installed on EKS.
+
+### Why do Thanos CRs set `securityContext.runAsUser: 65534`?
+
+CMO `ose-thanos-rhel9` uses `USER nobody`. The thanos-operator sets container `runAsNonRoot: true` and does not set `runAsUser`. Kubelet cannot verify a named user is non-root, so pods stay in `CreateContainerConfigError`. `65534` is nobody on RHEL and matches CMO’s Thanos pod securityContext. Keep this while the image USER is non-numeric.
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

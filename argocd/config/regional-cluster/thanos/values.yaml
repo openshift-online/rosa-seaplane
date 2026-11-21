@@ -8,6 +8,27 @@ global:
 
 namespace: thanos
 
+# CMO Thanos operand on the existing thanos-operator CRs.
+# Catalog: registry.redhat.io/openshift4/ose-thanos-rhel9:v4.20.0
+# Operator concatenates baseImage:version (no separate digest field).
+# Digest: RHSA-2026:95380 manifest list. Operator image stays RHOBS Konflux.
+# Do not install CMO.
+image:
+  repository: registry.redhat.io/openshift4/ose-thanos-rhel9
+  tag: v4.20.0@sha256:c786183d975a347894ba45f1b559d556d9d2efa35bc558a38dd9fc376ae9969c
+
+# CMO ose-thanos-rhel9 USER is nobody. Operator container securityContext
+# is runAsNonRoot: true with no runAsUser, which kubelet rejects for a
+# named image user. 65534 is nobody on RHEL and matches CMO Thanos pods.
+# Copied onto every operand CR (query, queryFrontend, receive, store,
+# compact, ruler). Operator default fsGroup is 1001 (Bitnami); override it.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
 objectStore:
   secretName: thanos-objstore-config
 
