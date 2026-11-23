@@ -44,7 +44,7 @@ The override is configured via env vars in the CI config:
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ROSA_REGIONAL_COMPONENT_NAME`     | Component name for logging (e.g., `platform-api`).                                                                                                                                      |
 | `ROSA_REGIONAL_HELM_VALUES_FILE`   | Path to the target file in this repo (e.g., `argocd/config/regional-cluster/platform-api/values.yaml`).                                                                                 |
-| `ROSA_REGIONAL_HELM_OVERRIDE_YAML` | Inline YAML fragment to deep-merge into the target file. Use `IMAGE_REPO` and `IMAGE_TAG` as placeholders — they are replaced with the actual image reference from the image-push step. |
+| `ROSA_REGIONAL_HELM_OVERRIDE_YAML` | Inline YAML fragment to deep-merge into the target file. `IMAGE_REPO` and `IMAGE_TAG` are replaced with the pushed image reference; `PR_SOURCE_SHA` is replaced with the triggering PR's source commit. |
 | `ROSA_REGIONAL_QUAY_DEST_REPO`     | Public quay.io repository for the CI-built image.                                                                                                                                       |
 
 The deep merge works as follows:
@@ -82,6 +82,11 @@ For image charts using separate registry and repository values, a legacy full
 fields by the chart helper. A short repository name with an empty registry uses
 the SSM-selected ECR registry. This keeps current pre-merge Quay overrides
 working while allowing CI jobs to migrate to explicit fields independently.
+
+For charts stored in the component repo, use `PR_SOURCE_SHA` for the child
+Argo CD Application's `source.targetRevision`. The provision step substitutes
+the triggering PR's full Git SHA, so the ephemeral environment tests the chart
+from the same change as the PR-built image.
 
 ### Chart version override example
 
