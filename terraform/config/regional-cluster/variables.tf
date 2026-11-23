@@ -480,7 +480,7 @@ variable "management_clusters" {
 # =============================================================================
 
 variable "zoa_lambda_image_tag" {
-  description = "Immutable tag for the ZOA Lambda image (Quay→regional ECR mirror). Override with a CI-built tag to validate a ZOA PR."
+  description = "Immutable tag for the ZOA Lambda image (Quay→ECR mirroring). Override with a CI-built tag to validate a zoa PR."
   type        = string
   default     = "67ef089"
 
@@ -497,13 +497,13 @@ variable "zoa_runner_image_tag" {
 }
 
 variable "zoa_lambda_source_image" {
-  description = "Quay source image for ZOA Lambda (mirrored to regional ECR at deploy time). Override with a full image reference for CI e2e or fork testing."
+  description = "Source registry image for ZOA Lambda (mirrored to ECR at deploy time). Override together with zoa_lambda_image_tag to point at a fork or CI registry."
   type        = string
   default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-lambda"
 }
 
 variable "zoa_runner_source_image" {
-  description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror). Override with a full image reference for CI e2e or fork testing."
+  description = "Source registry image for ZOA Runner (K8s pulls directly, no ECR mirror). Override together with zoa_runner_image_tag to point at a fork or CI registry."
   type        = string
   default     = "quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-zoa-runner"
 }

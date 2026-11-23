@@ -395,7 +395,7 @@ output "zoa_data_access_role_arn" {
 }
 
 output "zoa_lambda_ecr_url" {
-  description = "Regional ECR repository URL for ZOA Lambda (MC appends the configured tag)."
+  description = "ECR repository URL for ZOA Lambda (MC appends tag for cross-account pull)"
   value       = module.zoa.lambda_ecr_url
 }
 
