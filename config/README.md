@@ -163,7 +163,7 @@ Environment-level defaults:
 
 ```yaml
 dns:
-  domain: int0.rosa.devshift.net
+  domain: int0.rosa.devshift.org
 
 terraform_common:
   enable_bastion: true

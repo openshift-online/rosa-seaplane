@@ -58,7 +58,7 @@ variable "vpc_cidr" {
 # =============================================================================
 
 variable "regional_hosted_zone_id" {
-  description = "Route53 hosted zone ID for the regional zone (e.g. us-east-1.int0.rosa.devshift.net). When null, ACM cert and DNS records are not created."
+  description = "Route53 hosted zone ID for the regional zone (e.g. us-east-1.int0.rosa.devshift.org). When null, ACM cert and DNS records are not created."
   type        = string
   default     = null
 }
@@ -69,7 +69,7 @@ variable "deployment_name" {
 }
 
 variable "environment_domain" {
-  description = "Base domain for the environment (e.g. int0.rosa.devshift.net). When null or empty, ACM cert and Route53 records are skipped."
+  description = "Base domain for the environment (e.g. int0.rosa.devshift.org). When null or empty, ACM cert and Route53 records are skipped."
   type        = string
   default     = null
 }

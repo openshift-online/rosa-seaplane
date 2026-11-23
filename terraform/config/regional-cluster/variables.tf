@@ -303,7 +303,7 @@ variable "zone_shard_count" {
 
 
 variable "environment_domain" {
-  description = "Environment domain name (e.g. int0.rosa.devshift.net). When set, creates the regional DNS zone (<deployment_name>.<environment_domain>). When null, no DNS resources are created."
+  description = "Environment domain name (e.g. int0.rosa.devshift.org). When set, creates the regional DNS zone (<deployment_name>.<environment_domain>). When null, no DNS resources are created."
   type        = string
   default     = null
 }

@@ -186,12 +186,12 @@ output "api_test_command" {
 # =============================================================================
 
 output "regional_hosted_zone_id" {
-  description = "Route53 hosted zone ID for the regional domain (e.g. us-east-1.int0.rosa.devshift.net)"
+  description = "Route53 hosted zone ID for the regional domain (e.g. us-east-1.int0.rosa.devshift.org)"
   value       = var.environment_domain != null ? aws_route53_zone.regional[0].zone_id : null
 }
 
 output "regional_domain" {
-  description = "Regional domain name (e.g. us-east-1.int0.rosa.devshift.net)"
+  description = "Regional domain name (e.g. us-east-1.int0.rosa.devshift.org)"
   value       = var.environment_domain != null ? "${var.region}.${var.environment_domain}" : null
 }
 
@@ -207,7 +207,7 @@ output "dns_zone_operator_role_arn" {
 }
 
 output "api_domain_name" {
-  description = "Custom domain name for the API (e.g. api.us-east-1.int0.rosa.devshift.net)"
+  description = "Custom domain name for the API (e.g. api.us-east-1.int0.rosa.devshift.org)"
   value       = module.api_gateway.api_domain_name
 }
 
@@ -350,7 +350,7 @@ output "sre_alb_dns_name" {
 }
 
 output "sre_domain" {
-  description = "SRE base domain (e.g. sre.us-east-1.int0.rosa.devshift.net)"
+  description = "SRE base domain (e.g. sre.us-east-1.int0.rosa.devshift.org)"
   value       = try(module.sre_ui_alb[0].sre_domain, "")
 }
 

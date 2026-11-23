@@ -23,7 +23,7 @@ INT_REGION="us-east-1"
 RC_CLUSTER="regional"
 MC_CLUSTER="mc01"
 
-INT_API_URL="https://api.us-east-1.int0.rosa.devshift.net"
+INT_API_URL="https://api.us-east-1.int0.rosa.devshift.org"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "${SCRIPT_DIR}/env-common.sh"

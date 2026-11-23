@@ -62,7 +62,7 @@ aws iam update-assume-role-policy \
 
 > **Skip this step** if reusing an existing environment/region configuration.
 >
-> **DNS prerequisite**: If this environment will have DNS enabled (`dns.domain` set), the environment zone (e.g. `int0.rosa.devshift.net`) must exist in the central account first. This is a one-time setup per environment — see [DNS Architecture: Testing Strategy](design/dns-architecture.md#testing-strategy) for details.
+> **DNS prerequisite**: If this environment will have DNS enabled (`dns.domain` set), the environment zone (e.g. `int0.rosa.devshift.org`) must exist in the central account first. This is a one-time setup per environment — see [DNS Architecture: Testing Strategy](design/dns-architecture.md#testing-strategy) for details.
 
 ### 2.1 Store account IDs in SSM
 

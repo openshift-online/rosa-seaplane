@@ -102,7 +102,7 @@ variable "api_description" {
 # =============================================================================
 
 variable "api_domain_name" {
-  description = "Custom domain name for the API Gateway (e.g. api.us-east-1.int0.rosa.devshift.net). When null, no custom domain resources are created."
+  description = "Custom domain name for the API Gateway (e.g. api.us-east-1.int0.rosa.devshift.org). When null, no custom domain resources are created."
   type        = string
   default     = null
 
@@ -113,7 +113,7 @@ variable "api_domain_name" {
 }
 
 variable "regional_hosted_zone_id" {
-  description = "Route53 hosted zone ID for the regional delegation zone (e.g. the zone for us-east-1.int0.rosa.devshift.net) in the RC account. Used for ACM DNS validation and the API alias record. When null, ACM cert is created but DNS records must be managed externally."
+  description = "Route53 hosted zone ID for the regional delegation zone (e.g. the zone for us-east-1.int0.rosa.devshift.org) in the RC account. Used for ACM DNS validation and the API alias record. When null, ACM cert is created but DNS records must be managed externally."
   type        = string
   default     = null
 }

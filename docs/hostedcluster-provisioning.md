@@ -62,7 +62,7 @@ aws sts get-caller-identity
 # Platform API URL
 # - Integration: https://api.us-east-1.int0.rosa.devshift.org
 # - Stage:       https://api.us-east-1.stg0.rosa.devshift.org
-API_URL=https://api.us-east-1.int0.rosa.devshift.net
+API_URL=https://api.us-east-1.int0.rosa.devshift.org
 
 # Cluster variables
 REGION=us-east-1

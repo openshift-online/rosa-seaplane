@@ -107,7 +107,7 @@ ALB remains internet-facing, but the security group is restricted to the public 
 
 ```javascript
 function FindProxyForURL(url, host) {
-  if (shExpMatch(host, "*.sre.*.rosa.devshift.net")) {
+  if (shExpMatch(host, "*.sre.*.rosa.devshift.org")) {
     return "PROXY <rh-corporate-proxy>";
   }
   if (shExpMatch(host, "*.sre.*.rosa.redhat.com")) {
@@ -163,24 +163,24 @@ Examples:
 
 | Environment | Service        | FQDN                                                  |
 | ----------- | -------------- | ----------------------------------------------------- |
-| Integration | Grafana        | `grafana.sre.us-east-1.int0.rosa.devshift.net`        |
-| Integration | ArgoCD         | `argocd.sre.us-east-1.int0.rosa.devshift.net`         |
-| Integration | Thanos Querier | `thanos-querier.sre.us-east-1.int0.rosa.devshift.net` |
-| Integration | Alertmanager   | `alertmanager.sre.us-east-1.int0.rosa.devshift.net`   |
-| Integration | Thanos Ruler   | `thanos-ruler.sre.us-east-1.int0.rosa.devshift.net`   |
-| Integration | ZOA Console    | `zoa.sre.us-east-1.int0.rosa.devshift.net`            |
-| Integration | Prometheus     | `prometheus.sre.us-east-1.int0.rosa.devshift.net`     |
+| Integration | Grafana        | `grafana.sre.us-east-1.int0.rosa.devshift.org`        |
+| Integration | ArgoCD         | `argocd.sre.us-east-1.int0.rosa.devshift.org`         |
+| Integration | Thanos Querier | `thanos-querier.sre.us-east-1.int0.rosa.devshift.org` |
+| Integration | Alertmanager   | `alertmanager.sre.us-east-1.int0.rosa.devshift.org`   |
+| Integration | Thanos Ruler   | `thanos-ruler.sre.us-east-1.int0.rosa.devshift.org`   |
+| Integration | ZOA Console    | `zoa.sre.us-east-1.int0.rosa.devshift.org`            |
+| Integration | Prometheus     | `prometheus.sre.us-east-1.int0.rosa.devshift.org`     |
 | Stage       | Grafana        | `grafana.sre.us-east-1.stg0.rosa.devshift.org`        |
 | Stage       | ArgoCD         | `argocd.sre.us-east-1.stg0.rosa.devshift.org`         |
 | Stage       | Prometheus     | `prometheus.sre.us-east-1.stg0.rosa.devshift.org`     |
 | Stage       | Thanos         | `thanos.sre.us-east-1.stg0.rosa.devshift.org`         |
-| Ephemeral   | Grafana        | `grafana.sre.us-east-1.eph-7e3884.rosa.devshift.net`  |
-| MC (int)    | ArgoCD         | `argocd.sre.mc01.us-east-1.int0.rosa.devshift.net`    |
+| Ephemeral   | Grafana        | `grafana.sre.us-east-1.eph-7e3884.rosa.devshift.org`  |
+| MC (int)    | ArgoCD         | `argocd.sre.mc01.us-east-1.int0.rosa.devshift.org`    |
 | Production  | Grafana        | `grafana.sre.us-east-1.prod.rosa.redhat.com`          |
 
 **TLS**: Wildcard ACM certificate `*.sre.<region>.<env>.<domain>`, DNS-validated via Route53. One certificate covers all SRE services.
 
-**Note**: In Terraform, the composed `<region>.<env>.<domain>` string is passed as `var.regional_domain` (e.g., `us-east-1.int0.rosa.devshift.net` for RC, `mc01.us-east-1.int0.rosa.devshift.net` for MC).
+**Note**: In Terraform, the composed `<region>.<env>.<domain>` string is passed as `var.regional_domain` (e.g., `us-east-1.int0.rosa.devshift.org` for RC, `mc01.us-east-1.int0.rosa.devshift.org` for MC).
 
 ### Service Mapping
 

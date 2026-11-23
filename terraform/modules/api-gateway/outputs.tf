@@ -91,7 +91,7 @@ output "test_command" {
 # -----------------------------------------------------------------------------
 
 output "api_domain_name" {
-  description = "Custom domain name for the API (e.g. api.us-east-1.int0.rosa.devshift.net)"
+  description = "Custom domain name for the API (e.g. api.us-east-1.int0.rosa.devshift.org)"
   value       = var.api_domain_name != null ? aws_api_gateway_domain_name.api[0].domain_name : null
 }
 

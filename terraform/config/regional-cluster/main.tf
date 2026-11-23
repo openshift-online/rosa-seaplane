@@ -381,7 +381,7 @@ module "api_gateway" {
   node_security_group_id = module.regional_cluster.node_security_group_id
   cluster_name           = module.regional_cluster.cluster_name
 
-  # Custom domain (e.g. api.us-east-1.int0.rosa.devshift.net)
+  # Custom domain (e.g. api.us-east-1.int0.rosa.devshift.org)
   api_domain_name         = var.enable_api_custom_domain && var.environment_domain != null ? "api.${var.deployment_name}.${var.environment_domain}" : null
   regional_hosted_zone_id = var.environment_domain != null ? aws_route53_zone.regional[0].zone_id : null
 

@@ -18,12 +18,12 @@ Browser-based access to Grafana, ArgoCD, Prometheus, and Thanos via the SRE UI A
 
 | Tool       | URL                                                     | Purpose                      |
 | ---------- | ------------------------------------------------------- | ---------------------------- |
-| Grafana    | https://grafana.sre.us-east-1.int0.rosa.devshift.net    | Metrics dashboards and logs  |
-| ArgoCD     | https://argocd.sre.us-east-1.int0.rosa.devshift.net     | GitOps application status    |
-| Prometheus | https://prometheus.sre.us-east-1.int0.rosa.devshift.net | Raw metric queries (RC)      |
-| Thanos     | https://thanos.sre.us-east-1.int0.rosa.devshift.net     | Aggregated metrics (RC + MC) |
+| Grafana    | https://grafana.sre.us-east-1.int0.rosa.devshift.org    | Metrics dashboards and logs  |
+| ArgoCD     | https://argocd.sre.us-east-1.int0.rosa.devshift.org     | GitOps application status    |
+| Prometheus | https://prometheus.sre.us-east-1.int0.rosa.devshift.org | Raw metric queries (RC)      |
+| Thanos     | https://thanos.sre.us-east-1.int0.rosa.devshift.org     | Aggregated metrics (RC + MC) |
 
-**Proxy wildcard:** `*.sre.us-east-1.int0.rosa.devshift.net`
+**Proxy wildcard:** `*.sre.us-east-1.int0.rosa.devshift.org`
 
 ## Stage Environment
 
@@ -71,7 +71,7 @@ from the Chrome Web Store.
 3. In the **Auto Switch** profile add conditions for each environment:
    - **Integration:**
      - Condition type: `Host wildcard`
-     - Condition details: `*.sre.us-east-1.int0.rosa.devshift.net`
+     - Condition details: `*.sre.us-east-1.int0.rosa.devshift.org`
      - Profile: `seaplane-sre`
    - **Stage:**
      - Condition type: `Host wildcard`
@@ -90,7 +90,7 @@ Install [FoxyProxy](https://addons.mozilla.org/firefox/addon/foxyproxy-standard/
    - Hostname: `squid.corp.redhat.com`
    - Port: `3128`
 3. Under **URL Patterns** add both environment wildcards:
-   - **Integration:** Pattern: `*.sre.us-east-1.int0.rosa.devshift.net`, Type: `Wildcard`
+   - **Integration:** Pattern: `*.sre.us-east-1.int0.rosa.devshift.org`, Type: `Wildcard`
    - **Stage:** Pattern: `*.sre.us-east-1.stg0.rosa.devshift.org`, Type: `Wildcard`
 4. Save and enable FoxyProxy.
 

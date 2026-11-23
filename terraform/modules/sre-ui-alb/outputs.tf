@@ -33,6 +33,6 @@ output "alb_zone_id" {
 }
 
 output "sre_domain" {
-  description = "Base SRE domain (e.g. sre.us-east-1.int0.rosa.devshift.net). Empty when environment_domain is not set."
+  description = "Base SRE domain (e.g. sre.us-east-1.int0.rosa.devshift.org). Empty when environment_domain is not set."
   value       = local.has_domain ? local.sre_domain : ""
 }
