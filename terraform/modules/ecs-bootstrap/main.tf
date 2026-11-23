@@ -153,8 +153,16 @@ resource "aws_ecs_task_definition" "bootstrap" {
           # Always helm upgrade --install --wait. A timed-out first install still
           # leaves argocd-server, and skipping Helm leaves a failed release.
           # GitOps image pulls + HA redis routinely exceed 10m on a cold cluster.
+          # Regional overlay carries admin.enabled / policy.default. Without it,
+          # helm upgrade resets those keys to chart defaults until Argo CD heals.
+          ARGOCD_VALUES="$REPO_DIR/deploy/$ENVIRONMENT/$REGION_DEPLOYMENT/argocd-values-$CLUSTER_TYPE.yaml"
+          if [[ ! -f "$ARGOCD_VALUES" ]]; then
+            echo "ERROR: missing regional Argo CD values: $ARGOCD_VALUES" >&2
+            exit 1
+          fi
           if ! helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd" \
             --namespace argocd \
+            --values "$ARGOCD_VALUES" \
             --set pullSecret.externalSecret.enabled=false \
             --set argo-cd.redisSecretInit.enabled=true \
             --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
