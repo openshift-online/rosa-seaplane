@@ -10,6 +10,10 @@ RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.
 
 Same reason as cert-manager: the RH operand image has no ENTRYPOINT. grafana/loki **7.0.0** honors `loki.command` on four Distributed workloads and omits it on querier and index-gateway. The chart is vendored in `loki-chart/` and rendered through Kustomize so those two objects get `command: [/usr/bin/loki]`. Drop the patches if the chart grows a command value there.
 
+### Why is Argo CD on GitOps images with argo-helm 10.9.6?
+
+There is no GitOps Helm chart for EKS. GitOps **1.22** is Argo CD **3.5.3**; argo-helm **10.9.6** is that `appVersion`. Chart 10.11.6 is **v3.5.6** and is not a tag swap. Redis stays community (`redis-ha`). See [Argo CD Red Hat images](argocd-redhat-images.md).
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).

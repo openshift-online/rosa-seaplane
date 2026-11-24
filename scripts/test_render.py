@@ -2173,6 +2173,13 @@ class TestMainIntegration:
             'helm upgrade --install argocd "$REPO_DIR/argocd/config/shared/argocd"'
             in bootstrap
         )
+        assert "--set pullSecret.externalSecret.enabled=false" in bootstrap
+        assert "--wait --timeout=20m" in bootstrap
+        assert "skipping installation" not in bootstrap
+        assert "Dumping argocd namespace" in bootstrap
+        wrapper = yaml.safe_load(values_file.read_text())
+        assert wrapper["pullSecret"]["externalSecret"]["enabled"] is True
+        assert values["repoServer"]["copyutil"]["extraArgs"] == "-n"
 
     def test_image_registry_account_id_flows_to_both_cluster_types(self, tmp_path):
         deploy_dir = self._run_main(

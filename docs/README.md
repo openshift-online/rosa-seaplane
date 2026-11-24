@@ -62,6 +62,7 @@ Detailed architecture and rationale for key technical decisions:
 | [Platform API Authorization](platform-api-authorization.md)          | Configure Cedar authorization for Platform API |
 | [Konflux onboarding](konflux-onboarding.md)                          | Onboard Seaplane images to Konflux CI/CD       |
 | [Loki and Grafana Red Hat images](loki-grafana-redhat-images.md)     | Logging operand pin; Grafana OSS exception     |
+| [Argo CD Red Hat images](argocd-redhat-images.md)                    | GitOps 1.22 pin on argo-helm 10.9.6            |
 
 ### Reference
 
