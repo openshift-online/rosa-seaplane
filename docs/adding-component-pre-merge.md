@@ -40,12 +40,12 @@ The provision step deep-merges a YAML fragment into a target file in the rosa-se
 
 The override is configured via env vars in the CI config:
 
-| Variable                           | Description                                                                                                                                                                             |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ROSA_REGIONAL_COMPONENT_NAME`     | Component name for logging (e.g., `platform-api`).                                                                                                                                      |
-| `ROSA_REGIONAL_HELM_VALUES_FILE`   | Path to the target file in this repo (e.g., `argocd/config/regional-cluster/platform-api/values.yaml`).                                                                                 |
+| Variable                           | Description                                                                                                                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ROSA_REGIONAL_COMPONENT_NAME`     | Component name for logging (e.g., `platform-api`).                                                                                                                                                      |
+| `ROSA_REGIONAL_HELM_VALUES_FILE`   | Path to the target file in this repo (e.g., `argocd/config/regional-cluster/platform-api/values.yaml`).                                                                                                 |
 | `ROSA_REGIONAL_HELM_OVERRIDE_YAML` | Inline YAML fragment to deep-merge into the target file. `IMAGE_REPO` and `IMAGE_TAG` are replaced with the pushed image reference; `PR_SOURCE_SHA` is replaced with the triggering PR's source commit. |
-| `ROSA_REGIONAL_QUAY_DEST_REPO`     | Public quay.io repository for the CI-built image.                                                                                                                                       |
+| `ROSA_REGIONAL_QUAY_DEST_REPO`     | Public quay.io repository for the CI-built image.                                                                                                                                                       |
 
 The deep merge works as follows:
 
