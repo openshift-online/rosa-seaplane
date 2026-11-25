@@ -1,6 +1,3 @@
-global:
-  image_registry_account_id: ""
-
 ecrCredsSync:
   applicationName: ecr-creds-sync
   namespace: argocd
@@ -11,7 +8,7 @@ ecrCredsSync:
     repoURL: https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync
     # Pinned commit SHA of the ecr-creds-sync chart. Update manually or via
     # Mintmaker when a new chart version is released.
-    targetRevision: "630db24c37074ecb002fab0b786b8e81cf7d6d58"
+    targetRevision: "bd7891a"
     path: helm
 
   syncPolicy:
@@ -29,9 +26,6 @@ ecrCredsSync:
     sourceSecrets: ""
 
   image:
-    # Empty uses the shared ECR account forwarded to the child chart. For a
-    # Quay override, set registry to quay.io and repository to the full namespace path.
-    registry: ""
-    repository: rosa-seaplane-ecr-creds-sync
+    repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-ecr-creds-sync
     tag: "f34824f"
     pullPolicy: IfNotPresent

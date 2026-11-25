@@ -1978,22 +1978,6 @@ class TestMainIntegration:
 
         assert "templatePatch" not in content
 
-    def test_ecr_creds_sync_wrapper_forwards_structured_image_and_registry_account(self):
-        values = (PROJECT_ROOT / "argocd/config/management-cluster/ecr-creds-sync/values.yaml").read_text()
-        template = (
-            PROJECT_ROOT
-            / "argocd/config/management-cluster/ecr-creds-sync/templates/application.yaml"
-        ).read_text()
-
-        assert 'registry: ""' in values
-        assert "repository: rosa-seaplane-ecr-creds-sync" in values
-        assert 'targetRevision: "630db24c37074ecb002fab0b786b8e81cf7d6d58"' in values
-        assert '"registry" (index $image "registry")' in template
-        assert '"repository" (index $image "repository")' in template
-        assert 'image_registry_account_id: {{ .Values.global.image_registry_account_id | quote }}' in template
-        assert 'printf "%s/%s" $registry' not in template
-        assert "ecrCredsSync:" in template
-
     def test_ecr_creds_sync_enabled_from_management_cluster_defaults(self, tmp_path):
         """ecrCredsSync.helmValues.enabled must be sourced from
         management_cluster_defaults.enable_ecr_creds_sync, not from
