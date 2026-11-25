@@ -14,6 +14,14 @@ Same reason as cert-manager: the RH operand image has no ENTRYPOINT. grafana/lok
 
 There is no GitOps Helm chart for EKS. GitOps **1.22** is Argo CD **3.5.3**; argo-helm **10.9.6** is that `appVersion`. Chart 10.11.6 is **v3.5.6** and is not a tag swap. Redis stays community (`redis-ha`). See [Argo CD Red Hat images](argocd-redhat-images.md).
 
+### Why is the Thanos image pin in the seaplane CR templates?
+
+The operator Helm chart only installs the operator. Query / receive / store / compact / ruler CRs are this repo’s `argocd/config/regional-cluster/thanos/` chart. `baseImage` / `version` belong on those CRs. CMO is not installed on EKS.
+
+### Why do Thanos CRs set `securityContext.runAsUser: 65534`?
+
+CMO `ose-thanos-rhel9` uses `USER nobody`. The thanos-operator sets container `runAsNonRoot: true` and does not set `runAsUser`. Kubelet cannot verify a named user is non-root, so pods stay in `CreateContainerConfigError`. `65534` is nobody on RHEL and matches CMO’s Thanos pod securityContext. Keep this while the image USER is non-numeric.
+
 ### What cluster types does the regional architecture support?
 
 The regional architecture is designed exclusively for **ROSA HCP** (Hosted Control Planes). For the complete scope and architecture overview, see [ROSA Seaplane](README.md#scope).
