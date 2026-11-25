@@ -19,15 +19,16 @@ The catalog image has no ENTRYPOINT/CMD. Set `loki.loki.command: /usr/bin/loki`.
 
 Manifest-list digest (v6.4.7): `sha256:90ab304b12402d6759330a338f7b26fcf9ac7ec4d601fcab2582dca99111544b`.
 
-## Grafana — do not pin ose-grafana
+## Grafana — Red Hat hardened image
 
-| Source                   | Grafana                                                   |
-| ------------------------ | --------------------------------------------------------- |
-| Wrapper `grafana-oss`    | **11.4.0**                                                |
-| `openshift4/ose-grafana` | Deprecated CMO image (catalog v4.11 stream, Grafana ~8.3) |
+| Source                       | Grafana                                                        |
+| ---------------------------- | -------------------------------------------------------------- |
+| `rhel10/grafana:10.3`        | **12.4.3** (RHEL 10 Grafana package source; verify image SBOM) |
+| `openshift4/ose-grafana`     | Deprecated CMO image (catalog v4.11 stream, Grafana ~8.3)      |
+| Previous `grafana-oss` image | **11.4.0**                                                     |
 
-ose-grafana is not Grafana 11. Dashboards, sidecar provisioning, and `grafana.ini` assume 11.4. Keep `docker.io/grafana/grafana-oss:11.4.0`. The k8s-sidecar has no RH catalog equivalent. A Grafana 11 trusted build is Konflux (type 3), not this card.
+Use `registry.redhat.io/rhel10/grafana:10.3`, pinned to manifest-list digest `sha256:172af6db978bb10c8301f546025a9a5ace06c44177d2d23614f4caecd0887957`. The `10.3` tag is the RHEL stream, not Grafana's version. Red Hat's CentOS Stream Grafana package source specifies 12.4.3, but verify the pinned image's SBOM before rollout. `openshift4/ose-grafana` is deprecated and is not the replacement. This is a major-version upgrade from 11.4; validate startup, security context, dashboards, datasources, and provisioning against the exact image. The existing k8s-sidecar remains a separate third-party image.
 
 ## Pull secret
 
-`registry.redhat.io` needs `pull-secret` in `loki` from SSM `/infra/pull-secret` (same ExternalSecret as Vector).
+`registry.redhat.io` needs a namespace-local `pull-secret` from SSM `/infra/pull-secret`. Loki, Vector, and Grafana each create the ExternalSecret in their own namespace.

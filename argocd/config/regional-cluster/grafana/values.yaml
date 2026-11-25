@@ -4,15 +4,16 @@ global:
   management_clusters: ""
 
 grafana:
-  # Stay on Grafana OSS 11.4.0. ose-grafana is a deprecated CMO image
-  # (catalog v4.11 stream, Grafana ~8.3) and is not Grafana 11. Not a tag swap.
-  # Sidecar (k8s-sidecar) has no RH catalog equivalent. See
-  # docs/loki-grafana-redhat-images.md.
+  # Red Hat Hardened Image. 10.3 is the RHEL stream, not the Grafana version;
+  # the digest pins the catalog build. Verify its SBOM reports Grafana 12.4.x.
   image:
-    registry: docker.io
-    repository: grafana/grafana-oss
-    tag: "11.4.0"
+    registry: registry.redhat.io
+    repository: rhel10/grafana
+    tag: "10.3"
+    sha: "172af6db978bb10c8301f546025a9a5ace06c44177d2d23614f4caecd0887957"
     pullPolicy: IfNotPresent
+    pullSecrets:
+      - pull-secret
 
   # FedRAMP: non-root (UID/GID 472)
   securityContext:
