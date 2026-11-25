@@ -167,7 +167,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
               --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
               --set-string 'argo-cd.server.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
               --set-string 'argo-cd.repoServer.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
-              --wait --timeout=10m; then
+              --timeout=10m; then
               echo "ERROR: helm upgrade --install argocd failed. Dumping argocd namespace:"
               kubectl get pods,jobs -n argocd -o wide || true
               kubectl get events -n argocd --sort-by=.lastTimestamp || true
@@ -177,8 +177,18 @@ resource "aws_ecs_task_definition" "bootstrap" {
               exit 1
             fi
 
+            # redis-ha 4.38.0 has no HAProxy command/args Helm values. Patch the
+            # initial install before waiting; the ArgoCD Kustomize operand keeps
+            # the same command override in GitOps-managed syncs.
+            kubectl patch deployment argocd-redis-ha-haproxy \
+              --namespace argocd \
+              --type=strategic \
+              --patch='{"spec":{"template":{"spec":{"containers":[{"name":"haproxy","command":["/usr/sbin/haproxy"],"args":["-W","-db","-f","/usr/local/etc/haproxy/haproxy.cfg"]}]}}}}'
+
             echo "✓ ArgoCD installation complete"
 
+            kubectl rollout status deployment/argocd-redis-ha-haproxy --timeout=600s -n argocd
+            kubectl rollout status statefulset/argocd-redis-ha-server --timeout=600s -n argocd
             kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
             kubectl wait --for=condition=available --timeout=600s deployment/argocd-repo-server -n argocd
             kubectl wait --for=condition=available --timeout=600s deployment/argocd-applicationset-controller -n argocd

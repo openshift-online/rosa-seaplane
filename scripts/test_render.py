@@ -2069,7 +2069,7 @@ class TestMainIntegration:
             )
             assert sources[0]["targetRevision"] == expected_revision
             assert sources[1] == {
-                "path": '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") }}{{ .path.path }}{{ end }}',
+                "path": '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") (eq .path.basename "argocd") }}{{ .path.path }}{{ end }}',
                 "repoURL": "{{ .metadata.annotations.git_repo }}",
                 "targetRevision": expected_revision,
                 "ref": "operand",
@@ -2178,12 +2178,76 @@ class TestMainIntegration:
             "if ! kubectl get deployment argocd-server -n argocd 2>/dev/null; then"
             in bootstrap
         )
-        assert "--wait --timeout=10m" in bootstrap
+        assert "--timeout=10m; then" in bootstrap
+        assert "kubectl patch deployment argocd-redis-ha-haproxy" in bootstrap
+        assert '"/usr/sbin/haproxy"' in bootstrap
         assert "skipping installation" in bootstrap
         assert "Dumping argocd namespace" in bootstrap
         wrapper = yaml.safe_load(values_file.read_text())
         assert wrapper["pullSecret"]["externalSecret"]["enabled"] is True
         assert values["repoServer"]["copyutil"]["extraArgs"] == "-n"
+
+        redis_ha = values["redis-ha"]
+        assert redis_ha["enabled"] is True
+        assert redis_ha["image"] == {
+            "repository": "registry.redhat.io/rhel9/redis-7",
+            "tag": "1",
+            "pullPolicy": "IfNotPresent",
+        }
+        assert redis_ha["imagePullSecrets"] == [{"name": "pull-secret"}]
+        assert redis_ha["securityContext"]["runAsUser"] is None
+        assert redis_ha["securityContext"]["fsGroup"] == 1001
+        assert redis_ha["containerSecurityContext"]["runAsUser"] is None
+        assert redis_ha["redis"]["customCommand"] == ["redis-server"]
+        assert redis_ha["redis"]["customArgs"] == ["/data/conf/redis.conf"]
+        assert redis_ha["sentinel"]["customCommand"] == ["redis-sentinel"]
+        assert redis_ha["sentinel"]["customArgs"] == ["/data/conf/sentinel.conf"]
+        assert redis_ha["exporter"]["enabled"] is False
+        assert redis_ha["haproxy"]["image"] == {
+            "repository": "registry.redhat.io/openshift4/ose-haproxy-router-rhel9",
+            "tag": "v4.20.0",
+            "pullPolicy": "IfNotPresent",
+        }
+        assert redis_ha["haproxy"]["imagePullSecrets"] == [{"name": "pull-secret"}]
+        assert redis_ha["haproxy"]["securityContext"]["runAsUser"] is None
+        assert redis_ha["haproxy"]["securityContext"]["fsGroup"] == 1001
+        assert redis_ha["haproxy"]["containerSecurityContext"]["readOnlyRootFilesystem"] is True
+
+    def test_argocd_kustomize_operand_patches_router_entrypoint(self):
+        argocd = REAL_ARGOCD_CONFIG_DIR / "shared/argocd"
+        kustomization = load_yaml(argocd / "kustomization.yaml")
+        assert kustomization["helmCharts"] == [
+            {
+                "name": "argocd",
+                "releaseName": "argocd",
+                "namespace": "argocd",
+                "includeCRDs": True,
+                "valuesFile": "values.yaml",
+            }
+        ]
+        assert [patch["path"] for patch in kustomization["patches"]] == [
+            "patches/redis-haproxy-command.yaml",
+            "patches/keep-runtime-argocd-cm.yaml",
+            "patches/keep-runtime-argocd-rbac-cm.yaml",
+        ]
+        patch = load_yaml(argocd / "patches/redis-haproxy-command.yaml")
+        assert patch["metadata"] == {
+            "name": "argocd-redis-ha-haproxy",
+            "namespace": "argocd",
+        }
+        haproxy = patch["spec"]["template"]["spec"]["containers"][0]
+        assert haproxy["name"] == "haproxy"
+        assert haproxy["command"] == ["/usr/sbin/haproxy"]
+        assert haproxy["args"] == [
+            "-W",
+            "-db",
+            "-f",
+            "/usr/local/etc/haproxy/haproxy.cfg",
+        ]
+        for configmap_patch in kustomization["patches"][1:]:
+            patch = load_yaml(argocd / configmap_patch["path"])
+            assert patch["kind"] == "ConfigMap"
+            assert patch["$patch"] == "delete"
 
     def test_image_registry_account_id_flows_to_both_cluster_types(self, tmp_path):
         deploy_dir = self._run_main(

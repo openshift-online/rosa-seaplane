@@ -1,0 +1,21 @@
+# Re-render the vendored Argo CD chart as a Kustomize operand so the HAProxy
+# router image gets the command/args that redis-ha 4.38.0 does not expose as
+# Helm values. The earlier Helm source renders the same chart; this later
+# multi-source operand supplies the patched manifests.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+helmGlobals:
+  chartHome: ..
+helmCharts:
+  - name: argocd
+    releaseName: argocd
+    namespace: argocd
+    includeCRDs: true
+    valuesFile: values.yaml
+patches:
+  - path: patches/redis-haproxy-command.yaml
+  # These ConfigMaps receive cluster-specific settings from ApplicationSet's
+  # Helm values. Keep the Helm-source versions rather than replacing them with
+  # this static Kustomize render.
+  - path: patches/keep-runtime-argocd-cm.yaml
+  - path: patches/keep-runtime-argocd-rbac-cm.yaml

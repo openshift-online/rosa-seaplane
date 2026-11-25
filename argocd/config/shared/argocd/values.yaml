@@ -11,7 +11,8 @@ pullSecret:
 # ROSAENG-67992: pin GitOps 1.22 images onto argo-helm 10.9.6 (appVersion v3.5.3).
 # GitOps 1.22 ships Argo CD 3.5.3 / Dex 2.45.1. Chart 10.11.6 is v3.5.6 — do not
 # bump past 10.9.6 until a GitOps operand matches that appVersion. GitOps
-# operator is not installed on EKS. Redis stays community (redis-ha).
+# operator is not installed on EKS. Redis HA uses the RHEL 9 Redis image;
+# HAProxy uses the matching OpenShift 4.20 router image.
 # Images: RHSA-2026:94584 (GitOps 1.22.3). See docs/argocd-redhat-images.md.
 argo-cd:
   # High Availability configuration
@@ -172,9 +173,59 @@ argo-cd:
     replicas: 2
     hardAntiAffinity: false
     priorityClassName: system-cluster-critical
+    # Argo CD runs on EKS, so there is no restricted-v2 SCC to allocate a
+    # volume group. Keep a non-root group for writable emptyDir data/configs.
+    # Leave runAsUser unset so each Red Hat image's non-root default is used.
+    securityContext:
+      runAsUser: null
+      fsGroup: 1001
+      fsGroupChangePolicy: OnRootMismatch
+      runAsNonRoot: true
+    containerSecurityContext:
+      runAsUser: null
+      runAsNonRoot: true
+    image:
+      repository: registry.redhat.io/rhel9/redis-7
+      # Red Hat RHEL 9 Redis 7 stream tag; pin the registry digest before promotion.
+      tag: "1"
+      pullPolicy: IfNotPresent
+    imagePullSecrets:
+      - name: pull-secret
+    # Keep the optional community exporter disabled; it is not mirrored here.
+    exporter:
+      enabled: false
+    # redis-ha's config-init is a shell script init container, not a Redis
+    # server process. The Redis and Sentinel containers use these PATH commands.
+    redis:
+      customCommand:
+        - redis-server
+      customArgs:
+        - /data/conf/redis.conf
+    sentinel:
+      customCommand:
+        - redis-sentinel
+      customArgs:
+        - /data/conf/sentinel.conf
     haproxy:
       hardAntiAffinity: false
       priorityClassName: system-cluster-critical
+      image:
+        repository: registry.redhat.io/openshift4/ose-haproxy-router-rhel9
+        # Match the OpenShift 4.20 image pins used elsewhere in this repo;
+        # pin the registry digest before promotion.
+        tag: v4.20.0
+        pullPolicy: IfNotPresent
+      imagePullSecrets:
+        - name: pull-secret
+      securityContext:
+        runAsUser: null
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+        runAsNonRoot: true
+      containerSecurityContext:
+        runAsUser: null
+        runAsNonRoot: true
+        readOnlyRootFilesystem: true
 
   # redis key kept for non-HA mode reference (unused when ha.enabled=true)
   redis:
