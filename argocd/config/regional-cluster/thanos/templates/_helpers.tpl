@@ -48,7 +48,6 @@ Helm release annotations - required for Helm to recognize ownership
 meta.helm.sh/release-name: {{ .Release.Name }}
 meta.helm.sh/release-namespace: {{ .Release.Namespace }}
 argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
-argocd.argoproj.io/sync-wave: "1"
 {{- end }}
 
 {{/*
