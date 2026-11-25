@@ -19,6 +19,8 @@ Sentinel containers invoke `valkey-server` and `valkey-sentinel`; the subchart's
 generated init and health scripts still call `redis-cli`, so the Valkey image
 must include Valkey's Redis-compatible `redis-cli` symlink. The router image is
 run as HAProxy directly, rather than through its OpenShift router entrypoint.
+The same HAProxy command patch is applied by Helm's post-renderer during ECS
+bootstrap and by the Kustomize operand during steady-state Argo CD syncs.
 
 This Argo CD deployment is part of ROSA Seaplane but is bootstrapped on EKS,
 not inside an OpenShift/ROSA cluster. It cannot rely on the `restricted-v2` SCC

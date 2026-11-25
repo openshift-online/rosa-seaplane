@@ -2178,9 +2178,12 @@ class TestMainIntegration:
             "if ! kubectl get deployment argocd-server -n argocd 2>/dev/null; then"
             in bootstrap
         )
-        assert "--timeout=10m; then" in bootstrap
-        assert "kubectl patch deployment argocd-redis-ha-haproxy" in bootstrap
-        assert '"/usr/sbin/haproxy"' in bootstrap
+        assert (
+            '--post-renderer "$REPO_DIR/argocd/config/shared/argocd/patches/helm-post-renderer.sh"'
+            in bootstrap
+        )
+        assert "--wait --timeout=10m; then" in bootstrap
+        assert "kubectl patch deployment argocd-redis-ha-haproxy" not in bootstrap
         assert "skipping installation" in bootstrap
         assert "Dumping argocd namespace" in bootstrap
         wrapper = yaml.safe_load(values_file.read_text())
@@ -2248,6 +2251,13 @@ class TestMainIntegration:
             patch = load_yaml(argocd / configmap_patch["path"])
             assert patch["kind"] == "ConfigMap"
             assert patch["$patch"] == "delete"
+
+    def test_argocd_helm_post_renderer_uses_kustomize_patch_file(self):
+        argocd = REAL_ARGOCD_CONFIG_DIR / "shared/argocd"
+        post_renderer = (argocd / "patches/helm-post-renderer.sh").read_text()
+        assert "cat >\"$work_dir/rendered.yaml\"" in post_renderer
+        assert 'cp "$patch_dir/redis-haproxy-command.yaml"' in post_renderer
+        assert "kubectl kustomize \"$work_dir\"" in post_renderer
 
     def test_image_registry_account_id_flows_to_both_cluster_types(self, tmp_path):
         deploy_dir = self._run_main(
