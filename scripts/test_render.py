@@ -2207,8 +2207,8 @@ class TestMainIntegration:
         assert redis_ha["sentinel"]["customArgs"] == ["/data/conf/sentinel.conf"]
         assert redis_ha["exporter"]["enabled"] is False
         assert redis_ha["haproxy"]["image"] == {
-            "repository": "registry.redhat.io/openshift4/ose-haproxy-router-rhel9",
-            "tag": "v4.20.0",
+            "repository": "registry.access.redhat.com/hi/haproxy",
+            "tag": "3.0.31",
             "pullPolicy": "IfNotPresent",
         }
         assert redis_ha["haproxy"]["imagePullSecrets"] == [{"name": "pull-secret"}]

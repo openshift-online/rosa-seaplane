@@ -11,8 +11,8 @@ pullSecret:
 # ROSAENG-67992: pin GitOps 1.22 images onto argo-helm 10.9.6 (appVersion v3.5.3).
 # GitOps 1.22 ships Argo CD 3.5.3 / Dex 2.45.1. Chart 10.11.6 is v3.5.6 — do not
 # bump past 10.9.6 until a GitOps operand matches that appVersion. GitOps
-# operator is not installed on EKS. Redis HA uses the Red Hat Valkey image;
-# HAProxy uses the matching OpenShift 4.20 router image.
+# operator is not installed on EKS. Redis HA uses the Red Hat Valkey and
+# generic HAProxy images.
 # Images: RHSA-2026:94584 (GitOps 1.22.3). See docs/argocd-redhat-images.md.
 argo-cd:
   # High Availability configuration
@@ -211,10 +211,9 @@ argo-cd:
       hardAntiAffinity: false
       priorityClassName: system-cluster-critical
       image:
-        repository: registry.redhat.io/openshift4/ose-haproxy-router-rhel9
-        # Match the OpenShift 4.20 image pins used elsewhere in this repo;
-        # pin the registry digest before promotion.
-        tag: v4.20.0
+        repository: registry.access.redhat.com/hi/haproxy
+        # Pin the registry digest before promotion.
+        tag: "3.0.31"
         pullPolicy: IfNotPresent
       imagePullSecrets:
         - name: pull-secret

@@ -6,19 +6,19 @@ Chart **10.11.6** is Argo CD **v3.5.6**. That is not a tag swap onto GitOps 1.22
 
 ## Pin
 
-| Image   | Repository                                               | Tag / digest                                                                      |
-| ------- | -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Argo CD | `registry.redhat.io/openshift-gitops-1/argocd-rhel9`     | `v1.22.3@sha256:a4492e603ffa70327ac27094723819e55f2b2b038338eea8eac2e7c2f425a420` |
-| Dex     | `registry.redhat.io/openshift-gitops-1/dex-rhel9`        | `v1.22.3@sha256:a6d9927bb83c40da1e1ddec30ac41e15c9c4ea98228d05e57468a4d5bd590d1b` |
-| Valkey  | `registry.access.redhat.com/hi/valkey`                   | `9.2.0` (pin the registry digest before promotion)                                |
-| HAProxy | `registry.redhat.io/openshift4/ose-haproxy-router-rhel9` | `v4.20.0` (pin the registry digest before promotion)                              |
+| Image   | Repository                                           | Tag / digest                                                                      |
+| ------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Argo CD | `registry.redhat.io/openshift-gitops-1/argocd-rhel9` | `v1.22.3@sha256:a4492e603ffa70327ac27094723819e55f2b2b038338eea8eac2e7c2f425a420` |
+| Dex     | `registry.redhat.io/openshift-gitops-1/dex-rhel9`    | `v1.22.3@sha256:a6d9927bb83c40da1e1ddec30ac41e15c9c4ea98228d05e57468a4d5bd590d1b` |
+| Valkey  | `registry.access.redhat.com/hi/valkey`               | `9.2.0` (pin the registry digest before promotion)                                |
+| HAProxy | `registry.access.redhat.com/hi/haproxy`              | `3.0.31` (pin the registry digest before promotion)                               |
 
 The Argo CD wrapper bundles `redis-ha` **4.38.0**. Its Valkey and HAProxy image
 overrides are in `argocd/config/shared/argocd/values.yaml`. The Redis and
 Sentinel containers invoke `valkey-server` and `valkey-sentinel`; the subchart's
 generated init and health scripts still call `redis-cli`, so the Valkey image
-must include Valkey's Redis-compatible `redis-cli` symlink. The router image is
-run as HAProxy directly, rather than through its OpenShift router entrypoint.
+must include Valkey's Redis-compatible `redis-cli` symlink. HAProxy is invoked
+directly at `/usr/sbin/haproxy`, rather than through an image entrypoint.
 The same HAProxy command patch is applied by Helm's post-renderer during ECS
 bootstrap and by the Kustomize operand during steady-state Argo CD syncs.
 
