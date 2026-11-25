@@ -199,6 +199,24 @@ resolve_image_registry_account_id_from_target() {
     export IMAGE_REGISTRY_ACCOUNT_ID
 }
 
+# Read one ECR mirror SSM parameter from the target account. Empty output when
+# the parameter genuinely does not exist (mirror not configured); any other
+# failure (throttling, credentials, network) is fatal so a read error cannot
+# produce a partial ECR_MIRROR_* set — the seaplane-operator validates the
+# five env vars all-or-nothing and crashloops on a partial configuration.
+_ecr_mirror_param() {
+    local name="$1" out
+    if out=$(aws ssm get-parameter --name "${name}" --with-decryption \
+        --query 'Parameter.Value' --output text --region "${TARGET_REGION}" 2>&1); then
+        printf '%s' "${out}"
+    elif [[ "${out}" == *"ParameterNotFound"* ]]; then
+        return 0
+    else
+        echo "ERROR: reading SSM parameter ${name} for the ECR mirror config: ${out}" >&2
+        return 1
+    fi
+}
+
 # Read OCP image mirror configuration from SSM in the currently-active target
 # account. This covers the ECR registry used to mirror OCP release images to
 # zero-egress environments — not platform operator images, which are handled by
@@ -210,16 +228,20 @@ resolve_image_registry_account_id_from_target() {
 # parameters live. Exports ECR_MIRROR_REGISTRY_ACCOUNT, ECR_MIRROR_REGION,
 # ECR_MIRROR_REPOSITORY, ECR_MIRROR_SOURCES, ECR_MIRROR_BASE_SECRET_NAME, and
 # ECR_MIRROR_ECR_REPOSITORY (full URI derived from the first three). All are
-# empty strings when the SSM parameters are absent (mirror disabled).
+# empty strings when the SSM parameters are absent (mirror disabled); a failed
+# read of any parameter aborts the bootstrap instead of silently disabling or
+# partially configuring the mirror.
 resolve_ecr_mirror_config_from_target() {
     local prefix="/infra/image-registry"
-    local ssm_args=(--with-decryption --query 'Parameter.Value' --output text --region "${TARGET_REGION}")
 
-    ECR_MIRROR_REGISTRY_ACCOUNT=$(aws ssm get-parameter --name "${prefix}/ocp-mirror-account" "${ssm_args[@]}" 2>/dev/null || echo "")
-    ECR_MIRROR_REGION=$(          aws ssm get-parameter --name "${prefix}/region"            "${ssm_args[@]}" 2>/dev/null || echo "${TARGET_REGION}")
-    ECR_MIRROR_REPOSITORY=$(      aws ssm get-parameter --name "${prefix}/repository"        "${ssm_args[@]}" 2>/dev/null || echo "")
-    ECR_MIRROR_SOURCES=$(         aws ssm get-parameter --name "${prefix}/sources"           "${ssm_args[@]}" 2>/dev/null || echo "")
-    ECR_MIRROR_BASE_SECRET_NAME=$(aws ssm get-parameter --name "${prefix}/base-secret-name" "${ssm_args[@]}" 2>/dev/null || echo "")
+    ECR_MIRROR_REGISTRY_ACCOUNT=$(_ecr_mirror_param "${prefix}/ocp-mirror-account") || return 1
+    ECR_MIRROR_REGION=$(_ecr_mirror_param "${prefix}/region") || return 1
+    if [[ -z "${ECR_MIRROR_REGION}" ]]; then
+        ECR_MIRROR_REGION="${TARGET_REGION}"
+    fi
+    ECR_MIRROR_REPOSITORY=$(_ecr_mirror_param "${prefix}/repository") || return 1
+    ECR_MIRROR_SOURCES=$(_ecr_mirror_param "${prefix}/sources") || return 1
+    ECR_MIRROR_BASE_SECRET_NAME=$(_ecr_mirror_param "${prefix}/base-secret-name") || return 1
 
     ECR_MIRROR_ECR_REPOSITORY=""
     if [[ -n "${ECR_MIRROR_REGISTRY_ACCOUNT}" && -n "${ECR_MIRROR_REPOSITORY}" ]]; then

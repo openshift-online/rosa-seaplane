@@ -3191,5 +3191,119 @@ fi
         assert '"$DEPLOY_CONFIG_FILE"' in mc
 
 
+class TestECRMirrorConfigSSMResolution:
+    """resolve_ecr_mirror_config_from_target must distinguish a genuinely
+    missing SSM parameter (mirror not configured — all vars empty) from a
+    failed read (throttling/credentials/network — abort). Conflating them can
+    produce a partial ECR_MIRROR_* set, which crashloops the seaplane-operator
+    (all-or-nothing validation) in environments with ecrMirror.enabled."""
+
+    mirror_account = "235494791733"
+    region = "us-east-1"
+
+    def _run(self, spec, tmp_path):
+        # spec: param basename -> "value:<v>" | "missing" | "fail:<error text>"
+        shell = r'''
+set -euo pipefail
+source "$PIPELINE_LIB"
+TARGET_REGION="us-east-1"
+TARGET_ACCOUNT_ID="000000000000"
+aws() {
+  local name="" i
+  local args=("$@")
+  for ((i = 0; i < ${#args[@]}; i++)); do
+    if [[ "${args[$i]}" == "--name" ]]; then
+      name="${args[$((i + 1))]}"
+    fi
+  done
+  local base="${name##*/}" spec
+  case "$base" in
+    ocp-mirror-account) spec="${SPEC_ACCOUNT:-missing}" ;;
+    region)             spec="${SPEC_REGION:-missing}" ;;
+    repository)         spec="${SPEC_REPOSITORY:-missing}" ;;
+    sources)            spec="${SPEC_SOURCES:-missing}" ;;
+    base-secret-name)   spec="${SPEC_BASE_SECRET:-missing}" ;;
+    *)                  spec="missing" ;;
+  esac
+  case "$spec" in
+    value:*) printf '%s' "${spec#value:}"; return 0 ;;
+    missing) echo "An error occurred (ParameterNotFound) when calling the GetParameter operation: Parameter ${name} not found" >&2; return 254 ;;
+    *)       echo "${spec#fail:}" >&2; return 254 ;;
+  esac
+}
+if resolve_ecr_mirror_config_from_target; then
+  printf 'OK|%s|%s|%s|%s|%s|%s\n' \
+    "$ECR_MIRROR_REGISTRY_ACCOUNT" "$ECR_MIRROR_REGION" "$ECR_MIRROR_REPOSITORY" \
+    "$ECR_MIRROR_SOURCES" "$ECR_MIRROR_BASE_SECRET_NAME" "$ECR_MIRROR_ECR_REPOSITORY"
+else
+  printf 'FAILED\n'
+fi
+'''
+        env = {
+            **os.environ,
+            "PIPELINE_LIB": str(PROJECT_ROOT / "scripts/pipeline-common/lib.sh"),
+            **{f"SPEC_{k.upper()}": v for k, v in spec.items()},
+        }
+        return subprocess.run(
+            ["bash", "-c", shell],
+            cwd=PROJECT_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_all_missing_yields_empty_config_and_region_default(self, tmp_path):
+        result = self._run({}, tmp_path)
+
+        assert result.returncode == 0
+        assert f"OK||{self.region}||||" in result.stdout
+
+    def test_full_config_exports_derived_repository_uri(self, tmp_path):
+        result = self._run(
+            {
+                "account": f"value:{self.mirror_account}",
+                "repository": "value:openshift-release-dev/ocp-v5.0-art-dev",
+                "sources": "value:quay.io/openshift-release-dev",
+                "base_secret": "value:base-pull-secret",
+            },
+            tmp_path,
+        )
+
+        assert result.returncode == 0
+        assert (
+            f"OK|{self.mirror_account}|{self.region}|openshift-release-dev/ocp-v5.0-art-dev"
+            f"|quay.io/openshift-release-dev|base-pull-secret"
+            f"|{self.mirror_account}.dkr.ecr.{self.region}.amazonaws.com/openshift-release-dev/ocp-v5.0-art-dev"
+        ) in result.stdout
+
+    @pytest.mark.parametrize(
+        "failing", ["account", "repository", "sources", "base_secret"]
+    )
+    def test_read_error_aborts_instead_of_partial_config(self, failing, tmp_path):
+        spec = {
+            "account": f"value:{self.mirror_account}",
+            "repository": "value:openshift-release-dev/ocp-v5.0-art-dev",
+            "sources": "value:quay.io/openshift-release-dev",
+            "base_secret": "value:base-pull-secret",
+            failing: "fail:An error occurred (ThrottlingException) when calling the GetParameter operation",
+        }
+        result = self._run(spec, tmp_path)
+
+        assert result.returncode == 0  # the shell itself succeeds; the guard reports
+        assert "FAILED" in result.stdout
+        assert "ThrottlingException" in result.stderr
+        assert f"ECR mirror config" in result.stderr
+
+    def test_region_param_error_is_fatal_too(self, tmp_path):
+        result = self._run(
+            {"region": "fail:An error occurred (AccessDeniedException) when calling the GetParameter operation"},
+            tmp_path,
+        )
+
+        assert "FAILED" in result.stdout
+        assert "AccessDeniedException" in result.stderr
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
