@@ -96,6 +96,12 @@ kube-prometheus-stack:
         repository: openshift4/ose-prometheus-config-reloader-rhel9
         tag: v4.20.0
         sha: 439db56f052595228d47fe82988ebec5539c48a8fe0e7480b6c184c43452a075
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 64Mi
     admissionWebhooks:
       # During bootstrap, ArgoCD syncs itself and restarts its controllers
       # while other app syncs are in flight. If a PreSync hook Job completes
@@ -114,14 +120,6 @@ kube-prometheus-stack:
         memory: 128Mi
       limits:
         memory: 256Mi
-    prometheusConfigReloader:
-      resources:
-        requests:
-          cpu: 10m
-          memory: 32Mi
-        limits:
-          memory: 64Mi
-
   kube-state-metrics:
     image:
       registry: registry.redhat.io
