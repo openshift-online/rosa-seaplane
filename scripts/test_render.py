@@ -2190,17 +2190,17 @@ class TestMainIntegration:
         redis_ha = values["redis-ha"]
         assert redis_ha["enabled"] is True
         assert redis_ha["image"] == {
-            "repository": "registry.redhat.io/rhel9/redis-7",
-            "tag": "1",
+            "repository": "registry.access.redhat.com/hi/valkey",
+            "tag": "9.2.0",
             "pullPolicy": "IfNotPresent",
         }
         assert redis_ha["imagePullSecrets"] == [{"name": "pull-secret"}]
         assert redis_ha["securityContext"]["runAsUser"] is None
         assert redis_ha["securityContext"]["fsGroup"] == 1001
         assert redis_ha["containerSecurityContext"]["runAsUser"] is None
-        assert redis_ha["redis"]["customCommand"] == ["redis-server"]
+        assert redis_ha["redis"]["customCommand"] == ["valkey-server"]
         assert redis_ha["redis"]["customArgs"] == ["/data/conf/redis.conf"]
-        assert redis_ha["sentinel"]["customCommand"] == ["redis-sentinel"]
+        assert redis_ha["sentinel"]["customCommand"] == ["valkey-sentinel"]
         assert redis_ha["sentinel"]["customArgs"] == ["/data/conf/sentinel.conf"]
         assert redis_ha["exporter"]["enabled"] is False
         assert redis_ha["haproxy"]["image"] == {

@@ -11,7 +11,7 @@ pullSecret:
 # ROSAENG-67992: pin GitOps 1.22 images onto argo-helm 10.9.6 (appVersion v3.5.3).
 # GitOps 1.22 ships Argo CD 3.5.3 / Dex 2.45.1. Chart 10.11.6 is v3.5.6 — do not
 # bump past 10.9.6 until a GitOps operand matches that appVersion. GitOps
-# operator is not installed on EKS. Redis HA uses the RHEL 9 Redis image;
+# operator is not installed on EKS. Redis HA uses the Red Hat Valkey image;
 # HAProxy uses the matching OpenShift 4.20 router image.
 # Images: RHSA-2026:94584 (GitOps 1.22.3). See docs/argocd-redhat-images.md.
 argo-cd:
@@ -185,9 +185,10 @@ argo-cd:
       runAsUser: null
       runAsNonRoot: true
     image:
-      repository: registry.redhat.io/rhel9/redis-7
-      # Red Hat RHEL 9 Redis 7 stream tag; pin the registry digest before promotion.
-      tag: "1"
+      repository: registry.access.redhat.com/hi/valkey
+      # Valkey 9.2.0; redis-ha scripts also require its redis-cli compatibility
+      # symlink. Pin the registry digest before promotion.
+      tag: "9.2.0"
       pullPolicy: IfNotPresent
     imagePullSecrets:
       - name: pull-secret
@@ -198,12 +199,12 @@ argo-cd:
     # server process. The Redis and Sentinel containers use these PATH commands.
     redis:
       customCommand:
-        - redis-server
+        - valkey-server
       customArgs:
         - /data/conf/redis.conf
     sentinel:
       customCommand:
-        - redis-sentinel
+        - valkey-sentinel
       customArgs:
         - /data/conf/sentinel.conf
     haproxy:
