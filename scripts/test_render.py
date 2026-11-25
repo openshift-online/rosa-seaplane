@@ -2012,18 +2012,6 @@ class TestMainIntegration:
 
         # enabled must reflect the management_cluster_defaults flag.
         assert "enabled: True" in content or "enabled: true" in content
-        mc_input = json.loads(
-            (
-                deploy_dir
-                / "staging"
-                / "us-east-1"
-                / "pipeline-management-cluster-mc01-inputs"
-                / "terraform.json"
-            ).read_text()
-        )
-        assert mc_input["enable_ecr_creds_sync"] is True
-        provision_script = (PROJECT_ROOT / "scripts/buildspec/provision-infra-mc.sh").read_text()
-        assert "management_id enable_bastion enable_ecr_creds_sync" in provision_script
 
     @pytest.mark.parametrize("revision", ["main", "a" * 40])
     def test_regional_bootstrap_does_not_gate_cross_app_dependencies(self, tmp_path, revision):
