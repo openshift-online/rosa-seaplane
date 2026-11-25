@@ -9,6 +9,13 @@ external-secrets:
   # Install CRDs
   installCRDs: true
 
+  # Konflux UBI rebuilds for ROSAENG-68001. Chart default is
+  # ghcr.io/external-secrets/external-secrets (one image, three
+  # deployments). Sheet rows pin each deployment separately.
+  image:
+    repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-operator
+    tag: latest
+
   # Service account configuration
   serviceAccount:
     create: true
@@ -44,8 +51,14 @@ external-secrets:
   webhook:
     create: true
     replicaCount: 1
+    image:
+      repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-webhook
+      tag: latest
 
   # Cert controller for webhook certificates
   certController:
     create: true
     replicaCount: 1
+    image:
+      repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-cert-controller
+      tag: latest
