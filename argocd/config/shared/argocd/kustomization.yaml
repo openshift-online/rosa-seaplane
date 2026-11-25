@@ -1,8 +1,8 @@
-# Re-render the vendored Argo CD chart as a Kustomize operand so the HAProxy
-# router image gets the command/args that redis-ha 4.38.0 does not expose as
-# Helm values. The earlier Helm source renders the same chart; this later
-# multi-source operand supplies the patched manifests.
-# The same patch YAML is consumed by helm-post-renderer.py during ECS bootstrap.
+# Re-render the vendored Argo CD chart as a Kustomize operand to add Valkey
+# compatibility and use a shell-capable init image for HAProxy. The main
+# HAProxy image supplies its own entrypoint/CMD. The earlier Helm source renders
+# the same chart; this later multi-source operand supplies the patched manifests.
+# These patches are also applied by helm-post-renderer.sh during ECS bootstrap.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 helmGlobals:
@@ -14,7 +14,8 @@ helmCharts:
     includeCRDs: true
     valuesFile: values.yaml
 patches:
-  - path: patches/redis-haproxy-command.yaml
+  - path: patches/valkey-cli-compat.yaml
+  - path: patches/haproxy-init-image.yaml
   # These ConfigMaps receive cluster-specific settings from ApplicationSet's
   # Helm values. Keep the Helm-source versions rather than replacing them with
   # this static Kustomize render.

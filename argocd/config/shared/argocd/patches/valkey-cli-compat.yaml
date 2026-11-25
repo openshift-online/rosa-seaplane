@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: argocd-redis-ha-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      volumes:
+        - name: valkey-cli-compat
+          emptyDir: {}
+      initContainers:
+        - name: config-init
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              valkey_cli="$(command -v valkey-cli)"
+              test -x "$valkey_cli"
+              ln -sfn "$valkey_cli" /valkey-cli/redis-cli
+              exec /bin/sh /readonly-config/init.sh
+          env:
+            - name: PATH
+              value: /valkey-cli:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          volumeMounts:
+            - name: valkey-cli-compat
+              mountPath: /valkey-cli
+      containers:
+        - name: redis
+          env:
+            - name: PATH
+              value: /valkey-cli:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          volumeMounts:
+            - name: valkey-cli-compat
+              mountPath: /valkey-cli
+        - name: sentinel
+          env:
+            - name: PATH
+              value: /valkey-cli:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          volumeMounts:
+            - name: valkey-cli-compat
+              mountPath: /valkey-cli
+        - name: split-brain-fix
+          env:
+            - name: PATH
+              value: /valkey-cli:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          volumeMounts:
+            - name: valkey-cli-compat
+              mountPath: /valkey-cli

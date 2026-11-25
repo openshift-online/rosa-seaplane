@@ -185,10 +185,10 @@ argo-cd:
       runAsUser: null
       runAsNonRoot: true
     image:
-      repository: registry.access.redhat.com/hi/valkey
-      # Valkey 9.2.0; redis-ha scripts also require its redis-cli compatibility
-      # symlink. Pin the registry digest before promotion.
-      tag: "9.2.0"
+      repository: registry.redhat.io/rhel9/valkey-8
+      # Valkey 9.9 build; the Kustomize operand supplies redis-cli compatibility.
+      # Pin the registry digest before promotion.
+      tag: "9.9-1795268622"
       pullPolicy: IfNotPresent
     imagePullSecrets:
       - name: pull-secret
@@ -217,13 +217,15 @@ argo-cd:
         pullPolicy: IfNotPresent
       imagePullSecrets:
         - name: pull-secret
+      # Hummingbird declares USER as the name "haproxy"; EKS requires a
+      # numeric runAsUser when runAsNonRoot is set.
       securityContext:
-        runAsUser: null
+        runAsUser: 999
         fsGroup: 1001
         fsGroupChangePolicy: OnRootMismatch
         runAsNonRoot: true
       containerSecurityContext:
-        runAsUser: null
+        runAsUser: 999
         runAsNonRoot: true
         readOnlyRootFilesystem: true
 

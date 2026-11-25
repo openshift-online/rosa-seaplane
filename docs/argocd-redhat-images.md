@@ -10,24 +10,26 @@ Chart **10.11.6** is Argo CD **v3.5.6**. That is not a tag swap onto GitOps 1.22
 | ------- | ---------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Argo CD | `registry.redhat.io/openshift-gitops-1/argocd-rhel9` | `v1.22.3@sha256:a4492e603ffa70327ac27094723819e55f2b2b038338eea8eac2e7c2f425a420` |
 | Dex     | `registry.redhat.io/openshift-gitops-1/dex-rhel9`    | `v1.22.3@sha256:a6d9927bb83c40da1e1ddec30ac41e15c9c4ea98228d05e57468a4d5bd590d1b` |
-| Valkey  | `registry.access.redhat.com/hi/valkey`               | `9.2.0` (pin the registry digest before promotion)                                |
+| Valkey  | `registry.redhat.io/rhel9/valkey-8`                  | `9.9-1795268622` (pin the registry digest before promotion)                       |
 | HAProxy | `registry.access.redhat.com/hi/haproxy`              | `3.0.31` (pin the registry digest before promotion)                               |
 
 The Argo CD wrapper bundles `redis-ha` **4.38.0**. Its Valkey and HAProxy image
 overrides are in `argocd/config/shared/argocd/values.yaml`. The Redis and
-Sentinel containers invoke `valkey-server` and `valkey-sentinel`; the subchart's
-generated init and health scripts still call `redis-cli`, so the Valkey image
-must include Valkey's Redis-compatible `redis-cli` symlink. HAProxy is invoked
-directly at `/usr/sbin/haproxy`, rather than through an image entrypoint.
-The same HAProxy command patch is applied by Helm's post-renderer during ECS
-bootstrap and by the Kustomize operand during steady-state Argo CD syncs.
+Sentinel containers invoke `valkey-server` and `valkey-sentinel`. The subchart's
+generated init and health scripts call `redis-cli`, so a pod-shared symlink to
+Valkey's `valkey-cli` is created at startup and added to PATH. The HAProxy
+image's built-in entrypoint and default command are used. The shared
+Kustomize/Helm post-render patch selects the shell-capable Valkey image for
+HAProxy's `config-init` helper; the main HAProxy image itself has no shell.
 
 This Argo CD deployment is part of ROSA Seaplane but is bootstrapped on EKS,
 not inside an OpenShift/ROSA cluster. It cannot rely on the `restricted-v2` SCC
 to assign volume groups, so Redis and HAProxy use `fsGroup: 1001` for their
-writable `emptyDir` mounts and leave `runAsUser` unset to use the images'
-non-root defaults. If these pods are ever moved onto OpenShift, use a separate
-values overlay that delegates `runAsUser` and `fsGroup` to the SCC.
+writable `emptyDir` mounts. Valkey leaves `runAsUser` unset to use its numeric
+image user; HAProxy sets `runAsUser: 999` because its image declares the user
+by name, which EKS cannot validate with `runAsNonRoot: true`. If these pods are
+ever moved onto OpenShift, use a separate values overlay that delegates
+`runAsUser` and `fsGroup` to the SCC.
 
 `argo-helm` 10.9.6 sets `args: [/usr/local/bin/argocd-server, …]` (no `command`). The GitOps image must provide that path; this is not the cert-manager “flags as argv0” case.
 
