@@ -12,7 +12,7 @@ seaplane:
 
   source:
     repoURL: https://github.com/openshift-online/rosa-seaplane-api.git
-    targetRevision: aa468081b3e0148fccfb173dbf94a973da572ecf
+    targetRevision: 39afe3c42c918887ced80398609c3a6a608c0bfc
     path: seaplane-operator/charts
 
   syncPolicy:
