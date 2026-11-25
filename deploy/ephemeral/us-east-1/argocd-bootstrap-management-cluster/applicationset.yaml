@@ -112,7 +112,7 @@ spec:
             # annotations so that sensitive ECR config stays out of git.
             ecrCredsSync:
               helmValues:
-                enabled: False
+                enabled: True
                 ecrRepository: '{{ index .metadata.annotations "ecr_mirror_ecr_repository" | default "" }}'
                 awsRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
                 sourceSecrets: '{{ index .metadata.annotations "ecr_mirror_base_secret_name" | default "" }}'

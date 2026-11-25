@@ -97,7 +97,7 @@ spec:
                   # All other fields come from SSM via cluster secret annotations so that
                   # sensitive ECR config is not stored in git and cannot change via ArgoCD
                   # auto-sync alone.
-                  enabled: False
+                  enabled: True
                   registryAccount: '{{ index .metadata.annotations "ecr_mirror_registry_account" | default "" }}'
                   registryRegion: '{{ index .metadata.annotations "ecr_mirror_region" | default "" }}'
                   repository: '{{ index .metadata.annotations "ecr_mirror_repository" | default "" }}'

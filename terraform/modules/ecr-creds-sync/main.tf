@@ -44,14 +44,30 @@ resource "aws_iam_role_policy" "ecr_get_auth_token" {
   name = "${var.management_id}-ecr-get-auth-token"
   role = aws_iam_role.ecr_creds_sync.id
 
+  # Cross-account ECR requires the pull actions in both this identity policy
+  # and the mirror repository's resource policy. Pull is granted on all
+  # repositories: for cross-account registries the repository policy remains
+  # the effective gate, so the same role must be granted there.
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid      = "ECRGetAuthorizationToken"
-      Effect   = "Allow"
-      Action   = "ecr:GetAuthorizationToken"
-      Resource = "*"
-    }]
+    Statement = [
+      {
+        Sid      = "ECRGetAuthorizationToken"
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Sid    = "ECRPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability",
+        ]
+        Resource = "*"
+      },
+    ]
   })
 }
 

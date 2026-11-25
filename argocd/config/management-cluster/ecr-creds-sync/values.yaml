@@ -1,5 +1,5 @@
 ecrCredsSync:
-  applicationName: ecr-creds-sync
+  applicationName: ecr-creds-sync-operator
   namespace: argocd
   targetNamespace: hypershift
   project: default
@@ -8,7 +8,7 @@ ecrCredsSync:
     repoURL: https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync
     # Pinned commit SHA of the ecr-creds-sync chart. Update manually or via
     # Mintmaker when a new chart version is released.
-    targetRevision: "bd7891a"
+    targetRevision: "5a9a671"
     path: helm
 
   syncPolicy:
@@ -25,7 +25,7 @@ ecrCredsSync:
     awsRegion: ""
     sourceSecrets: ""
 
-  image:
-    repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-ecr-creds-sync
-    tag: "f34824f"
-    pullPolicy: IfNotPresent
+# Global values injected by the ArgoCD ApplicationSet valuesObject.
+# Not set here — always provided at runtime.
+global:
+  image_registry_account_id: ""
