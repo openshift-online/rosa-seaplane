@@ -11,7 +11,7 @@ Chart **10.11.6** is Argo CD **v3.5.6**. That is not a tag swap onto GitOps 1.22
 | Argo CD | `registry.redhat.io/openshift-gitops-1/argocd-rhel9`     | `v1.22.3@sha256:a4492e603ffa70327ac27094723819e55f2b2b038338eea8eac2e7c2f425a420` |
 | Dex     | `registry.redhat.io/openshift-gitops-1/dex-rhel9`        | `v1.22.3@sha256:a6d9927bb83c40da1e1ddec30ac41e15c9c4ea98228d05e57468a4d5bd590d1b` |
 | Valkey  | `registry.access.redhat.com/hi/valkey`                   | `9.2.0` (pin the registry digest before promotion)                                |
-| HAProxy | `registry.redhat.io/openshift4/ose-haproxy-router-rhel9` | `v4.20.0` (pin the registry digest before promotion)                             |
+| HAProxy | `registry.redhat.io/openshift4/ose-haproxy-router-rhel9` | `v4.20.0` (pin the registry digest before promotion)                              |
 
 The Argo CD wrapper bundles `redis-ha` **4.38.0**. Its Valkey and HAProxy image
 overrides are in `argocd/config/shared/argocd/values.yaml`. The Redis and
