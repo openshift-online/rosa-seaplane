@@ -12,9 +12,13 @@ external-secrets:
   # Konflux UBI rebuilds for ROSAENG-68001. Chart default is
   # ghcr.io/external-secrets/external-secrets (one image, three
   # deployments). Sheet rows pin each deployment separately.
+  # Tag matches vendored chart appVersion (2.14.0). Do not use
+  # latest: pullPolicy is IfNotPresent, so a floating tag can
+  # leave nodes on different builds. Digest can go in the tag
+  # (tag@sha256:…) once Konflux publishes these repos.
   image:
     repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-operator
-    tag: latest
+    tag: v2.14.0
 
   # Service account configuration
   serviceAccount:
@@ -53,7 +57,7 @@ external-secrets:
     replicaCount: 1
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-webhook
-      tag: latest
+      tag: v2.14.0
 
   # Cert controller for webhook certificates
   certController:
@@ -61,4 +65,4 @@ external-secrets:
     replicaCount: 1
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/external-secrets-cert-controller
-      tag: latest
+      tag: v2.14.0
