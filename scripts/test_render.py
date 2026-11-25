@@ -2279,6 +2279,46 @@ class TestMainIntegration:
         assert rc_input["image_registry_account_id"] == ""
         assert mc_input["image_registry_account_id"] == ""
 
+    def test_zoa_premerge_quay_references_and_tags_flow_to_rc_and_mc(self, tmp_path):
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "aws": {
+                    "account_id": "111111111111",
+                    "management_cluster_account_id": "222222222222",
+                },
+                "regional_cluster": {
+                    "zoa_lambda_image_tag": "ci-123-lambda",
+                    "zoa_runner_image_tag": "ci-123-runner",
+                    "zoa_boundary_image_tag": "ci-123-boundary",
+                    "zoa_lambda_source_image": "quay.io/rrp-dev-ci/zoa-lambda",
+                    "zoa_runner_source_image": "quay.io/rrp-dev-ci/zoa-runner",
+                    "zoa_boundary_source_image": "quay.io/rrp-dev-ci/zoa-boundary",
+                },
+            },
+            environments={
+                "ephemeral": {
+                    "defaults": {"regional_cluster": {"zoa_lambda_api_concurrency": -1}},
+                    "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+                }
+            },
+        )
+
+        region_dir = deploy_dir / "ephemeral" / "us-east-1"
+        rc = json.loads((region_dir / "pipeline-regional-cluster-inputs/terraform.json").read_text())
+        mc = json.loads((region_dir / "pipeline-management-cluster-mc01-inputs/terraform.json").read_text())
+        assert rc["zoa_lambda_source_image"] == "quay.io/rrp-dev-ci/zoa-lambda"
+        assert rc["zoa_lambda_image_tag"] == "ci-123-lambda"
+        assert rc["zoa_runner_source_image"] == "quay.io/rrp-dev-ci/zoa-runner"
+        assert rc["zoa_runner_image_tag"] == "ci-123-runner"
+        assert rc["zoa_boundary_source_image"] == "quay.io/rrp-dev-ci/zoa-boundary"
+        assert rc["zoa_boundary_image_tag"] == "ci-123-boundary"
+        assert mc["zoa_lambda_image_tag"] == "ci-123-lambda"
+        assert mc["zoa_runner_source_image"] == "quay.io/rrp-dev-ci/zoa-runner"
+        assert mc["zoa_runner_image_tag"] == "ci-123-runner"
+        assert mc["zoa_boundary_source_image"] == "quay.io/rrp-dev-ci/zoa-boundary"
+        assert mc["zoa_boundary_image_tag"] == "ci-123-boundary"
+
     def test_argocd_bootstrap_pinned_revision(self, tmp_path):
         deploy_dir = self._run_main(
             tmp_path,
@@ -3200,6 +3240,21 @@ fi
         )
         assert '"$RC_CONFIG_FILE"' in rc
         assert '"$DEPLOY_CONFIG_FILE"' in mc
+
+    def test_ephemeral_defaults_do_not_mask_zoa_ci_tags(self):
+        ephemeral = yaml.safe_load((PROJECT_ROOT / "config/ephemeral/defaults.yaml").read_text())
+        regional_cluster = ephemeral.get("regional_cluster", {})
+        for key in (
+            "zoa_lambda_image_tag",
+            "zoa_runner_image_tag",
+            "zoa_boundary_image_tag",
+        ):
+            assert key not in regional_cluster
+
+    def test_zoa_lambda_remains_mirrored_from_overrideable_quay_source(self):
+        ecr = (PROJECT_ROOT / "terraform/modules/zoa/ecr.tf").read_text()
+        assert 'SRC="docker://${var.zoa_lambda_source_image}:$TAG"' in ecr
+        assert "skopeo copy --retry-times 3" in ecr
 
 
 if __name__ == "__main__":

@@ -36,6 +36,11 @@ suites:
         source:
           file: argocd/config/regional-cluster/platform-api/values.yaml
           key: platformApi.app.image.tag
+      - name: platform-api-chart-revision
+        doc: ArgoCD Application targetRevision of the platform-api chart.
+        source:
+          file: argocd/config/regional-cluster/platform-api/values.yaml
+          key: seaplane.source.targetRevision
       - name: seaplane-operator-chart-revision
         doc: ArgoCD Application targetRevision of the seaplane-operator chart.
         source:
