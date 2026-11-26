@@ -119,6 +119,10 @@ kube-prometheus-stack:
       repository: openshift4/ose-prometheus-node-exporter-rhel9
       tag: v4.20.0
       digest: sha256:0d91bf8ba5d4261a97c465d9f9d14463c0b588204478077bed57b848bc45034b
+    # The OSE image requires the accelerator collector config used by CMO.
+    configmaps:
+      - name: node-exporter-accelerators-collector-config
+        mountPath: /var/node_exporter/accelerators_collector_config
     priorityClassName: system-node-critical
     tolerations:
       - operator: Exists
