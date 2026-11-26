@@ -25,6 +25,13 @@ kube-prometheus-stack:
     upgradeJob:
       enabled: true
       forceConflicts: true
+      # CRD apply Job. Red Hat Hardened Images kubectl, not registry.k8s.io.
+      image:
+        kubectl:
+          registry: registry.access.redhat.com
+          repository: hi/kubectl
+          tag: "1.36"
+          sha: 93e8ae53bb16fe175dc39320d23a86ed61091ff89e49677a41da11c79e7434d5
 
   defaultRules:
     create: false
