@@ -16,6 +16,16 @@ kube-prometheus-stack:
     upgradeJob:
       enabled: true
       forceConflicts: true
+      # Init container runs `bzcat`; UBI has no bzcat. Pin off :latest.
+      # Chart 72.6.2 gates the digest on upgradeJob.image.sha, then
+      # interpolates upgradeJob.image.busybox.sha.
+      image:
+        sha: 66a6306db78bf2dbf3487f293aa8d6990d8e506fdffab9cc43fe422becf886e4
+        busybox:
+          registry: docker.io
+          repository: busybox
+          tag: "1.37.0"
+          sha: 66a6306db78bf2dbf3487f293aa8d6990d8e506fdffab9cc43fe422becf886e4
 
   defaultRules:
     create: false
@@ -62,6 +72,11 @@ kube-prometheus-stack:
         ttlSecondsAfterFinished: 600
       patch:
         ttlSecondsAfterFinished: 600
+        image:
+          registry: registry.k8s.io
+          repository: ingress-nginx/kube-webhook-certgen
+          tag: v1.5.3
+          sha: ea3c8758a4eebfd1fd927a68c4d6d70415f6427b4355b7b90e4102fe4ad3843f
     resources:
       requests:
         cpu: 50m
