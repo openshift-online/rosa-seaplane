@@ -177,7 +177,7 @@ spec:
       - repoURL: '{{ '{{ .metadata.annotations.git_repo }}' }}'
         targetRevision: '{% if pinned %}{{ pinned }}{% else %}{{ "{{ .metadata.annotations.git_revision }}" }}{% endif %}'
         ref: operand
-        path: '{{ '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") }}{{ .path.path }}{{ end }}' }}'
+        path: '{{ '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") (eq .path.basename "argocd") }}{{ .path.path }}{{ end }}' }}'
         kustomize: {}
       - repoURL: '{{ "{{ .metadata.annotations.git_repo | replace \"github.com\" \"github.com:443\" }}" }}'
         targetRevision: '{{ '{{ .metadata.annotations.git_revision }}' }}'

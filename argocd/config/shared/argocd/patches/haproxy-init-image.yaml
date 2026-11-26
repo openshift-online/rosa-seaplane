@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-redis-ha-haproxy
+  namespace: argocd
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: config-init
+          image: registry.redhat.io/rhel9/valkey-8:9.9-1795268622
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 1001
+            runAsNonRoot: true

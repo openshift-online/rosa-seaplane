@@ -167,6 +167,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
               --set-string 'argo-cd.controller.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
               --set-string 'argo-cd.server.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
               --set-string 'argo-cd.repoServer.annotations.argocd\.argoproj\.io/tracking-id=argocd:argoproj.io/Application:argocd/argocd' \
+              --post-renderer "$REPO_DIR/argocd/config/shared/argocd/patches/helm-post-renderer.sh" \
               --wait --timeout=10m; then
               echo "ERROR: helm upgrade --install argocd failed. Dumping argocd namespace:"
               kubectl get pods,jobs -n argocd -o wide || true

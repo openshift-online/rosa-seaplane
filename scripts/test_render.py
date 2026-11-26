@@ -2069,7 +2069,7 @@ class TestMainIntegration:
             )
             assert sources[0]["targetRevision"] == expected_revision
             assert sources[1] == {
-                "path": '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") }}{{ .path.path }}{{ end }}',
+                "path": '{{ if or (eq .path.basename "cert-manager") (eq .path.basename "loki") (eq .path.basename "argocd") }}{{ .path.path }}{{ end }}',
                 "repoURL": "{{ .metadata.annotations.git_repo }}",
                 "targetRevision": expected_revision,
                 "ref": "operand",
@@ -2178,12 +2178,99 @@ class TestMainIntegration:
             "if ! kubectl get deployment argocd-server -n argocd 2>/dev/null; then"
             in bootstrap
         )
-        assert "--wait --timeout=10m" in bootstrap
+        assert (
+            '--post-renderer "$REPO_DIR/argocd/config/shared/argocd/patches/helm-post-renderer.sh"'
+            in bootstrap
+        )
+        assert "--wait --timeout=10m; then" in bootstrap
+        assert "kubectl patch deployment argocd-redis-ha-haproxy" not in bootstrap
         assert "skipping installation" in bootstrap
         assert "Dumping argocd namespace" in bootstrap
         wrapper = yaml.safe_load(values_file.read_text())
         assert wrapper["pullSecret"]["externalSecret"]["enabled"] is True
         assert values["repoServer"]["copyutil"]["extraArgs"] == "-n"
+
+        redis_ha = values["redis-ha"]
+        assert redis_ha["enabled"] is True
+        assert redis_ha["image"] == {
+            "repository": "registry.redhat.io/rhel9/valkey-8",
+            "tag": "9.9-1795268622",
+            "pullPolicy": "IfNotPresent",
+        }
+        assert redis_ha["imagePullSecrets"] == [{"name": "pull-secret"}]
+        assert redis_ha["securityContext"]["runAsUser"] is None
+        assert redis_ha["securityContext"]["fsGroup"] == 1001
+        assert redis_ha["containerSecurityContext"]["runAsUser"] is None
+        assert redis_ha["redis"]["customCommand"] == ["valkey-server"]
+        assert redis_ha["redis"]["customArgs"] == ["/data/conf/redis.conf"]
+        assert redis_ha["sentinel"]["customCommand"] == ["valkey-sentinel"]
+        assert redis_ha["sentinel"]["customArgs"] == ["/data/conf/sentinel.conf"]
+        assert redis_ha["exporter"]["enabled"] is False
+        assert redis_ha["haproxy"]["image"] == {
+            "repository": "registry.access.redhat.com/hi/haproxy",
+            "tag": "3.0.31",
+            "pullPolicy": "IfNotPresent",
+        }
+        assert redis_ha["haproxy"]["imagePullSecrets"] == [{"name": "pull-secret"}]
+        assert redis_ha["haproxy"]["securityContext"]["runAsUser"] == 999
+        assert redis_ha["haproxy"]["securityContext"]["fsGroup"] == 1001
+        assert redis_ha["haproxy"]["containerSecurityContext"]["runAsUser"] == 999
+        assert redis_ha["haproxy"]["containerSecurityContext"]["readOnlyRootFilesystem"] is True
+
+    def test_argocd_kustomize_operand_patches_haproxy_helper(self):
+        argocd = REAL_ARGOCD_CONFIG_DIR / "shared/argocd"
+        kustomization = load_yaml(argocd / "kustomization.yaml")
+        assert kustomization["helmCharts"] == [
+            {
+                "name": "argocd",
+                "releaseName": "argocd",
+                "namespace": "argocd",
+                "includeCRDs": True,
+                "valuesFile": "values.yaml",
+            }
+        ]
+        assert [patch["path"] for patch in kustomization["patches"]] == [
+            "patches/valkey-cli-compat.yaml",
+            "patches/haproxy-init-image.yaml",
+            "patches/keep-runtime-argocd-cm.yaml",
+            "patches/keep-runtime-argocd-rbac-cm.yaml",
+        ]
+        valkey_patch = load_yaml(argocd / "patches/valkey-cli-compat.yaml")
+        assert valkey_patch["metadata"]["name"] == "argocd-redis-ha-server"
+        sts_spec = valkey_patch["spec"]["template"]["spec"]
+        assert {"name": "valkey-cli-compat", "emptyDir": {}} in sts_spec["volumes"]
+        config_init = next(
+            container for container in sts_spec["initContainers"] if container["name"] == "config-init"
+        )
+        assert config_init["command"] == ["/bin/sh", "-ec"]
+        assert "command -v valkey-cli" in config_init["args"][0]
+        assert "ln -sfn" in config_init["args"][0]
+        for name in ("redis", "sentinel", "split-brain-fix"):
+            container = next(item for item in sts_spec["containers"] if item["name"] == name)
+            assert any(item["name"] == "valkey-cli-compat" for item in container["volumeMounts"])
+            assert any(item["name"] == "PATH" and "/valkey-cli:" in item["value"] for item in container["env"])
+
+        patch = load_yaml(argocd / "patches/haproxy-init-image.yaml")
+        assert patch["metadata"] == {
+            "name": "argocd-redis-ha-haproxy",
+            "namespace": "argocd",
+        }
+        haproxy_init = patch["spec"]["template"]["spec"]["initContainers"][0]
+        assert haproxy_init["name"] == "config-init"
+        assert haproxy_init["image"] == "registry.redhat.io/rhel9/valkey-8:9.9-1795268622"
+        assert haproxy_init["securityContext"]["runAsUser"] == 1001
+        for configmap_patch in kustomization["patches"][2:]:
+            patch = load_yaml(argocd / configmap_patch["path"])
+            assert patch["kind"] == "ConfigMap"
+            assert patch["$patch"] == "delete"
+
+    def test_argocd_helm_post_renderer_uses_kustomize_patch_file(self):
+        argocd = REAL_ARGOCD_CONFIG_DIR / "shared/argocd"
+        post_renderer = (argocd / "patches/helm-post-renderer.sh").read_text()
+        assert "cat >\"$work_dir/rendered.yaml\"" in post_renderer
+        assert 'cp "$patch_dir/valkey-cli-compat.yaml"' in post_renderer
+        assert 'cp "$patch_dir/haproxy-init-image.yaml"' in post_renderer
+        assert "kubectl kustomize \"$work_dir\"" in post_renderer
 
     def test_image_registry_account_id_flows_to_both_cluster_types(self, tmp_path):
         deploy_dir = self._run_main(
