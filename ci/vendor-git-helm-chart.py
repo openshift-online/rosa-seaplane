@@ -163,11 +163,24 @@ def main() -> None:
 
             archive = chart_dir / "charts" / archive_name
             archive.parent.mkdir(parents=True, exist_ok=True)
-            staged_archive = archive.with_name(f".{archive.name}.tmp")
-            shutil.copyfile(packaged, staged_archive)
-            os.replace(staged_archive, archive)
-            with gzip.open(archive, "rb") as packaged_tar:
+            with gzip.open(packaged, "rb") as packaged_tar:
                 digest = hashlib.sha256(packaged_tar.read()).hexdigest()
+
+            existing_digest = None
+            if archive.exists():
+                try:
+                    with gzip.open(archive, "rb") as existing_tar:
+                        existing_digest = hashlib.sha256(existing_tar.read()).hexdigest()
+                except OSError:
+                    pass
+
+            if existing_digest == digest:
+                print(f"Keeping existing {archive_name}; chart contents are unchanged")
+            else:
+                staged_archive = archive.with_name(f".{archive.name}.tmp")
+                shutil.copyfile(packaged, staged_archive)
+                os.replace(staged_archive, archive)
+
             checksums.append(f"{digest}  charts/{archive_name}")
             print(f"Vendored {name}@{expected_version} (sha256:{digest})")
 
