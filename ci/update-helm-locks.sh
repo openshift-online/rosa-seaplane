@@ -29,7 +29,7 @@ has_git_deps() {
 	if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
 		yq_bin="$root/bin/yq"
 	fi
-	deps="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | startswith("git+")) | .name' "$1")" || return 2
+	deps="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | test("^git[+]")) | .name' "$1")" || return 2
 	[[ -n "$deps" ]]
 }
 

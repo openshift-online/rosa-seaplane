@@ -86,7 +86,7 @@ check_git_sources() {
 	local dependency_count source_count i name repository dependency_repository revision chart_path version archive archive_name chart_name chart_version expected_sha checksum_entries actual_sha checksum_count
 	if [[ ! -f "$sources" ]]; then
 		local git_dependencies
-		git_dependencies="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | startswith("git+")) | .name' "$chart")"
+		git_dependencies="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | test("^git[+]")) | .name' "$chart")"
 		if [[ -n "$git_dependencies" ]]; then
 			echo "missing Git source manifest $sources for dependencies: $(tr '\n' ' ' <<<"$git_dependencies")"
 			mark_failure
