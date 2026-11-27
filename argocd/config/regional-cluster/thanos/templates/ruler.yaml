@@ -22,14 +22,17 @@ spec:
   alertmanagerURL: {{ .Values.ruler.alertmanagerURL | quote }}
   alertLabelDrop:
     - rule_replica
-  objectStorageConfig:
-    name: {{ .Values.objectStore.secretName }}
-    key: objstore.yml
+  rulerMode:
+    type: Stateful
+    stateful:
+      objectStorageConfig:
+        name: {{ .Values.objectStore.secretName }}
+        key: objstore.yml
+      retention: {{ .Values.ruler.retention | default "48h" }}
+      externalLabels:
+        rule_replica: "$(NAME)"
+        region: {{ .Values.global.aws_region | quote }}
   evaluationInterval: {{ .Values.ruler.evaluationInterval | default "1m" }}
-  retention: {{ .Values.ruler.retention | default "48h" }}
-  externalLabels:
-    rule_replica: "$(NAME)"
-    region: {{ .Values.global.aws_region | quote }}
   resourceRequirements:
     requests:
       cpu: {{ .Values.ruler.resources.requests.cpu }}
