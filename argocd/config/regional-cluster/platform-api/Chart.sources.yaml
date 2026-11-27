@@ -1,0 +1,6 @@
+sources:
+  - name: platform-api
+    version: 0.1.0
+    repository: https://github.com/openshift-online/rosa-seaplane-api.git
+    revision: 1d713c2d1d9eca230a80fb2c0eb65202a63bd6a9
+    chartPath: seaplane-api/charts

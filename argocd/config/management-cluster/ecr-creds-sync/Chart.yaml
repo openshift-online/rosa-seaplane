@@ -5,3 +5,9 @@ description: >
   Wrapper chart — renders an ArgoCD Application that sources the ecr-creds-sync
   chart from the rosa-seaplane-ecr-creds-sync repository. Follows the same
   wrapper pattern as hyperfleet (seaplane-operator) and platform-api.
+dependencies:
+  - name: ecr-creds-sync
+    version: 0.1.0
+    repository: git+https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync.git
+    revision: 5b0a58e4ef8c27f69cb60d843b7b47fff89497d9
+    chartPath: helm

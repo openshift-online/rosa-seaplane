@@ -4,3 +4,9 @@ description: A Helm chart that deploys an ArgoCD Application for seaplane-operat
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+dependencies:
+  - name: seaplane-operator
+    version: 0.1.0
+    repository: git+https://github.com/openshift-online/rosa-seaplane-api.git
+    revision: 1d713c2d1d9eca230a80fb2c0eb65202a63bd6a9
+    chartPath: seaplane-operator/charts

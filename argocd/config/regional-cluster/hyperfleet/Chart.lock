@@ -1,0 +1,6 @@
+dependencies:
+- name: seaplane-operator
+  version: 0.1.0
+  repository: git+https://github.com/openshift-online/rosa-seaplane-api.git
+digest: sha256:12fc83d3179aed62cd77eb9a86060dcd51d41243d626f54cbdd0d47c86ed408b
+generated: '2026-11-27T21:34:29.515854+00:00'

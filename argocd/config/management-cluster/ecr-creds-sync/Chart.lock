@@ -1,0 +1,6 @@
+dependencies:
+- name: ecr-creds-sync
+  version: 0.1.0
+  repository: git+https://github.com/openshift-online/rosa-seaplane-ecr-creds-sync.git
+digest: sha256:1de5456a126c0327c6272fdc06b3568c68093aeef4f40191cb109004584e1325
+generated: '2026-11-27T21:37:27.014272+00:00'

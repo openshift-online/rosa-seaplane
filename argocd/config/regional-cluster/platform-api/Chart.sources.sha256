@@ -1,0 +1,2 @@
+# SHA-256 of the normalized uncompressed tar payload (gzip output can vary by toolchain).
+c21cb5b410c0118936879dbf78d3695c461a59d32e2978e1380198c8fde8f866  charts/platform-api-0.1.0.tgz

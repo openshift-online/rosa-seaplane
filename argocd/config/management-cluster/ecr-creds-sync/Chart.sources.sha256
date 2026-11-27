@@ -1,0 +1,2 @@
+# SHA-256 of the normalized uncompressed tar payload (gzip output can vary by toolchain).
+9fce72574263257ba99722285c7264a3187ec7e1ac216e5e52ab26f82f724143  charts/ecr-creds-sync-0.1.0.tgz

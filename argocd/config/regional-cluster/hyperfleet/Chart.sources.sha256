@@ -1,0 +1,2 @@
+# SHA-256 of the normalized uncompressed tar payload (gzip output can vary by toolchain).
+7b13a59166d876e52cb64a29290b88b451ec9bf0b049796b66c4627507b5a2f6  charts/seaplane-operator-0.1.0.tgz
