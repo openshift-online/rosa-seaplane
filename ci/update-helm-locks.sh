@@ -14,12 +14,13 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
 has_deps() {
-	ensure_yq
 	local yq_bin="${YQ:-yq}"
+	local deps
 	if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
 		yq_bin="$root/bin/yq"
 	fi
-	[[ -n "$("$yq_bin" -r '.dependencies[]? | .name' "$1")" ]]
+	deps="$("$yq_bin" -r '.dependencies[]? | .name' "$1")" || return 2
+	[[ -n "$deps" ]]
 }
 
 ensure_yq() {
@@ -38,20 +39,24 @@ update_one() {
 		echo "missing $chart" >&2
 		return 1
 	fi
-	if [[ -f "$dir/Chart.sources.yaml" ]] || { [[ -f "$dir/Chart.lock" ]] && grep -Eq '^[[:space:]]*repository:[[:space:]]*git\+' "$dir/Chart.lock"; }; then
-		if [[ ! -f "$dir/Chart.sources.yaml" ]] || ! grep -Eq '^[[:space:]]*repository:[[:space:]]*git\+' "$dir/Chart.lock"; then
-			echo "$dir must have both Chart.sources.yaml and a git+ Chart.lock dependency" >&2
-			return 1
-		fi
+	if [[ -f "$dir/Chart.sources.yaml" ]]; then
 		uv run "$root/ci/vendor-git-helm-chart.py" "$dir"
 		return
 	fi
-	if [[ -f "$dir/Chart.sources.yaml" ]]; then
-		echo "$dir has Chart.sources.yaml but Chart.lock does not declare a git+ dependency" >&2
+	if [[ -f "$dir/Chart.lock" ]] && grep -Eq '^[[:space:]]*repository:[[:space:]]*git\+' "$dir/Chart.lock"; then
+		echo "$dir has a git+ Chart.lock dependency but no Chart.sources.yaml" >&2
 		return 1
 	fi
-	if ! has_deps "$chart"; then
+	ensure_yq
+	if has_deps "$chart"; then
+		:
+	else
+		local has_deps_status=$?
+		if [[ "$has_deps_status" != "1" ]]; then
+			return "$has_deps_status"
+		fi
 		echo "skip $dir (no dependencies)"
+		rm -f "$dir/Chart.lock" "$dir/Chart.sources.sha256" "$dir"/charts/*.tgz
 		return 0
 	fi
 	if ! command -v helm >/dev/null 2>&1; then

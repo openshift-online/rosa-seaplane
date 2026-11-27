@@ -85,15 +85,14 @@ def main() -> None:
     dependencies = chart_meta.get("dependencies", [])
     sources = source_meta.get("sources", [])
 
-    if not dependencies or len(dependencies) != len(sources):
+    if len(dependencies) != len(sources):
         raise SystemExit("Chart.sources.yaml must pin every dependency in Chart.yaml")
-    sync_chart_lock(chart_dir, dependencies)
 
     source_by_name = {source["name"]: source for source in sources}
     if len(source_by_name) != len(sources):
         raise SystemExit("Chart.sources.yaml contains duplicate dependency names")
 
-    checksums: list[str] = []
+    prepared: list[tuple[str, Path, str]] = []
     with tempfile.TemporaryDirectory(prefix="helm-git-vendor-") as temp:
         temp_dir = Path(temp)
 
@@ -161,11 +160,24 @@ def main() -> None:
                     f"expected {name}@{expected_version}"
                 )
 
-            archive = chart_dir / "charts" / archive_name
-            archive.parent.mkdir(parents=True, exist_ok=True)
             with gzip.open(packaged, "rb") as packaged_tar:
                 digest = hashlib.sha256(packaged_tar.read()).hexdigest()
+            prepared.append((archive_name, packaged, digest))
 
+        # Validate and prepare every dependency before changing the lock or
+        # charts/ contents. This prevents a failed fetch/package from leaving a
+        # partially updated vendor directory.
+        sync_chart_lock(chart_dir, dependencies)
+        charts_dir = chart_dir / "charts"
+        charts_dir.mkdir(parents=True, exist_ok=True)
+        expected_archives = {archive_name for archive_name, _, _ in prepared}
+        for existing in charts_dir.glob("*.tgz"):
+            if existing.name not in expected_archives:
+                existing.unlink()
+
+        checksums = []
+        for archive_name, packaged, digest in prepared:
+            archive = charts_dir / archive_name
             existing_digest = None
             if archive.exists():
                 try:
@@ -182,7 +194,7 @@ def main() -> None:
                 os.replace(staged_archive, archive)
 
             checksums.append(f"{digest}  charts/{archive_name}")
-            print(f"Vendored {name}@{expected_version} (sha256:{digest})")
+            print(f"Vendored {archive_name} (sha256:{digest})")
 
     checksum_file = chart_dir / "Chart.sources.sha256"
     checksum_file.write_text(

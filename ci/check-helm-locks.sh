@@ -84,7 +84,15 @@ check_git_sources() {
 	local sources="$dir/Chart.sources.yaml"
 	local checksums="$dir/Chart.sources.sha256"
 	local dependency_count source_count i name repository dependency_repository revision chart_path version archive archive_name chart_name chart_version expected_sha checksum_entries actual_sha checksum_count
-	[[ -f "$sources" ]] || return 0
+	if [[ ! -f "$sources" ]]; then
+		local git_dependencies
+		git_dependencies="$("$yq_bin" -r '.dependencies[]? | select(.repository | startswith("git+")) | .name' "$chart")"
+		if [[ -n "$git_dependencies" ]]; then
+			echo "missing Git source manifest $sources for dependencies: $(tr '\n' ' ' <<<"$git_dependencies")"
+			mark_failure
+		fi
+		return 0
+	fi
 
 	dependency_count="$("$yq_bin" -r '.dependencies | length' "$chart")"
 	source_count="$("$yq_bin" -r '.sources | length' "$sources")"
