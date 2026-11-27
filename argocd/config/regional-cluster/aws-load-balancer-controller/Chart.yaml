@@ -9,5 +9,5 @@ dependencies:
     # Keep 1.17.1 until 3.x is tested with cert-manager-managed webhook certs.
     # Version 3.6.2 caused intermittent serving-cert/caBundle mismatches during
     # RC bootstrap (ROSAENG-75299).
-    version: 1.17.1
+    version: 3.6.2
     repository: https://aws.github.io/eks-charts
