@@ -23,6 +23,16 @@ has_deps() {
 	[[ -n "$deps" ]]
 }
 
+has_git_deps() {
+	local yq_bin="${YQ:-yq}"
+	local deps
+	if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
+		yq_bin="$root/bin/yq"
+	fi
+	deps="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | startswith("git+")) | .name' "$1")" || return 2
+	[[ -n "$deps" ]]
+}
+
 ensure_yq() {
 	local yq_bin="${YQ:-yq}"
 	if command -v "$yq_bin" >/dev/null 2>&1 || [[ -x "$root/bin/yq" ]]; then
@@ -43,13 +53,17 @@ update_one() {
 		uv run "$root/ci/vendor-git-helm-chart.py" "$dir"
 		return
 	fi
-	if [[ -f "$dir/Chart.lock" ]] && grep -Eq '^[[:space:]]*repository:[[:space:]]*git\+' "$dir/Chart.lock"; then
-		echo "$dir has a git+ Chart.lock dependency but no Chart.sources.yaml" >&2
-		return 1
-	fi
 	ensure_yq
 	if has_deps "$chart"; then
-		:
+		if has_git_deps "$chart"; then
+			echo "$dir declares a git+ dependency but has no Chart.sources.yaml" >&2
+			return 1
+		else
+			local git_deps_status=$?
+			if [[ "$git_deps_status" != "1" ]]; then
+				return "$git_deps_status"
+			fi
+		fi
 	else
 		local has_deps_status=$?
 		if [[ "$has_deps_status" != "1" ]]; then

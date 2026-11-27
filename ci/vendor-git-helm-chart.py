@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -183,7 +184,7 @@ def main() -> None:
                 try:
                     with gzip.open(archive, "rb") as existing_tar:
                         existing_digest = hashlib.sha256(existing_tar.read()).hexdigest()
-                except OSError:
+                except (OSError, EOFError, zlib.error):
                     pass
 
             if existing_digest == digest:
