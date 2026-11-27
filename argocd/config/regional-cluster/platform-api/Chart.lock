@@ -1,0 +1,6 @@
+dependencies:
+- name: platform-api
+  version: 0.1.0
+  repository: git+https://github.com/openshift-online/rosa-seaplane-api.git
+digest: sha256:b7d4046d6c346a0a2d89afc2d2266cc6ae834c0c5e9254b92a97456733edd90b
+generated: '2026-11-27T21:32:17.658593+00:00'
