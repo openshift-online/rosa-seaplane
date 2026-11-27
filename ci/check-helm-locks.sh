@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Fail if a wrapper chart's Chart.lock is missing, stale vs Chart.yaml
-# (name, version, and repository), missing a vendored
-# charts/<name>-<version>.tgz, or has extra archives / unpacked subcharts
-# that are not locked. Offline / hermetic — does not fetch.
+# Fail if a wrapper chart's Chart.lock is missing/stale vs Chart.yaml
+# (name, version, and repository), a vendored archive is missing, or there
+# are extra archives/unpacked subcharts. Git-sourced archives are checked
+# against Chart.sources.yaml. Offline / hermetic — does not fetch.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -78,6 +78,77 @@ reject_unexpected() {
 	shopt -u nullglob
 }
 
+check_git_sources() {
+	local dir="$1"
+	local chart="$dir/Chart.yaml"
+	local sources="$dir/Chart.sources.yaml"
+	local checksums="$dir/Chart.sources.sha256"
+	local dependency_count source_count i name repository dependency_repository revision chart_path version archive archive_name chart_name chart_version
+	[[ -f "$sources" ]] || return 0
+
+	dependency_count="$("$yq_bin" -r '.dependencies | length' "$chart")"
+	source_count="$("$yq_bin" -r '.sources | length' "$sources")"
+	if [[ "$dependency_count" != "$source_count" ]]; then
+		echo "Chart.sources.yaml must pin every dependency in $dir"
+		mark_failure
+		return
+	fi
+	if [[ ! -f "$checksums" ]]; then
+		echo "missing Git-vendor checksum file $checksums"
+		mark_failure
+		return
+	fi
+
+	for ((i = 0; i < source_count; i++)); do
+		name="$("$yq_bin" -r ".sources[$i].name" "$sources")"
+		repository="$("$yq_bin" -r ".sources[$i].repository" "$sources")"
+		dependency_repository="$(SOURCE_NAME="$name" "$yq_bin" -r '.dependencies[] | select(.name == strenv(SOURCE_NAME)) | .repository' "$chart")"
+		revision="$("$yq_bin" -r ".sources[$i].revision" "$sources")"
+		chart_path="$("$yq_bin" -r ".sources[$i].chartPath" "$sources")"
+		version="$(SOURCE_NAME="$name" "$yq_bin" -r '.dependencies[] | select(.name == strenv(SOURCE_NAME)) | .version' "$chart")"
+		archive_name="$name-$version.tgz"
+		archive="$dir/charts/$archive_name"
+
+		if [[ -z "$version" || "$version" == "null" ]]; then
+			echo "Git source $name in $sources has no matching Chart.yaml dependency"
+			mark_failure
+			continue
+		fi
+		if [[ "$dependency_repository" != "git+$repository" ]]; then
+			echo "Chart.yaml Git source marker does not match $sources for $name"
+			mark_failure
+		fi
+		if [[ ! "$repository" =~ ^https://.+\.git$ || ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+			echo "invalid Git source URL or full commit SHA for $name in $sources"
+			mark_failure
+			continue
+		fi
+		case "$chart_path" in
+			""|/*|../*|*/../*|*/..)
+				echo "invalid chartPath for $name in $sources: $chart_path"
+				mark_failure
+				continue
+			;;
+		esac
+		if [[ ! -f "$archive" ]]; then
+			echo "missing Git-vendored archive $archive"
+			mark_failure
+			continue
+		fi
+
+		chart_name="$(tar -xOzf "$archive" "$name/Chart.yaml" | "$yq_bin" -r '.name')"
+		chart_version="$(tar -xOzf "$archive" "$name/Chart.yaml" | "$yq_bin" -r '.version')"
+		if [[ "$chart_name" != "$name" || "$chart_version" != "$version" ]]; then
+			echo "Git-vendored chart metadata mismatch for $archive: got $chart_name@$chart_version"
+			mark_failure
+		fi
+		done
+	if ! (cd "$dir" && sha256sum --status -c "$(basename "$checksums")"); then
+		echo "Git-vendored archive checksum mismatch for $dir"
+		mark_failure
+	fi
+}
+
 while IFS= read -r chart; do
 	[[ -n "$chart" ]] || continue
 	dir="$(dirname "$chart")"
@@ -130,6 +201,7 @@ while IFS= read -r chart; do
 	done <<<"$lock_deps"
 
 	reject_unexpected "$dir" "$expected"
+	check_git_sources "$dir"
 	report_chart "$display_chart"
 done <<<"$chart_files"
 

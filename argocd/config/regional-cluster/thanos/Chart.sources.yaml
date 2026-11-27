@@ -1,0 +1,8 @@
+# Git source pins for dependencies packaged into charts/*.tgz. Helm itself
+# does not fetch Git repositories; the repository's `make helm-deps` handles
+# the git+ source marker in Chart.yaml and vendors these pinned chart paths.
+sources:
+  - name: thanos-operator
+    repository: https://github.com/thanos-community/thanos-operator.git
+    revision: a7e79d79c48288e7b12880a4907d7ef748796f7a
+    chartPath: helm/chart

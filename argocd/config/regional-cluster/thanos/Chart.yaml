@@ -23,4 +23,4 @@ keywords:
 dependencies:
   - name: thanos-operator
     version: 0.1.0
-    repository: oci://quay.io/bsmit/rhobs-thanos-operator-chart
+    repository: git+https://github.com/thanos-community/thanos-operator.git # Resolved by make helm-deps; keep the vendored archive committed.
