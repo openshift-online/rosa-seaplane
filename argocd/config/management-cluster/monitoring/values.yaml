@@ -16,6 +16,14 @@ kube-prometheus-stack:
     upgradeJob:
       enabled: true
       forceConflicts: true
+      # CRD apply Job. Red Hat Hardened Images kubectl, not registry.k8s.io.
+      # 1.35 stays within one minor of EKS 1.34 (kubectl version skew).
+      image:
+        kubectl:
+          registry: registry.access.redhat.com
+          repository: hi/kubectl
+          tag: "1.35"
+          sha: ae70d11bcfa0a4eb2b2ccf99471329691dddebd452537f821109d496fe533e15
 
   defaultRules:
     create: false
