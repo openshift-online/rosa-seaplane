@@ -61,7 +61,9 @@ tf_init_backend() {
 # ──────────────────────────────────────────────────────────────────────────────
 # Function: tf_apply
 # Run terraform apply or destroy using TF_VAR_* values from the environment.
-# Sources imports.sh if present (apply only).
+# Sources imports.sh if present (apply only) and pre-destroy.sh if present
+# (destroy only). pre-destroy.sh detaches resources this state no longer owns;
+# if it fails, destroy does not run.
 #
 # Args:
 #   $1 - Terraform directory
@@ -94,6 +96,26 @@ tf_apply() {
             cd "${tf_dir}"
             source imports.sh
         )
+    fi
+
+    # Detach resources this state no longer owns (for destroy only). Refuse to
+    # destroy when the detach fails — a `removed` block does not protect them
+    # here, because terraform destroy ignores it.
+    if [ "${action}" == "destroy" ] && [ -f "${tf_dir}/pre-destroy.sh" ]; then
+        echo "  Sourcing ${tf_dir}/pre-destroy.sh to detach relinquished resources from state"
+        # Fail closed. errexit is suppressed inside a condition subshell, so
+        # the hook's own status is checked explicitly (a syntax error or a
+        # truncated file must not read as success), and the counter defaults to
+        # failure so that a missing lib.sh — which never initialises it — also
+        # stops the destroy instead of silently skipping the detach.
+        if ! (
+            cd "${tf_dir}"
+            source pre-destroy.sh || exit 1
+            [ "${_TF_STATE_RM_FAILED:-1}" -eq 0 ]
+        ); then
+            echo "ERROR: ${tf_dir}/pre-destroy.sh failed — refusing to run terraform destroy" >&2
+            return 1
+        fi
     fi
 
     terraform -chdir="${tf_dir}" "${action}" \

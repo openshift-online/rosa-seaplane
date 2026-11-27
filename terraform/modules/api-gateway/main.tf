@@ -120,36 +120,80 @@ resource "aws_api_gateway_deployment" "main" {
 # API Gateway Account — CloudWatch logging role (account-level, one per region)
 #
 # API Gateway requires an account-level IAM role before any stage can write
-# access logs to CloudWatch. Without aws_api_gateway_account, access_log_settings
-# on the stage is silently ignored.
+# access logs to CloudWatch. Without it, access_log_settings on the stage is
+# silently ignored.
+#
+# That setting is an AWS singleton: exactly one cloudwatchRoleArn per AWS
+# account and region, shared by every REST API in the account — including the
+# RHOBS gateway, which has no account resource of its own. This module used to
+# declare it, which made every regional cluster state a competing owner of one
+# shared value: the newest apply won, and a teardown cleared the setting for
+# every surviving cluster in the account, because the provider's delete
+# unconditionally resets /cloudwatchRoleArn without checking whether the stored
+# ARN is still the live one.
+#
+# The role and the account settings are therefore an account-level prerequisite
+# provisioned once per AWS account and region, outside this repository, with a
+# lifetime longer than any cluster — and provisioned before the first cluster
+# is deployed into the account. This module consumes them and manages neither.
+# See docs/design/api-gateway-account-ownership.md.
 # -----------------------------------------------------------------------------
 
-resource "aws_iam_role" "api_gateway_cloudwatch" {
-  name = "${var.regional_id}-api-gateway-cloudwatch"
+# Ownership handover. `removed` forgets the previous per-cluster copies on the
+# next apply without destroying anything — in particular without triggering the
+# account reset. Harmless on a state that never had them, and a no-op once the
+# state has applied this change. Keep until every regional cluster state has
+# applied at least once.
+removed {
+  from = aws_api_gateway_account.main
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "apigateway.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-
-  tags = merge(local.common_tags, {
-    Name = "${var.regional_id}-api-gateway-cloudwatch"
-  })
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_iam_role_policy_attachment" "api_gateway_cloudwatch" {
-  role       = aws_iam_role.api_gateway_cloudwatch.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+removed {
+  from = aws_iam_role_policy_attachment.api_gateway_cloudwatch
+
+  lifecycle {
+    destroy = false
+  }
 }
 
-resource "aws_api_gateway_account" "main" {
-  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
+removed {
+  from = aws_iam_role.api_gateway_cloudwatch
 
-  depends_on = [aws_iam_role_policy_attachment.api_gateway_cloudwatch]
+  lifecycle {
+    destroy = false
+  }
+}
+
+# The prerequisite is mandatory, not optional: aws_api_gateway_method_settings
+# below enables execution logging, and API Gateway rejects that with
+# "CloudWatch Logs role ARN must be set in account settings to enable logging"
+# while the account has no logging role. An account must therefore be
+# provisioned before the first regional cluster is deployed into it.
+#
+# This block is an advisory diagnostic, not a gate and not a policy evaluator.
+# It reads the role by name so the plan names a missing prerequisite instead of
+# leaving an opaque BadRequestException at apply time, and text-matches the
+# trust policy. A scoped data source inside `check` reports a read failure as a
+# warning rather than an error.
+#
+# It does NOT verify that the account's cloudwatchRoleArn setting exists or
+# points at this role, that the managed policy is attached, that the trust
+# policy actually permits the assume (effects, actions and conditions are not
+# evaluated), or that any log event is delivered. Those need a live account.
+# See docs/design/api-gateway-account-ownership.md ("Diagnostic scope").
+check "api_gateway_account_logging_role" {
+  data "aws_iam_role" "api_gateway_cloudwatch" {
+    name = var.cloudwatch_role_name
+  }
+
+  assert {
+    condition     = can(regex("apigateway\\.amazonaws\\.com", data.aws_iam_role.api_gateway_cloudwatch.assume_role_policy))
+    error_message = "IAM role ${var.cloudwatch_role_name} exists but its trust policy does not mention apigateway.amazonaws.com. This is a text match on the trust policy only: it does not evaluate effects or conditions, the attached permissions, or the account's cloudwatchRoleArn setting."
+  }
 }
 
 # =============================================================================
@@ -259,10 +303,9 @@ resource "aws_api_gateway_stage" "main" {
     Name = "${var.regional_id}-api-${var.stage_name}"
   })
 
-  depends_on = [
-    aws_cloudwatch_log_group.api_gateway_access,
-    aws_api_gateway_account.main,
-  ]
+  # The account-level logging role is a prerequisite of the account, not of
+  # this stage, so there is nothing in this configuration to order against.
+  depends_on = [aws_cloudwatch_log_group.api_gateway_access]
 }
 
 # -----------------------------------------------------------------------------
