@@ -3,11 +3,11 @@ apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
 metadata:
   name: thanos-receive
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   serviceRef:
     # Service created by thanos-community operator for the router
@@ -22,11 +22,11 @@ apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
 metadata:
   name: thanos-query-frontend
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   serviceRef:
     name: {{ .Values.thanos.queryTargetGroup.serviceName | default "thanos-query-frontend-thanos-query" }}
@@ -40,11 +40,11 @@ apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
 metadata:
   name: thanos-query-frontend-sre
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   serviceRef:
     name: thanos-query-frontend-thanos-query

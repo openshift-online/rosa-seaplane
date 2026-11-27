@@ -3,13 +3,15 @@ apiVersion: monitoring.thanos.io/v1alpha1
 kind: ThanosCompact
 metadata:
   name: thanos-compact
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   {{- include "thanos.operandImage" . | nindent 2 }}
+  imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 4 }}
   resourceRequirements:
     requests:
       cpu: {{ .Values.compactor.resources.requests.cpu }}

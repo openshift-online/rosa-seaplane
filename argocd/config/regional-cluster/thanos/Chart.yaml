@@ -1,8 +1,8 @@
 apiVersion: v2
 name: thanos-operator
-description: Slim wrapper deploying Thanos platform resources; operator itself comes from upstream thanos-community chart via app-of-apps
+description: Thanos operator and regional Thanos platform resources
 type: application
-version: 0.4.0
+version: 0.5.0
 appVersion: "0.1.0-alpha"
 home: https://github.com/openshift-online/rosa-seaplane
 sources:
@@ -20,3 +20,7 @@ keywords:
   - observability
   - rosa
   - eks
+dependencies:
+  - name: thanos-operator
+    version: 0.1.0
+    repository: oci://quay.io/bsmit/rhobs-thanos-operator-chart
