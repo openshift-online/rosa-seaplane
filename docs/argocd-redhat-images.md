@@ -48,4 +48,4 @@ Repo-server `copyutil` is different. The chart default is `cp --update=none`, wh
 
 `registry.redhat.io` needs `pull-secret` in `argocd`. ECS bootstrap seeds it from SSM `/infra/pull-secret` before Helm and sets `pullSecret.externalSecret.enabled=false` so Helm does not apply the ExternalSecret (ESO CRD is not installed yet; `SkipDryRunOnMissingResource` is Argo CD-only). After ESO syncs, Argo CD creates the ExternalSecret (`creationPolicy: Orphan`) to refresh the Secret.
 
-Bootstrap always runs `helm upgrade --install --wait --timeout=20m`. It does not skip when `argocd-server` already exists: a timed-out first install still leaves that Deployment, and skipping leaves a failed Helm release. On Helm failure the task dumps pods, jobs, events, and `helm status` in `argocd`.
+Bootstrap runs `helm upgrade --install --wait --timeout=10m`. It skips Helm when the `argocd-server` Deployment already exists: re-running bootstrap on a provisioned cluster is a no-op. A timed-out first install can still be skipped because the Deployment may remain even after Helm failure. On Helm failure the task dumps pods, jobs, events, and `helm status` in `argocd`.

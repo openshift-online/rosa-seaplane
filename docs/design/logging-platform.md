@@ -294,7 +294,7 @@ Three dashboards deployed as ConfigMaps with `grafana_dashboard: "1"` label (sid
 **Path to FIPS compliance** (if required for FedRAMP Moderate):
 
 1. **Loki / Vector**: Treat the Logging operand images as the RH binary source. Do not install Loki Operator or CLO on EKS. A FIPS claim for this topology needs a separate assessment; Konflux rebuilds are the type-3 path if catalog images are not accepted.
-2. Grafana stays `grafana-oss:11.4.0` (`ose-grafana` is not Grafana 11). See [Loki and Grafana Red Hat images](../loki-grafana-redhat-images.md).
+2. Grafana uses the Red Hat hardened image `rhel10/grafana` (the `10.3` tag is the RHEL stream, not the Grafana version). See [Loki and Grafana Red Hat images](../loki-grafana-redhat-images.md).
 
 For FedRAMP Moderate in US commercial regions, the FIPS S3 endpoints satisfy the network-level requirement (SC-13 for data in transit to S3). The binary-level gap affects internal TLS handshakes only.
 
