@@ -213,7 +213,7 @@ argo-cd:
       image:
         repository: registry.access.redhat.com/hi/haproxy
         # Pin the registry digest before promotion.
-        tag: "3.0.31"
+        tag: "3.0.32"
         pullPolicy: IfNotPresent
       imagePullSecrets:
         - name: pull-secret
