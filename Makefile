@@ -150,8 +150,12 @@ check-helm-locks: $(YQ) ## Verify Chart.lock matches Chart.yaml and vendored tgz
 
 # Needs network. After bumping a dependency version in Chart.yaml:
 #   make helm-deps CHART=argocd/config/shared/argocd
-# then commit Chart.lock and charts/*.tgz. MintMaker is not wired to this yet.
-helm-deps: $(YQ) ## Refresh Chart.lock and vendored tgz from Chart.yaml
+# Git-sourced dependencies use Chart.sources.yaml and are packaged from their
+# pinned commit without a Helm binary; other dependencies use Helm's configured
+# chart repository.
+# Commit Chart.lock, Chart.sources.yaml, Chart.sources.sha256, and charts/*.tgz.
+# MintMaker is not wired to this yet.
+helm-deps: ## Refresh Chart.lock and vendored tgz from Chart.yaml / Chart.sources.yaml
 	@YQ="$(YQ)" ./ci/update-helm-locks.sh
 
 check-rendered-files: ## Verify deploy/ is up to date with config.yaml

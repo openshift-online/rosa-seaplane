@@ -3,14 +3,16 @@ apiVersion: monitoring.thanos.io/v1alpha1
 kind: ThanosQuery
 metadata:
   name: thanos-query
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   # This chart owns the Thanos CRs. The operator Helm chart does not ship them.
   {{- include "thanos.operandImage" . | nindent 2 }}
+  imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 4 }}
   replicas: {{ .Values.query.replicas | default 2 }}
   replicaLabels:
     - prometheus_replica
@@ -25,6 +27,8 @@ spec:
   # Query will auto-discover stores via operator labels
   queryFrontend:
     {{- include "thanos.operandImage" . | nindent 4 }}
+    imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
     replicas: {{ .Values.query.frontend.replicas | default 1 }}
     resourceRequirements:
       requests:

@@ -1,0 +1,6 @@
+dependencies:
+- name: thanos-operator
+  repository: git+https://github.com/thanos-community/thanos-operator.git
+  version: 0.1.0
+digest: sha256:423fc5d7b4900873e8702dda3790707e7c28d84d215344ae33acd338f6448a52
+generated: "2026-11-11T18:49:23.470449+05:30"

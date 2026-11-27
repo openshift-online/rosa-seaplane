@@ -3,11 +3,11 @@ apiVersion: monitoring.thanos.io/v1alpha1
 kind: ThanosReceive
 metadata:
   name: thanos-receive
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   ingesterSpec:
     defaultObjectStorageConfig:
@@ -22,6 +22,8 @@ spec:
     hashrings:
       - name: default
         {{- include "thanos.operandImage" . | nindent 8 }}
+        imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 10 }}
         replicas: {{ .Values.receive.replicas }}
         tsdbConfig:
           retention: {{ .Values.receive.retention }}
@@ -41,6 +43,8 @@ spec:
           {{- end }}
   routerSpec:
     {{- include "thanos.operandImage" . | nindent 4 }}
+    imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
     replicas: {{ .Values.receive.router.replicas | default 1 }}
     replicationFactor: {{ .Values.receive.replicationFactor }}
     resourceRequirements:

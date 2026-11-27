@@ -3,13 +3,15 @@ apiVersion: monitoring.thanos.io/v1alpha1
 kind: ThanosRuler
 metadata:
   name: thanos-ruler
-  namespace: {{ include "thanos-operator.namespace" . }}
+  namespace: {{ include "seaplane-thanos.namespace" . }}
   labels:
-    {{- include "thanos-operator.labels" . | nindent 4 }}
+    {{- include "seaplane-thanos.labels" . | nindent 4 }}
   annotations:
-    {{- include "thanos-operator.annotations" . | nindent 4 }}
+    {{- include "seaplane-thanos.annotations" . | nindent 4 }}
 spec:
   {{- include "thanos.operandImage" . | nindent 2 }}
+  imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 4 }}
   replicas: {{ .Values.ruler.replicas | default 2 }}
   queryLabelSelector:
     matchLabels:
@@ -20,14 +22,17 @@ spec:
   alertmanagerURL: {{ .Values.ruler.alertmanagerURL | quote }}
   alertLabelDrop:
     - rule_replica
-  objectStorageConfig:
-    name: {{ .Values.objectStore.secretName }}
-    key: objstore.yml
+  rulerMode:
+    type: Stateful
+    stateful:
+      objectStorageConfig:
+        name: {{ .Values.objectStore.secretName }}
+        key: objstore.yml
+      retention: {{ .Values.ruler.retention | default "48h" }}
+      externalLabels:
+        rule_replica: "$(NAME)"
+        region: {{ .Values.global.aws_region | quote }}
   evaluationInterval: {{ .Values.ruler.evaluationInterval | default "1m" }}
-  retention: {{ .Values.ruler.retention | default "48h" }}
-  externalLabels:
-    rule_replica: "$(NAME)"
-    region: {{ .Values.global.aws_region | quote }}
   resourceRequirements:
     requests:
       cpu: {{ .Values.ruler.resources.requests.cpu }}

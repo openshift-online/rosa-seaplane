@@ -1,32 +1,45 @@
 #!/usr/bin/env bash
 # Refresh Chart.lock and charts/<name>-<version>.tgz from Chart.yaml.
+# Charts with Chart.sources.yaml are packaged from their pinned Git commits.
 #
 #   make helm-deps
 #   make helm-deps CHART=argocd/config/shared/argocd
 #
-# Needs network. Does not unpack archives. After a Chart.yaml version bump,
-# commit the lock and tgz this writes; make check-helm-locks must pass.
+# Needs network. Git-sourced dependencies are fetched at their pinned commit
+# and packaged deterministically without a Helm binary. Other dependencies use
+# Helm's normal repository resolver.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-if ! command -v helm >/dev/null 2>&1; then
-	echo "helm is required" >&2
-	exit 1
-fi
-
-yq_bin="${YQ:-yq}"
-if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
-	yq_bin="$root/bin/yq"
-fi
-if ! command -v "$yq_bin" >/dev/null 2>&1; then
-	echo "yq is required (install via make helm-deps, which fetches ./bin/yq)." >&2
-	exit 1
-fi
-
 has_deps() {
-	[[ -n "$("$yq_bin" -r '.dependencies[]? | .name' "$1")" ]]
+	local yq_bin="${YQ:-yq}"
+	local deps
+	if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
+		yq_bin="$root/bin/yq"
+	fi
+	deps="$("$yq_bin" -r '.dependencies[]? | .name' "$1")" || return 2
+	[[ -n "$deps" ]]
+}
+
+has_git_deps() {
+	local yq_bin="${YQ:-yq}"
+	local deps
+	if ! command -v "$yq_bin" >/dev/null 2>&1 && [[ -x "$root/bin/yq" ]]; then
+		yq_bin="$root/bin/yq"
+	fi
+	deps="$("$yq_bin" -r '.dependencies[]? | select((.repository // "") | test("^git[+]")) | .name' "$1")" || return 2
+	[[ -n "$deps" ]]
+}
+
+ensure_yq() {
+	local yq_bin="${YQ:-yq}"
+	if command -v "$yq_bin" >/dev/null 2>&1 || [[ -x "$root/bin/yq" ]]; then
+		return 0
+	fi
+	echo "installing yq for repository-based chart dependencies"
+	make "$root/bin/yq"
 }
 
 update_one() {
@@ -36,9 +49,33 @@ update_one() {
 		echo "missing $chart" >&2
 		return 1
 	fi
-	if ! has_deps "$chart"; then
+	if [[ -f "$dir/Chart.sources.yaml" ]]; then
+		uv run "$root/ci/vendor-git-helm-chart.py" "$dir"
+		return
+	fi
+	ensure_yq
+	if has_deps "$chart"; then
+		if has_git_deps "$chart"; then
+			echo "$dir declares a git+ dependency but has no Chart.sources.yaml" >&2
+			return 1
+		else
+			local git_deps_status=$?
+			if [[ "$git_deps_status" != "1" ]]; then
+				return "$git_deps_status"
+			fi
+		fi
+	else
+		local has_deps_status=$?
+		if [[ "$has_deps_status" != "1" ]]; then
+			return "$has_deps_status"
+		fi
 		echo "skip $dir (no dependencies)"
+		rm -f "$dir/Chart.lock" "$dir/Chart.sources.sha256" "$dir"/charts/*.tgz
 		return 0
+	fi
+	if ! command -v helm >/dev/null 2>&1; then
+		echo "helm is required for non-Git chart dependencies" >&2
+		return 1
 	fi
 	echo "helm dependency update $dir"
 	rm -f "$dir"/charts/*.tgz
