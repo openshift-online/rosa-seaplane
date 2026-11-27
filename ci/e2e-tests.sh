@@ -210,6 +210,36 @@ echo "working commit $(git rev-parse HEAD)"
 go install github.com/onsi/ginkgo/v2/ginkgo@v2.28.1
 export PATH="$(go env GOPATH)/bin:${PATH}"
 
+# Enrollment never supplies resource permissions. Seed grants before any lifecycle or cleanup.
+_rc_account=$(aws sts get-caller-identity --profile rrp-rc --query Account --output text)
+if [[ ! "${_rc_account}" =~ ^[0-9]{12}$ || "${E2E_ACCOUNT_ID:-${_rc_account}}" != "${_rc_account}" ]]; then
+  echo "ERROR: E2E_ACCOUNT_ID must match the actual rrp-rc account" >&2
+  exit 1
+fi
+export E2E_ACCOUNT_ID="${_rc_account}"
+_accounts=("${_rc_account}")
+# The customer profile is optional; without it HCP suites are skipped below.
+if aws configure export-credentials --profile rrp-customer --format process &>/dev/null; then
+  _customer_account=$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)
+  if [[ ! "${_customer_account}" =~ ^[0-9]{12}$ || "${E2E_CUSTOMER_ACCOUNT_ID:-${_customer_account}}" != "${_customer_account}" ]]; then
+    echo "ERROR: E2E_CUSTOMER_ACCOUNT_ID must match the actual rrp-customer account" >&2
+    exit 1
+  fi
+  export E2E_CUSTOMER_ACCOUNT_ID="${_customer_account}"
+  _accounts+=("${_customer_account}")
+fi
+
+# Tables are <deployment_name>-authz-*; deployment_name equals the region outside ephemeral.
+_authz_prefix="${ZOA_DEPLOYMENT_NAME:-${AWS_DEFAULT_REGION}}"
+for _account in "${_accounts[@]}"; do
+  AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
+    -X POST -H "Content-Type: application/json" \
+    -d "{\"accountId\":\"${_account}\"}" "${BASE_URL}/api/v0/accounts"
+done
+for _account in "${_accounts[@]}"; do
+  "${REPO_ROOT}/scripts/dev/seed-authz-grants.sh" "${_account}" "${_authz_prefix}"
+done
+
 platform_rc=0
 hcp_rc=0
 monitoring_rc=0
@@ -263,12 +293,6 @@ else
   fi
 fi
 
-# Get regional account ID for CLI tests
-if [[ -z "${E2E_ACCOUNT_ID:-}" ]]; then
-  export E2E_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-  echo "Regional account ID: ${E2E_ACCOUNT_ID}"
-fi
-
 # --- HCP Creation E2E Tests ---
 # Customer credentials are supplied via the rrp-customer AWS profile (CUSTOMER_AWS_PROFILE).
 # Subprocesses use credential_process auto-refresh, avoiding the 15-minute STS TTL cliff.
@@ -281,11 +305,6 @@ elif aws configure export-credentials --profile rrp-customer --format process &>
   echo "Customer profile rrp-customer is available"
   echo "Customer API caller (rrp-customer):"
   aws sts get-caller-identity --profile rrp-customer --query '{Account:Account,Arn:Arn}' --output json
-
-  if [[ -z "${E2E_CUSTOMER_ACCOUNT_ID:-}" ]]; then
-    export E2E_CUSTOMER_ACCOUNT_ID="$(aws sts get-caller-identity --profile rrp-customer --query Account --output text)"
-    echo "Customer account ID: ${E2E_CUSTOMER_ACCOUNT_ID:0:8}..."
-  fi
   _have_customer_creds=true
 else
   echo "WARNING: No rrp-customer profile available — skipping HCP creation tests"
@@ -362,17 +381,7 @@ if [[ "$_have_customer_creds" == "true" ]]; then
     export ROSA_REPO_URL ROSA_REPO_BRANCH TEST_PROFILE="${ROSA_TEST_PROFILE}"
     export GOTOOLCHAIN=auto
     echo "ROSA_LABEL_FILTER: ${ROSA_LABEL_FILTER}"
-    # Register the customer account as the RC account. "privileged" is for the legacy
-    # accounts API; the Cedar allowlist ignores it.
-    if AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
-      -X POST -H "Content-Type: application/json" \
-      -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
-      "${BASE_URL}/api/v0/accounts"; then
-      AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
-    else
-      echo "ERROR: allowlisting customer account failed" >&2
-      rosa_cli_rc=1
-    fi
+    AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
   else
     echo ""
     echo "=== ROSA CLI Tests ==="
