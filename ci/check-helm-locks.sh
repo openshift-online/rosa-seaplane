@@ -2,7 +2,7 @@
 # Fail if a wrapper chart's Chart.lock is missing/stale vs Chart.yaml
 # (name, version, and repository), a vendored archive is missing, or there
 # are extra archives/unpacked subcharts. Git-sourced archives are checked
-# against Chart.sources.yaml. Offline / hermetic — does not fetch.
+# against Chart.sources.yaml and Chart.sources.sha256. Offline / hermetic.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -83,7 +83,7 @@ check_git_sources() {
 	local chart="$dir/Chart.yaml"
 	local sources="$dir/Chart.sources.yaml"
 	local checksums="$dir/Chart.sources.sha256"
-	local dependency_count source_count i name repository dependency_repository revision chart_path version archive archive_name chart_name chart_version
+	local dependency_count source_count i name repository dependency_repository revision chart_path version archive archive_name chart_name chart_version expected_sha checksum_entries actual_sha checksum_count
 	[[ -f "$sources" ]] || return 0
 
 	dependency_count="$("$yq_bin" -r '.dependencies | length' "$chart")"
@@ -135,6 +135,22 @@ check_git_sources() {
 			mark_failure
 			continue
 		fi
+		checksum_entries="$(awk -v path="charts/$archive_name" '$2 == path { count++ } END { print count + 0 }' "$checksums")"
+		expected_sha="$(awk -v path="charts/$archive_name" '$2 == path { print $1 }' "$checksums")"
+		if [[ "$checksum_entries" != "1" || ! "$expected_sha" =~ ^[0-9a-f]{64}$ ]]; then
+			echo "missing or duplicate canonical-tar checksum for $archive in $checksums"
+			mark_failure
+			continue
+		fi
+		if ! actual_sha="$(gzip -dc "$archive" 2>/dev/null | sha256sum | awk '{print $1}')"; then
+			echo "invalid gzip chart archive $archive"
+			mark_failure
+			continue
+		fi
+		if [[ "$actual_sha" != "$expected_sha" ]]; then
+			echo "Git-vendored chart content checksum mismatch for $archive"
+			mark_failure
+		fi
 
 		chart_name="$(tar -xOzf "$archive" "$name/Chart.yaml" | "$yq_bin" -r '.name')"
 		chart_version="$(tar -xOzf "$archive" "$name/Chart.yaml" | "$yq_bin" -r '.version')"
@@ -143,8 +159,9 @@ check_git_sources() {
 			mark_failure
 		fi
 		done
-	if ! (cd "$dir" && sha256sum --status -c "$(basename "$checksums")"); then
-		echo "Git-vendored archive checksum mismatch for $dir"
+	checksum_count="$(awk '$1 !~ /^#/ && NF == 2 { count++ } END { print count + 0 }' "$checksums")"
+	if [[ "$checksum_count" != "$source_count" ]]; then
+		echo "expected $source_count canonical-tar checksums in $checksums, found $checksum_count"
 		mark_failure
 	fi
 }

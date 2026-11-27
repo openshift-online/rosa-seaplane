@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -165,12 +166,17 @@ def main() -> None:
             staged_archive = archive.with_name(f".{archive.name}.tmp")
             shutil.copyfile(packaged, staged_archive)
             os.replace(staged_archive, archive)
-            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            with gzip.open(archive, "rb") as packaged_tar:
+                digest = hashlib.sha256(packaged_tar.read()).hexdigest()
             checksums.append(f"{digest}  charts/{archive_name}")
             print(f"Vendored {name}@{expected_version} (sha256:{digest})")
 
     checksum_file = chart_dir / "Chart.sources.sha256"
-    checksum_file.write_text("\n".join(sorted(checksums)) + "\n")
+    checksum_file.write_text(
+        "# SHA-256 of the normalized uncompressed tar payload (gzip output can vary by toolchain).\n"
+        + "\n".join(sorted(checksums))
+        + "\n"
+    )
 
 
 if __name__ == "__main__":

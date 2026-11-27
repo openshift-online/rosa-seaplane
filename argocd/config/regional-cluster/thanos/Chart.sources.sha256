@@ -1,1 +1,2 @@
-fce7e1389bf0886b130d80e78969d93a27d8317388d74048118b706340fef467  charts/thanos-operator-0.1.0.tgz
+# SHA-256 of the normalized uncompressed tar payload (gzip output can vary by toolchain).
+75a0d6bfda98c04fa2f36006a776b6d40c0da6ee085f7fdfc30adc414b3f91bc  charts/thanos-operator-0.1.0.tgz
