@@ -40,6 +40,7 @@ Detailed architecture and rationale for key technical decisions:
 | [Regional Account Minting](design/regional-account-minting.md)                       | AWS account structure and minting pipelines                               |
 | [Regional Control Plane Architecture](design/regional-control-plane-architecture.md) | Operator + PostgreSQL control plane (seaplane-operator, seaplane-db)      |
 | [Regional OIDC Ownership](design/regional-oidc-ownership.md)                         | Shared OIDC bucket per region, cross-account MC writes                    |
+| [Shared Resource Validation](design/shared-resource-validation.md)                   | Common schema and CEL checks for API and operator writes                  |
 | [Spec-to-PR Agent](design/spec-to-pr-agent.md)                                       | AI agent workflow for spec-driven implementation                          |
 | [SRE UI Access](design/sre-ui-access.md)                                             | ALB + OIDC access to SRE UIs replacing SSM port-forward                   |
 | [CodePipeline Cluster Lifecycle](design/codepipeline-cluster-lifecycle.md)           | Per-cluster CodePipeline orchestration with retained CodeBuild workers    |

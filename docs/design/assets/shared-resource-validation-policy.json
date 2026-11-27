@@ -1,0 +1,390 @@
+{
+  "formatVersion": 1,
+  "sourceDigest": "b87b07bf834be748c6266bfba540d1a8759136f79054692118961c188b54f67b",
+  "expectedRules": {
+    "original": 301,
+    "retained": 289,
+    "replaced": 12,
+    "added": 11,
+    "removed": 0,
+    "result": 312
+  },
+  "excludedGVKs": [
+    "hypershift.openshift.io/v1beta1/HostedCluster",
+    "hypershift.openshift.io/v1beta1/NodePool"
+  ],
+  "resources": [
+    {
+      "gvk": "seaplane.io/v1alpha1/Cluster",
+      "patch": [
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/autoscaling/x-kubernetes-validations/0/rule",
+          "value": "self.scaling == 'ScaleUpAndScaleDown' ? true : !has(self.scaleDown)"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/autoscaling/x-kubernetes-validations/0/rule",
+          "value": "!has(self.scaling) || self.scaling == 'ScaleUpAndScaleDown' || !has(self.scaleDown)"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/hostedCluster/properties/etcd/properties/managementType/enum/-",
+          "value": ""
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/etcd/properties/managementType/x-kubernetes-validations/0/rule",
+          "value": "self == oldSelf"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/etcd/properties/managementType/x-kubernetes-validations/0/rule",
+          "value": "oldSelf == '' || self == oldSelf"
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/clusterNetwork/x-kubernetes-validations/0/rule",
+          "value": "self == oldSelf"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/clusterNetwork/x-kubernetes-validations/0/rule",
+          "value": "oldSelf.size() == 0 || self == oldSelf"
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/machineNetwork/x-kubernetes-validations/0/rule",
+          "value": "self == oldSelf"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/machineNetwork/x-kubernetes-validations/0/rule",
+          "value": "oldSelf.size() == 0 || self == oldSelf"
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/serviceNetwork/x-kubernetes-validations/0/rule",
+          "value": "self == oldSelf"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/properties/serviceNetwork/x-kubernetes-validations/0/rule",
+          "value": "oldSelf.size() == 0 || self == oldSelf"
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/x-kubernetes-validations/0/rule",
+          "value": "(!has(self.machineNetwork) && self.clusterNetwork.all(c, self.serviceNetwork.all(s, c.cidr != s.cidr)) || (has(self.machineNetwork) && (self.machineNetwork.all(m, self.clusterNetwork.all(c, m.cidr != c.cidr)) && self.machineNetwork.all(m, self.serviceNetwork.all(s, m.cidr != s.cidr)) && self.clusterNetwork.all(c, self.serviceNetwork.all(s, c.cidr != s.cidr)))))"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/x-kubernetes-validations/0/rule",
+          "value": "(!has(self.machineNetwork) || !has(self.clusterNetwork) || self.machineNetwork.all(m, self.clusterNetwork.all(c, m.cidr != c.cidr))) && (!has(self.machineNetwork) || !has(self.serviceNetwork) || self.machineNetwork.all(m, self.serviceNetwork.all(s, m.cidr != s.cidr))) && (!has(self.clusterNetwork) || !has(self.serviceNetwork) || self.clusterNetwork.all(c, self.serviceNetwork.all(s, c.cidr != s.cidr)))"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.machineNetwork) || oldSelf.machineNetwork.size() == 0 || (has(self.machineNetwork) && self.machineNetwork == oldSelf.machineNetwork)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".machineNetwork"
+          }
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.clusterNetwork) || oldSelf.clusterNetwork.size() == 0 || (has(self.clusterNetwork) && self.clusterNetwork == oldSelf.clusterNetwork)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".clusterNetwork"
+          }
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/hostedCluster/properties/networking/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.serviceNetwork) || oldSelf.serviceNetwork.size() == 0 || (has(self.serviceNetwork) && self.serviceNetwork == oldSelf.serviceNetwork)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".serviceNetwork"
+          }
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/release/properties/image/minLength",
+          "value": 1
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/release/properties/image/minLength",
+          "value": 0
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/hostedCluster/properties/release/properties/image/x-kubernetes-validations/0/rule",
+          "value": "self.matches('^(\\\\w+\\\\S+)$')"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/hostedCluster/properties/release/properties/image/x-kubernetes-validations/0/rule",
+          "value": "self == '' || (self.matches('^(\\\\w+\\\\S+)$'))"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/hostedCluster/properties/services/nullable",
+          "value": true
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/x-kubernetes-validations",
+          "value": [
+            {
+              "rule": "!has(oldSelf.accountId) || oldSelf.accountId == '' || (has(self.accountId) && self.accountId == oldSelf.accountId)",
+              "message": "Stored binding cannot be reassigned or cleared",
+              "fieldPath": ".accountId"
+            },
+            {
+              "rule": "!has(oldSelf.dnsReservationId) || oldSelf.dnsReservationId == '' || (has(self.dnsReservationId) && self.dnsReservationId == oldSelf.dnsReservationId)",
+              "message": "Stored binding cannot be reassigned or cleared",
+              "fieldPath": ".dnsReservationId"
+            },
+            {
+              "rule": "!has(oldSelf.hostedClusterName) || oldSelf.hostedClusterName in ['', 'uid-pending'] || (has(self.hostedClusterName) && self.hostedClusterName == oldSelf.hostedClusterName)",
+              "message": "Stored binding cannot be reassigned or cleared",
+              "fieldPath": ".hostedClusterName"
+            },
+            {
+              "rule": "(has(self.oidcConfigId) ? self.oidcConfigId : '') == (has(oldSelf.oidcConfigId) ? oldSelf.oidcConfigId : '')",
+              "message": "Stored binding cannot be reassigned or cleared",
+              "fieldPath": ".oidcConfigId"
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "immutable": [
+          "/metadata/ownerReferences",
+          "/metadata/labels/seaplane.io~1account-id"
+        ],
+        "account": {
+          "namespacePrefix": "account-",
+          "label": "seaplane.io/account-id",
+          "specField": "/spec/accountId"
+        }
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/DNSReservation",
+      "patch": [],
+      "metadata": {
+        "immutable": [
+          "/metadata/ownerReferences",
+          "/metadata/labels/seaplane.io~1account-id"
+        ],
+        "account": {
+          "namespacePrefix": "account-",
+          "label": "seaplane.io/account-id"
+        }
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/Index",
+      "patch": [],
+      "metadata": {
+        "immutable": ["/metadata/ownerReferences"]
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/ManagementCluster",
+      "patch": [],
+      "metadata": {
+        "immutable": ["/metadata/ownerReferences"]
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/NodePool",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/replace/properties/strategy/enum/-",
+          "value": ""
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/replace/x-kubernetes-validations/0/rule",
+          "value": "!has(self.rollingUpdate) || self.strategy == 'RollingUpdate'"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/replace/x-kubernetes-validations/0/rule",
+          "value": "!has(self.rollingUpdate) || self.strategy in ['', 'RollingUpdate']"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/upgradeType/enum/-",
+          "value": ""
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/upgradeType/x-kubernetes-validations/0/rule",
+          "value": "self == oldSelf"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/nodePool/properties/management/properties/upgradeType/x-kubernetes-validations/0/rule",
+          "value": "oldSelf == '' || self == oldSelf"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/nodePool/properties/platform/properties/aws/properties/rootVolume/properties/size/anyOf",
+          "value": [
+            {
+              "maximum": 0
+            },
+            {
+              "minimum": 8
+            }
+          ]
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/nodePool/properties/platform/properties/aws/properties/rootVolume/properties/size/minimum",
+          "value": 8
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/nodePool/properties/platform/properties/aws/properties/rootVolume/properties/size/minimum",
+          "value": 0
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/nodePool/properties/release/properties/image/minLength",
+          "value": 1
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/nodePool/properties/release/properties/image/minLength",
+          "value": 0
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/properties/nodePool/properties/release/properties/image/x-kubernetes-validations/0/rule",
+          "value": "self.matches('^(\\\\w+\\\\S+)$')"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/properties/nodePool/properties/release/properties/image/x-kubernetes-validations/0/rule",
+          "value": "self == '' || (self.matches('^(\\\\w+\\\\S+)$'))"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/properties/nodePool/x-kubernetes-validations",
+          "value": [
+            {
+              "rule": "!has(oldSelf.clusterName) || oldSelf.clusterName == '' || (has(self.clusterName) && self.clusterName == oldSelf.clusterName)",
+              "message": "Stored binding cannot be reassigned or cleared",
+              "fieldPath": ".clusterName"
+            }
+          ]
+        },
+        {
+          "op": "test",
+          "path": "/properties/spec/x-kubernetes-validations/2/rule",
+          "value": "!has(self.maxSurge) || !has(self.nodePool) || !has(self.nodePool.management) || self.nodePool.management.upgradeType == 'Replace'"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/x-kubernetes-validations/2/rule",
+          "value": "!has(self.maxSurge) || !has(self.nodePool) || !has(self.nodePool.management) || self.nodePool.management.upgradeType in ['', 'Replace']"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.accountId) || oldSelf.accountId == '' || (has(self.accountId) && self.accountId == oldSelf.accountId)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".accountId"
+          }
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.internalPoolId) || oldSelf.internalPoolId == '' || (has(self.internalPoolId) && self.internalPoolId == oldSelf.internalPoolId)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".internalPoolId"
+          }
+        }
+      ],
+      "metadata": {
+        "immutable": [
+          "/metadata/ownerReferences",
+          "/metadata/labels/seaplane.io~1account-id",
+          "/metadata/labels/seaplane.io~1cluster-uid"
+        ],
+        "account": {
+          "namespacePrefix": "account-",
+          "label": "seaplane.io/account-id",
+          "specField": "/spec/accountId"
+        },
+        "controllerOwner": {
+          "apiVersion": "seaplane.io/v1alpha1",
+          "kind": "Cluster",
+          "uidLabel": "seaplane.io/cluster-uid",
+          "nameField": "/spec/nodePool/clusterName"
+        }
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/OidcConfig",
+      "patch": [
+        {
+          "op": "test",
+          "path": "/properties/spec/x-kubernetes-validations/1/rule",
+          "value": "self.type != 'unmanaged' || (size(self.secretArn) > 0 && size(self.installerRoleArn) > 0)"
+        },
+        {
+          "op": "replace",
+          "path": "/properties/spec/x-kubernetes-validations/1/rule",
+          "value": "self.type != 'unmanaged' || (has(self.secretArn) && size(self.secretArn) > 0 && has(self.installerRoleArn) && size(self.installerRoleArn) > 0)"
+        },
+        {
+          "op": "add",
+          "path": "/properties/spec/x-kubernetes-validations/-",
+          "value": {
+            "rule": "!has(oldSelf.accountId) || oldSelf.accountId == '' || (has(self.accountId) && self.accountId == oldSelf.accountId)",
+            "message": "Stored binding cannot be reassigned or cleared",
+            "fieldPath": ".accountId"
+          }
+        }
+      ],
+      "metadata": {
+        "immutable": [
+          "/metadata/ownerReferences",
+          "/metadata/labels/seaplane.io~1account-id"
+        ],
+        "account": {
+          "namespacePrefix": "account-",
+          "label": "seaplane.io/account-id",
+          "specField": "/spec/accountId"
+        }
+      }
+    },
+    {
+      "gvk": "seaplane.io/v1alpha1/Placement",
+      "patch": [],
+      "metadata": {
+        "immutable": [
+          "/metadata/ownerReferences",
+          "/metadata/labels/seaplane.io~1cluster-uid"
+        ],
+        "controllerOwner": {
+          "apiVersion": "seaplane.io/v1alpha1",
+          "kind": "Cluster",
+          "uidLabel": "seaplane.io/cluster-uid",
+          "nameField": "/spec/clusterName"
+        }
+      }
+    }
+  ]
+}
