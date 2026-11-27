@@ -33,7 +33,7 @@ Production work is **boundary-first**: every path begins on the laptop with sess
 
 **TA path** (mutations and reads): boundary → per-VPC **API** / **Worker** Lambdas → EKS (and AWS APIs where the TA requires them). Sync TAs are the common case; async TAs use Worker + `zoa-runner` Jobs.
 
-Operator guides and CLI detail: [ZOA documentation](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/README.md). Resolved central `rh-aws-saml-login` targets and app-interface role setup: [rosa-hyperfleet-internal — ZOA operator access](https://github.com/openshift-online/rosa-hyperfleet-internal/blob/main/docs/onboarding/zoa-operator-access.md).
+Operator guides and CLI detail: [ZOA documentation](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/README.md). Resolved central `rh-aws-saml-login` targets and app-interface role setup: [rosa-seaplane-internal — ZOA operator access](https://github.com/openshift-online/rosa-seaplane-internal/blob/main/docs/onboarding/zoa-operator-access.md).
 
 ### Composite deployment
 

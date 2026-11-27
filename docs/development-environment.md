@@ -394,7 +394,7 @@ make ephemeral-resync ID=6bd2d3d7
 [Zero Operator Access](https://github.com/openshift-online/rosa-seaplane-zoa) is how you operate a running environment from your laptop: discover deployments and targets, start audited boundary sessions, and run trusted actions from inside the boundary. Use it after [provision](#provision) (and [resync](#resync) when you change ZOA images, Terraform, or invoker trust on your branch).
 
 1. Request ZOA operator roles in app-interface (see onboarding in the internal repo).
-2. `rh-aws-saml-login` into the central account for dev — [ZOA operator access](https://github.com/openshift-online/rosa-hyperfleet-internal/blob/main/docs/onboarding/zoa-operator-access.md) in the `rosa-seaplane-internal` sibling repo lists resolved commands per environment.
+2. `rh-aws-saml-login` into the central account for dev — [ZOA operator access](https://github.com/openshift-online/rosa-seaplane-internal/blob/main/docs/onboarding/zoa-operator-access.md) in the `rosa-seaplane-internal` sibling repo lists resolved commands per environment.
 3. Build or install the `zoa` CLI from [rosa-seaplane-zoa](https://github.com/openshift-online/rosa-seaplane-zoa).
 
 ```bash
@@ -442,6 +442,5 @@ make ephemeral-teardown ID=6bd2d3d7 RESYNC=1
 
 ## Further Reading
 
-- [Milestone 2 slides](presentations/milestone-2/slides.md) -- ephemeral provider architecture and how environments are provisioned/torn down
 - [ci/ephemeral-provider/README.md](../ci/ephemeral-provider/README.md) -- ephemeral provider internals
 - [SRE UI Access — Integration](sop/sre-ui-access.md) -- accessing Grafana, ArgoCD, Prometheus, Thanos, and Loki in the integration environment

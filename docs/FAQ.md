@@ -2,9 +2,9 @@
 
 The operand chart is the upstream cert-manager chart **1.19.6**, vendored from `oci://quay.io/jetstack/charts` by `make helm-deps` and rendered through Kustomize. It matches `jetstack-cert-manager-rhel9:v1.19.6-1`. The RH image has no ENTRYPOINT, so Kustomize patches `command`. The cert-manager operator is not installed on EKS. Drop the patches if the chart grows a command value.
 
-### Why is Loki on logging-loki-rhel9 and Grafana still grafana-oss?
+### Why is Loki on logging-loki-rhel9 and what Grafana image is used?
 
-RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.0.0**, pinned to `logging-loki-rhel9:v6.4.7` (Loki **3.7**). Logging **6.0.x** is Loki **3.1.0** and is not a tag swap onto this chart. Grafana stays `grafana-oss:11.4.0`: `ose-grafana` is deprecated CMO Grafana ~8.3, not 11.4. See [Loki and Grafana Red Hat images](loki-grafana-redhat-images.md).
+RH Logging operators (LokiStack, CLO) stay off EKS. Loki stays grafana/loki **7.0.0**, pinned to `logging-loki-rhel9:v6.4.7` (Loki **3.7**). Logging **6.0.x** is Loki **3.1.0** and is not a tag swap onto this chart. Grafana uses the Red Hat hardened image `rhel10/grafana` (the `10.3` tag is the RHEL stream, not the Grafana version; the digest pins the catalog build). See [Loki and Grafana Red Hat images](loki-grafana-redhat-images.md).
 
 ### Why does Loki use kustomize command patches?
 

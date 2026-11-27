@@ -98,17 +98,19 @@ Both applications are picked up directly by the root ApplicationSet — there is
 
 All templates are platform-specific resources not provided by either upstream repo:
 
-| Template                  | Renders                        | Why here                                           |
-| ------------------------- | ------------------------------ | -------------------------------------------------- |
-| `receiver.yaml`           | `ThanosReceive` CR             | Platform config (replicas, storage, region labels) |
-| `query.yaml`              | `ThanosQuery` CR               | Platform config (replicas, frontend)               |
-| `store.yaml`              | `ThanosStore` CR               | Platform config (replicas, storage)                |
-| `compact.yaml`            | `ThanosCompact` CR             | Platform config (retention, storage)               |
-| `ruler.yaml`              | `ThanosRuler` CR               | Rule evaluation against Thanos Query, alerting     |
-| `objstore-secret.yaml`    | `Secret` (`objstore.yml`)      | S3/KMS config derived from global values           |
-| `serviceaccount.yaml`     | `ServiceAccount`               | Pod Identity annotation — AWS-specific             |
-| `targetgroupbinding.yaml` | `TargetGroupBinding`           | ALB wiring — AWS-specific                          |
-| `_helpers.tpl`            | Shared label/annotation macros | `SkipDryRunOnMissingResource`, Helm release labels |
+| Template                       | Renders                        | Why here                                              |
+| ------------------------------ | ------------------------------ | ----------------------------------------------------- |
+| `receiver.yaml`                | `ThanosReceive` CR             | Platform config (replicas, storage, region labels)    |
+| `query.yaml`                   | `ThanosQuery` CR               | Platform config (replicas, frontend)                  |
+| `store.yaml`                   | `ThanosStore` CR               | Platform config (replicas, storage)                   |
+| `compact.yaml`                 | `ThanosCompact` CR             | Platform config (retention, storage)                  |
+| `ruler.yaml`                   | `ThanosRuler` CR               | Rule evaluation against Thanos Query, alerting        |
+| `objstore-secret.yaml`         | `Secret` (`objstore.yml`)      | S3/KMS config derived from global values              |
+| `serviceaccount.yaml`          | `ServiceAccount`               | Pod Identity annotation — AWS-specific                |
+| `targetgroupbinding.yaml`      | `TargetGroupBinding`           | ALB wiring — AWS-specific                             |
+| `pull-secret.yaml`             | `ExternalSecret` → `Secret`    | Creates the registry pull-secret `Secret` via ESO     |
+| `operand-serviceaccounts.yaml` | `ServiceAccount`s for operands | `imagePullSecrets` configuration for Thanos workloads |
+| `_helpers.tpl`                 | Shared label/annotation macros | `SkipDryRunOnMissingResource`, Helm release labels    |
 
 ### Components
 
